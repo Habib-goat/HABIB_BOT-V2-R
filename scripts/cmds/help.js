@@ -37,9 +37,9 @@ module.exports = {
         }
       }
 
-      let responseText = `╔═════════════════════╗
+      let responseText = `╔═══════════════════╗
 📂 ✦『 𝙍𝙄𝙔𝘼𝘿 𝘽𝙊𝙏 𝙈𝙀𝙉𝙐 』✦ 📂
-╚═════════════════════╝
+╚═══════════════════╝
 
 ⚡ 𝙋𝙧𝙚𝙛𝙞𝙭 ➜ '${prefix}'
 ✨ 𝘾𝙤𝙢𝙢𝙖𝙣𝙙𝙨 ➜ ${commands.size}
@@ -60,11 +60,11 @@ module.exports = {
   responseText += "\n\n";
 }
 
-      responseText += `╔═════════════════════╗
+      responseText += `╔═══════════════════╗
 💡 𝙏𝙮𝙥𝙚 '${prefix}help [command]' 𝙩𝙤 𝙜𝙚𝙩 𝙘𝙤𝙢𝙢𝙖𝙣𝙙 𝙞𝙣𝙛𝙤.
-╚═════════════════════╝`;
+╚═══════════════════╝`;
       const img = (await axios.get(
-  "https://files.catbox.moe/skd17r",
+  "https://i.imgur.com/iV35CAf.gif",
   { responseType: "stream" }
 )).data;
 
