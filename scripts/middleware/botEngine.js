@@ -84,8 +84,8 @@ const botEngine = {
   getText,
   
   // Primary message processing router
-  processMessage: async (event, commandLoader, eventLoader, wsServer, restLogs) => {
-    const api = createApiWrapper(wsServer, restLogs);
+  processMessage: async (event, commandLoader, eventLoader, wsServer, restLogs, customApi = null) => {
+    const api = customApi || createApiWrapper(wsServer, restLogs);
     
     const senderID = event.senderID;
     const threadID = event.threadID;

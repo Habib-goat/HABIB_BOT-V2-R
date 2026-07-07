@@ -19,6 +19,7 @@ const pluginManager = require('./scripts/plugins/pluginManager');
 const serviceManager = require('./scripts/services/serviceManager');
 const scheduler = require('./cron/systemBackup');
 const apiRouter = require('./api/routes/api');
+const messenger = require('./scripts/utils/messenger');
 
 async function startBot() {
   logger.system("Initializing Riyad Bot Framework...");
@@ -111,7 +112,10 @@ async function startBot() {
   // 7. Initialize background schedulers (cron jobs)
   scheduler.setupScheduler();
 
-  // 8. Bind Web Server
+  // 8. Start Facebook Messenger Bot Client runtime
+  messenger.startMessenger(app, wss);
+
+  // 9. Bind Web Server
   server.listen(PORT, '0.0.0.0', () => {
     logger.success(`Riyad Bot Server running on http://localhost:${PORT}`);
     logger.success(`Webhook verify token configured in config.json: 'riyad_bot_verify_token_2026'`);
