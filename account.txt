@@ -1,0 +1,6 @@
+# Riyad Bot Messenger Credentials
+# Format: username|password or use appstate.json for safer cookie-based authentication.
+# Update this with your actual account credentials if needed.
+
+username=your_messenger_email@example.com
+password=your_messenger_password_here

@@ -1,0 +1,28 @@
+{
+  "system": {
+    "starting": "Riyad Bot Framework is starting...",
+    "loaded_commands": "Successfully loaded {count} commands.",
+    "loaded_events": "Successfully loaded {count} events.",
+    "database_connected": "JSON database connected successfully.",
+    "server_running": "Server running on port {port}. Open Dashboard to inspect.",
+    "anti_spam_block": "⚠️ [ANTI-SPAM] User {name} ({id}) has been blocked for {duration} seconds due to rapid spamming.",
+    "unauthorized_admin": "❌ You do not have permissions (Admin/Owner) to execute this command.",
+    "unauthorized_owner": "❌ This command is restricted to the Bot Owner only.",
+    "cooldown_wait": "⏳ Cooldown active. Please wait {seconds}s before using '{command}' again."
+  },
+  "commands": {
+    "ping": {
+      "pong": "Pong! 🏓 Latency: {latency}ms | System Uptime: {uptime}"
+    },
+    "uptime": {
+      "response": "🤖 [Riyad Bot Status]\nUptime: {uptime}\nTotal Users: {users}\nTotal Threads: {threads}\nCommands: {commands}\nCPU Usage: {cpu}% | Memory: {memory}MB"
+    },
+    "help": {
+      "title": "📚 RIYAD BOT COMMAND MENU",
+      "prefix": "Prefix: '{prefix}'",
+      "category_title": "📂 [{category}]",
+      "command_item": " • {name}: {desc} (cooldown: {cooldown}s)",
+      "guide": "💡 Type '{prefix}help <command_name>' to see a detailed guide on how to use it."
+    }
+  }
+}

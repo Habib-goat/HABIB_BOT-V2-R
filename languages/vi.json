@@ -1,0 +1,28 @@
+{
+  "system": {
+    "starting": "Riyad Bot Framework đang khởi động...",
+    "loaded_commands": "Đã tải thành công {count} lệnh.",
+    "loaded_events": "Đã tải thành công {count} sự kiện.",
+    "database_connected": "Cơ sở dữ liệu JSON đã kết nối thành công.",
+    "server_running": "Máy chủ đang chạy trên cổng {port}. Hãy mở Dashboard để kiểm tra.",
+    "anti_spam_block": "⚠️ [ANTI-SPAM] Người dùng {name} ({id}) đã bị chặn trong {duration} giây do spam quá nhanh.",
+    "unauthorized_admin": "❌ Bạn không có quyền (Quản trị viên/Người sở hữu) để thực hiện lệnh này.",
+    "unauthorized_owner": "❌ Lệnh này chỉ dành cho Người sở hữu Bot.",
+    "cooldown_wait": "⏳ Đang trong thời gian chờ. Vui lòng đợi {seconds}s trước khi sử dụng lại lệnh '{command}'."
+  },
+  "commands": {
+    "ping": {
+      "pong": "Pong! 🏓 Độ trễ: {latency}ms | Thời gian hoạt động: {uptime}"
+    },
+    "uptime": {
+      "response": "🤖 [Trạng thái Riyad Bot]\nUptime: {uptime}\nTổng người dùng: {users}\nTổng nhóm: {threads}\nTổng số lệnh: {commands}\nSử dụng CPU: {cpu}% | RAM: {memory}MB"
+    },
+    "help": {
+      "title": "📚 DANH SÁCH LỆNH RIYAD BOT",
+      "prefix": "Prefix hiện tại: '{prefix}'",
+      "category_title": "📂 [{category}]",
+      "command_item": " • {name}: {desc} (chờ: {cooldown}s)",
+      "guide": "💡 Nhập '{prefix}help <tên_lệnh>' để xem hướng dẫn chi tiết cách sử dụng."
+    }
+  }
+}

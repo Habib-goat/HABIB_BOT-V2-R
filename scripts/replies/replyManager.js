@@ -1,0 +1,80 @@
+/**
+ * Riyad Bot Framework - Reply Manager
+ * Standard management for onReply hooks.
+ */
+
+const logger = require('../utils/logger');
+
+// Initialize global reply register
+if (!global.RiyadBot) {
+  global.RiyadBot = {};
+}
+if (!global.RiyadBot.onReply) {
+  global.RiyadBot.onReply = new Map(); // key: messageID, value: { commandName, authorID, ... }
+}
+
+const replyManager = {
+  /**
+   * Register a message ID to listen for replies
+   * @param {string} messageID - The ID of the message sent by the bot
+   * @param {object} replyData - Metadata (commandName, senderID, etc.)
+   */
+  register: (messageID, replyData) => {
+    global.RiyadBot.onReply.set(messageID, {
+      ...replyData,
+      timestamp: Date.now()
+    });
+    logger.info(`[Reply Manager] Registered reply listener for message ${messageID} (${replyData.commandName})`);
+  },
+
+  /**
+   * Check if a message reply event has an active listener and execute it
+   */
+  handle: async (api, event, commandLoader) => {
+    const { messageReply, threadID, senderID } = event;
+    if (!messageReply) return false;
+
+    const targetMessageID = messageReply.messageID;
+    if (global.RiyadBot.onReply.has(targetMessageID)) {
+      const replyData = global.RiyadBot.onReply.get(targetMessageID);
+      
+      const cmd = commandLoader.commands.get(replyData.commandName);
+      if (cmd && typeof cmd.onReply === 'function') {
+        try {
+          logger.info(`[Reply Manager] Executing onReply for command '${replyData.commandName}'`);
+          await cmd.onReply({
+            api,
+            event,
+            replyData,
+            message: api
+          });
+          return true;
+        } catch (err) {
+          logger.error(`Error in onReply handler of command '${replyData.commandName}':`, err);
+        }
+      }
+    }
+    return false;
+  },
+
+  /**
+   * Clean up expired replies listeners (older than 10 mins)
+   */
+  cleanExpired: () => {
+    const now = Date.now();
+    const expiryLimit = 10 * 60 * 1000; // 10 minutes
+    let count = 0;
+    
+    for (const [key, val] of global.RiyadBot.onReply.entries()) {
+      if (now - val.timestamp > expiryLimit) {
+        global.RiyadBot.onReply.delete(key);
+        count++;
+      }
+    }
+    if (count > 0) {
+      logger.info(`[Reply Manager] Pruned ${count} expired reply listeners.`);
+    }
+  }
+};
+
+module.exports = replyManager;

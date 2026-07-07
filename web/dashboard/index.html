@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riyad Bot Framework - Status Console</title>
+  <!-- Tailwind CSS CDN for high-fidelity custom design styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .mono-font {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-[#0b0f19] text-gray-200 min-h-screen flex flex-col antialiased">
+
+  <!-- Header Panel -->
+  <header class="border-b border-gray-800 bg-[#111625] px-6 py-4 sticky top-0 z-50 shadow-md">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-white shadow-lg text-lg">
+          RB
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            Riyad Bot <span class="text-xs bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded">Framework V1.0.0</span>
+          </h1>
+          <p class="text-xs text-gray-400">Production-Ready server-side Messenger Bot control tower</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-4 text-xs">
+        <div class="flex items-center gap-2 bg-[#1b233a] border border-gray-800 px-3 py-1.5 rounded-lg">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span class="text-gray-300 font-medium">BOT SERVER: ONLINE</span>
+        </div>
+        <div id="ws-status" class="bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg font-medium">
+          WS: DISCONNECTED
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-7xl mx-auto w-full p-6 space-y-6">
+
+    <!-- Overview Statistics Bento Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-[#111625] border border-gray-800 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+        <span class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Bot Prefix</span>
+        <span id="stat-prefix" class="text-3xl font-bold text-cyan-400 mono-font mt-2">/</span>
+      </div>
+      <div class="bg-[#111625] border border-gray-800 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+        <span class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Loaded Commands</span>
+        <span id="stat-commands" class="text-3xl font-bold text-white mt-2">0</span>
+      </div>
+      <div class="bg-[#111625] border border-gray-800 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+        <span class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Active Threads/Groups</span>
+        <span id="stat-threads" class="text-3xl font-bold text-white mt-2">0</span>
+      </div>
+      <div class="bg-[#111625] border border-gray-800 rounded-xl p-4 flex flex-col justify-between shadow-sm">
+        <span class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Executed Commands</span>
+        <span id="stat-executions" class="text-3xl font-bold text-emerald-400 mt-2">0</span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Interactive Bot Simulator Console (Left 2 Columns) -->
+      <div class="lg:col-span-2 flex flex-col space-y-6">
+        
+        <div class="bg-[#111625] border border-gray-800 rounded-xl overflow-hidden flex flex-col shadow-lg">
+          <div class="border-b border-gray-800 bg-[#161c2e] px-4 py-3 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-white tracking-wide flex items-center gap-2">
+              🖥️ Interactive Chat Simulator Terminal
+            </h2>
+            <span class="text-xs text-gray-400 font-medium">Test prefix commands, AI chat, or work logic directly!</span>
+          </div>
+
+          <!-- Chat Console Terminal Viewport -->
+          <div id="chat-viewport" class="p-4 h-96 overflow-y-auto bg-[#0a0d16] border-b border-gray-800 space-y-3 custom-scrollbar mono-font text-sm flex flex-col">
+            <!-- Simulated greeting card -->
+            <div class="text-center py-6 text-gray-500 max-w-md mx-auto space-y-2">
+              <p class="text-cyan-400 font-semibold">Welcome to the Interactive Bot Simulator!</p>
+              <p class="text-xs">This panel lets you trigger command hooks without connecting to a real Facebook account. Type prefix commands below (e.g. <span class="text-gray-300">/help</span>, <span class="text-gray-300">/ping</span>, <span class="text-gray-300">/uptime</span>, or <span class="text-gray-300">/ai</span>) to test the framework output instantly.</p>
+            </div>
+          </div>
+
+          <!-- Simulation Controller Inputs -->
+          <form id="simulator-form" class="p-4 bg-[#111625] grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label class="block text-xs text-gray-400 font-semibold mb-1">User Name</label>
+              <input id="sim-user-name" type="text" value="Hasan Riyad" class="w-full bg-[#1b233a] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500">
+            </div>
+            <div>
+              <label class="block text-xs text-gray-400 font-semibold mb-1">User FBID</label>
+              <input id="sim-user-id" type="text" value="100076133880000" class="w-full bg-[#1b233a] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs text-gray-400 font-semibold mb-1">Send Message Body</label>
+              <!-- Dynamic Reply Badge -->
+              <div id="reply-badge" class="hidden flex items-center justify-between bg-cyan-950/40 border border-cyan-800/40 text-cyan-300 rounded px-2.5 py-1 mb-1.5 text-xs">
+                <span class="truncate">Replying to bot: <span id="reply-badge-text" class="italic text-gray-300 font-medium"></span></span>
+                <button type="button" onclick="cancelReply()" class="text-red-400 hover:text-red-300 font-bold ml-2 text-sm px-1">×</button>
+              </div>
+              <div class="flex gap-2">
+                <input id="sim-message" type="text" placeholder="e.g. /ai what is a node framework?" class="flex-1 bg-[#1b233a] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500">
+                <button type="submit" class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:opacity-90 text-white font-semibold text-sm px-4 py-2 rounded-lg shadow transition-opacity">
+                  Send
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Live Server Log Stream Console -->
+        <div class="bg-[#111625] border border-gray-800 rounded-xl overflow-hidden shadow-lg">
+          <div class="border-b border-gray-800 bg-[#161c2e] px-4 py-3 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-white tracking-wide flex items-center gap-2">
+              📜 Real-Time System Log Stream
+            </h2>
+            <button id="clear-logs-btn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white px-2.5 py-1 rounded transition-colors">
+              Clear Logs
+            </button>
+          </div>
+          <div id="log-viewport" class="p-4 h-64 overflow-y-auto bg-[#0a0d16] custom-scrollbar mono-font text-xs space-y-1">
+            <!-- Logs stream here -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: API inspector and Command list -->
+      <div class="flex flex-col space-y-6">
+        
+        <!-- REST API Inspector Panel -->
+        <div class="bg-[#111625] border border-gray-800 rounded-xl overflow-hidden shadow-lg flex flex-col">
+          <div class="border-b border-gray-800 bg-[#161c2e] px-4 py-3">
+            <h2 class="text-sm font-semibold text-white tracking-wide">
+              🔗 REST API Explorer
+            </h2>
+          </div>
+          <div class="p-4 space-y-4">
+            <p class="text-xs text-gray-400">Trigger framework API routes dynamically and inspect JSON payloads:</p>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="inspectApi('/api/status')" class="text-xs bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 px-3 py-1.5 rounded-lg transition-colors">
+                GET /api/status
+              </button>
+              <button onclick="inspectApi('/api/commands')" class="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-lg transition-colors">
+                GET /api/commands
+              </button>
+              <button onclick="inspectApi('/api/logs')" class="text-xs bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 px-3 py-1.5 rounded-lg transition-colors">
+                GET /api/logs
+              </button>
+            </div>
+            
+            <div class="bg-[#0a0d16] rounded-lg p-3 border border-gray-800">
+              <span class="text-[10px] uppercase text-gray-500 font-bold tracking-wider block mb-1">Response Payload</span>
+              <pre id="api-payload" class="text-[11px] text-emerald-400 mono-font overflow-x-auto h-40 custom-scrollbar">{ "message": "Click an endpoint above to fetch" }</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loaded Commands Registry -->
+        <div class="bg-[#111625] border border-gray-800 rounded-xl overflow-hidden shadow-lg flex flex-col flex-1">
+          <div class="border-b border-gray-800 bg-[#161c2e] px-4 py-3 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-white tracking-wide">
+              🛠️ Loaded Commands Registry
+            </h2>
+            <span id="cmd-reg-count" class="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full font-bold">0</span>
+          </div>
+          <div id="commands-list" class="divide-y divide-gray-800/60 overflow-y-auto max-h-[400px] custom-scrollbar flex-1">
+            <!-- Command items loaded here -->
+            <div class="p-4 text-center text-gray-500 text-xs">Loading commands registry...</div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <footer class="border-t border-gray-800 bg-[#0d121f] text-center py-4 text-xs text-gray-500">
+    <p>© 2026 Riyad Bot Framework - Crafted on Google AI Studio Server with production CommonJS standard.</p>
+  </footer>
+
+  <!-- Script logic for interactive dashboard components -->
+  <script>
+    const chatViewport = document.getElementById('chat-viewport');
+    const logViewport = document.getElementById('log-viewport');
+    const wsStatusLabel = document.getElementById('ws-status');
+    const statPrefix = document.getElementById('stat-prefix');
+    const statCommands = document.getElementById('stat-commands');
+    const statThreads = document.getElementById('stat-threads');
+    const statExecutions = document.getElementById('stat-executions');
+    const cmdRegCount = document.getElementById('cmd-reg-count');
+    const commandsList = document.getElementById('commands-list');
+    const simulatorForm = document.getElementById('simulator-form');
+
+    // Fetch initial status and register commands list
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        statPrefix.innerText = data.prefix;
+        statCommands.innerText = data.stats.totalCommands;
+        statThreads.innerText = data.stats.threads;
+        statExecutions.innerText = data.stats.executedCommands;
+        cmdRegCount.innerText = data.stats.totalCommands;
+      } catch (err) {
+        console.error("Error loading statistics:", err);
+      }
+    }
+
+    async function loadCommands() {
+      try {
+        const res = await fetch('/api/commands');
+        const list = await res.json();
+        
+        commandsList.innerHTML = '';
+        list.forEach(cmd => {
+          const roleNames = ["Everyone", "Group Admin", "Bot Admin", "Bot Owner"];
+          const item = document.createElement('div');
+          item.className = 'p-3 hover:bg-[#151c2e]/50 transition-colors text-xs space-y-1';
+          item.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-cyan-400 text-sm font-mono">${cmd.name}</span>
+              <span class="bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded text-[10px] font-semibold">${cmd.category.toUpperCase()}</span>
+            </div>
+            <p class="text-gray-300 text-[11px]">${cmd.description}</p>
+            <div class="flex gap-3 text-gray-500 text-[10px] pt-1">
+              <span>🔑 ${roleNames[cmd.role || 0]}</span>
+              <span>⏳ ${cmd.countDown || 0}s cd</span>
+            </div>
+          `;
+          commandsList.appendChild(item);
+        });
+      } catch (err) {
+        console.error("Error loading commands list:", err);
+      }
+    }
+
+    async function loadInitialLogs() {
+      try {
+        const res = await fetch('/api/logs');
+        const list = await res.json();
+        logViewport.innerHTML = '';
+        list.forEach(line => {
+          appendLogLine(line);
+        });
+      } catch (err) {
+        console.error("Error loading initial logs:", err);
+      }
+    }
+
+    function appendLogLine(line) {
+      const lineDiv = document.createElement('div');
+      
+      // Syntax highlight levels
+      if (line.includes('[SUCCESS]')) {
+        lineDiv.className = 'text-emerald-400';
+      } else if (line.includes('[WARN]')) {
+        lineDiv.className = 'text-yellow-400';
+      } else if (line.includes('[ERROR]')) {
+        lineDiv.className = 'text-red-400 font-bold';
+      } else if (line.includes('[SYSTEM]')) {
+        lineDiv.className = 'text-purple-400';
+      } else {
+        lineDiv.className = 'text-cyan-200';
+      }
+      
+      lineDiv.innerText = line;
+      logViewport.appendChild(lineDiv);
+      logViewport.scrollTop = logViewport.scrollHeight;
+    }
+
+    // Connect real-time logging via WebSockets
+    function setupWebSocket() {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        wsStatusLabel.innerText = "WS: LIVE";
+        wsStatusLabel.className = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-lg font-medium";
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        
+        // Log stream
+        if (msg.type === 'log') {
+          appendLogLine(msg.text);
+        }
+        
+        // Bot replies intercept
+        if (msg.type === 'bot_message') {
+          appendBotMessage(msg.text, msg.messageID);
+        }
+      };
+
+      ws.onclose = () => {
+        wsStatusLabel.innerText = "WS: RECONNECTING";
+        wsStatusLabel.className = "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-3 py-1.5 rounded-lg font-medium";
+        setTimeout(setupWebSocket, 3000); // retry
+      };
+    }
+
+    // UI Additions for chat viewport
+    function appendUserMessage(senderName, text) {
+      const block = document.createElement('div');
+      block.className = 'self-end bg-[#1e293b] border border-gray-700/50 rounded-xl px-4 py-2.5 max-w-lg shadow-sm text-xs space-y-0.5';
+      block.innerHTML = `
+        <span class="block text-[10px] text-gray-400 font-bold">${senderName}</span>
+        <span class="text-white text-xs">${escapeHtml(text)}</span>
+      `;
+      chatViewport.appendChild(block);
+      chatViewport.scrollTop = chatViewport.scrollHeight;
+    }
+
+    let activeReply = null;
+
+    function cancelReply() {
+      activeReply = null;
+      document.getElementById('reply-badge').classList.add('hidden');
+    }
+
+    function initiateReply(messageID, text) {
+      activeReply = { messageID, text };
+      document.getElementById('reply-badge-text').innerText = text.length > 30 ? text.slice(0, 30) + '...' : text;
+      document.getElementById('reply-badge').classList.remove('hidden');
+      document.getElementById('sim-message').focus();
+    }
+
+    async function sendSimulatedReaction(emoji, messageID) {
+      const userName = document.getElementById('sim-user-name').value.trim();
+      const userId = document.getElementById('sim-user-id').value.trim();
+      
+      appendLogLine(`[SYSTEM] Sending reaction ${emoji} to message ${messageID}...`);
+
+      try {
+        const res = await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderID: userId,
+            senderName: userName,
+            threadID: "1234567890",
+            reaction: { reaction: emoji, messageID }
+          })
+        });
+        const result = await res.json();
+        if (result.success) {
+          appendLogLine(`[SUCCESS] Registered simulated reaction: ${emoji}`);
+          loadStats();
+        }
+      } catch (err) {
+        console.error("Failed to send simulated reaction:", err);
+      }
+    }
+
+    function appendBotMessage(text, messageID = null) {
+      const block = document.createElement('div');
+      block.className = 'self-start bg-[#020617] border border-cyan-800/30 rounded-xl px-4 py-2.5 max-w-lg shadow-md text-xs space-y-2 relative group';
+      
+      let actionsHtml = '';
+      if (messageID) {
+        const cleanText = text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        actionsHtml = `
+          <div class="flex items-center gap-2 mt-2 border-t border-gray-800/60 pt-1.5">
+            <button onclick="initiateReply('${messageID}', '${cleanText}')" class="text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold bg-cyan-950/20 hover:bg-cyan-950/50 px-2 py-0.5 rounded transition-colors flex items-center gap-1">
+              ↩️ Reply
+            </button>
+            <div class="flex gap-1 border-l border-gray-800 pl-2">
+              ${['👍', '❤️', '😂', '😮', '😢', '😡'].map(emoji => `
+                <button onclick="sendSimulatedReaction('${emoji}', '${messageID}')" class="hover:scale-125 transition-transform px-0.5 text-xs">
+                  ${emoji}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      block.innerHTML = `
+        <span class="block text-[10px] text-cyan-400 font-bold">🤖 Riyad Bot Reply</span>
+        <span class="text-gray-200 text-xs whitespace-pre-wrap">${escapeHtml(text)}</span>
+        ${actionsHtml}
+      `;
+      chatViewport.appendChild(block);
+      chatViewport.scrollTop = chatViewport.scrollHeight;
+    }
+
+    function escapeHtml(unsafe) {
+      return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // REST API Explorer Fetch helper
+    async function inspectApi(endpoint) {
+      const display = document.getElementById('api-payload');
+      display.innerText = "Fetching payload...";
+      try {
+        const res = await fetch(endpoint);
+        const data = await res.json();
+        display.innerText = JSON.stringify(data, null, 2);
+      } catch (err) {
+        display.innerText = "Error: " + err.message;
+      }
+    }
+
+    // Handle interactive text submission
+    simulatorForm.onsubmit = async (e) => {
+      e.preventDefault();
+      
+      const userName = document.getElementById('sim-user-name').value.trim();
+      const userId = document.getElementById('sim-user-id').value.trim();
+      const messageBody = document.getElementById('sim-message').value.trim();
+
+      if (!messageBody) return;
+
+      // Save reply context
+      const replyPayload = activeReply ? { messageID: activeReply.messageID, senderID: "bot", body: activeReply.text } : null;
+
+      // Add to viewport
+      appendUserMessage(userName, messageBody);
+      document.getElementById('sim-message').value = '';
+      cancelReply();
+
+      // Post simulation API event
+      try {
+        const res = await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderID: userId,
+            senderName: userName,
+            threadID: "1234567890", // mock thread
+            body: messageBody,
+            isGroupAdmin: true,
+            messageReply: replyPayload
+          })
+        });
+        
+        const result = await res.json();
+        if (!result.success) {
+          appendBotMessage(`❌ Simulation Failed: ${result.error}`);
+        } else {
+          // Trigger instant refresh of state metrics on dashboard
+          loadStats();
+        }
+      } catch (err) {
+        appendBotMessage(`❌ Connection Error: ${err.message}`);
+      }
+    };
+
+    // Clear log viewport
+    document.getElementById('clear-logs-btn').onclick = async () => {
+      try {
+        await fetch('/api/clear-logs', { method: 'POST' });
+        logViewport.innerHTML = '<div class="text-gray-500 italic text-[11px]">System logs cleared.</div>';
+      } catch (err) {
+        console.error("Failed to clear logs:", err);
+      }
+    };
+
+    // Init Page setup
+    loadStats();
+    loadCommands();
+    loadInitialLogs();
+    setupWebSocket();
+  </script>
+</body>
+</html>

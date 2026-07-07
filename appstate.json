@@ -1,0 +1,16 @@
+[
+  {
+    "key": "c_user",
+    "value": "100076133880000",
+    "domain": "facebook.com",
+    "path": "/",
+    "expires": "2027-12-31T23:59:59.000Z"
+  },
+  {
+    "key": "xs",
+    "value": "mock_xs_cookie_value_riyad_bot",
+    "domain": "facebook.com",
+    "path": "/",
+    "expires": "2027-12-31T23:59:59.000Z"
+  }
+]

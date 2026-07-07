@@ -1,0 +1,8 @@
+{
+  "name": "Riyad Bot",
+  "description": "Riyad Bot Framework - A production-ready, modular, and highly extensible Messenger Bot Framework in Node.js (CommonJS), fully integrated with the Gemini AI API.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
