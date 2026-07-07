@@ -63,14 +63,14 @@ module.exports = {
       responseText += `╔═══════════════════╗
 💡 𝙏𝙮𝙥𝙚 '${prefix}help [command]' 𝙩𝙤 𝙜𝙚𝙩 𝙘𝙤𝙢𝙢𝙖𝙣𝙙 𝙞𝙣𝙛𝙤.
 ╚═══════════════════╝`;
-      const img = (await axios.get(
+      const res = await axios.get(
   "https://i.imgur.com/iV35CAf.gif",
-  { responseType: "stream" }
-)).data;
+  { responseType: "arraybuffer" }
+);
 
 await api.sendMessage({
   body: responseText,
-  attachment: img
+  attachment: Buffer.from(res.data)
 }, threadID);
     } else {
       const query = args[0].toLowerCase();
