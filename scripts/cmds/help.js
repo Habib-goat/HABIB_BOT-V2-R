@@ -37,9 +37,9 @@ module.exports = {
         }
       }
 
-      let responseText = `╔════════════════════════════════════╗
+      let responseText = `╔═════════════════════╗
 📂 ✦『 𝙍𝙄𝙔𝘼𝘿 𝘽𝙊𝙏 𝙈𝙀𝙉𝙐 』✦ 📂
-╚════════════════════════════════════╝
+╚═════════════════════╝
 
 ⚡ 𝙋𝙧𝙚𝙛𝙞𝙭 ➜ '${prefix}'
 ✨ 𝘾𝙤𝙢𝙢𝙖𝙣𝙙𝙨 ➜ ${commands.size}
@@ -60,9 +60,9 @@ module.exports = {
   responseText += "\n\n";
 }
 
-      responseText += `╔══════════════════════════╗
+      responseText += `╔═════════════════════╗
 💡 𝙏𝙮𝙥𝙚 '${prefix}help [command]' 𝙩𝙤 𝙜𝙚𝙩 𝙘𝙤𝙢𝙢𝙖𝙣𝙙 𝙞𝙣𝙛𝙤.
-╚══════════════════════════╝`;
+╚═════════════════════╝`;
       await api.sendMessage(responseText, threadID);
     } else {
       const query = args[0].toLowerCase();
