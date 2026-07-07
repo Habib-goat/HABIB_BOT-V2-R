@@ -9,15 +9,21 @@ const eventLoader = require('../handlers/eventLoader');
 const { MessengerAdapterFactory } = require('./messengerAdapter');
 
 let loginLib;
+
 try {
   const libName = config.messengerLib || "fca-eryxenx";
-loginLib = require(libName);
+  loginLib = require(libName);
 } catch (err) {
-  logger.warn(`[Messenger] Selected library "${config.messengerLib || 'fca-eryxenx'}" not found, falling back to "fca-eryxenx"`);
+  logger.warn(
+    `[Messenger] Selected library "${config.messengerLib || "fca-eryxenx"}" not found, falling back to "fca-eryxenx"`
+  );
 
-loginLib = require("fca-eryxenx");
+  try {
+    loginLib = require("fca-eryxenx");
   } catch (e) {
-    logger.error("[Messenger] Failed to load 'fca-eryxenx'. Running in simulated dashboard mode only.");
+    logger.error(
+      "[Messenger] Failed to load 'fca-eryxenx'. Running in simulated dashboard mode only."
+    );
   }
 }
 
@@ -145,7 +151,11 @@ function startMessenger(app, wsServer) {
       });
 
       // Wrap standard API with our custom promise-based adapter
-      const adaptedApi = MessengerAdapterFactory.create(config.messengerLib || 'fca-unofficial', api, wsServer);
+      const adaptedApi = MessengerAdapterFactory.create(
+  config.messengerLib || "fca-eryxenx",
+  api,
+  wsServer
+);
 
       // Make API accessible globally or in express app
       app.set('messengerApi', adaptedApi);
