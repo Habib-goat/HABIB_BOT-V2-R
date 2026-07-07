@@ -1,5 +1,5 @@
 const config = require('../../config.json');
-
+const axios = require("axios");
 module.exports = {
   config: {
     name: "help",
@@ -63,7 +63,15 @@ module.exports = {
       responseText += `╔═════════════════════╗
 💡 𝙏𝙮𝙥𝙚 '${prefix}help [command]' 𝙩𝙤 𝙜𝙚𝙩 𝙘𝙤𝙢𝙢𝙖𝙣𝙙 𝙞𝙣𝙛𝙤.
 ╚═════════════════════╝`;
-      await api.sendMessage(responseText, threadID);
+      const img = (await axios.get(
+  "https://files.catbox.moe/skd17r",
+  { responseType: "stream" }
+)).data;
+
+await api.sendMessage({
+  body: responseText,
+  attachment: img
+}, threadID);
     } else {
       const query = args[0].toLowerCase();
       let cmd = commands.get(query);
