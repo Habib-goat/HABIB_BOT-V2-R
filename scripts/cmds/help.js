@@ -1,5 +1,5 @@
 const config = require('../../config.json');
-const axios = require("axios");
+const fs = require("fs");
 module.exports = {
   config: {
     name: "help",
@@ -63,14 +63,9 @@ module.exports = {
       responseText += `╔═══════════════════╗
 💡 𝙏𝙮𝙥𝙚 '${prefix}help [command]' 𝙩𝙤 𝙜𝙚𝙩 𝙘𝙤𝙢𝙢𝙖𝙣𝙙 𝙞𝙣𝙛𝙤.
 ╚═══════════════════╝`;
-      const res = await axios.get(
-  "https://i.imgur.com/iV35CAf.gif",
-  { responseType: "arraybuffer" }
-);
-
-await api.sendMessage({
+      await api.sendMessage({
   body: responseText,
-  attachment: Buffer.from(res.data)
+  attachment: fs.createReadStream("./assets/help.gif")
 }, threadID);
     } else {
       const query = args[0].toLowerCase();
