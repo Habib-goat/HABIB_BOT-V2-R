@@ -37,15 +37,32 @@ module.exports = {
         }
       }
 
-      let responseText = `📂 ━━━━ [ ${config.botName.toUpperCase()} MENU ] ━━━━ 📂\n`;
-      responseText += `✨ Prefix: '${prefix}' | Commands: ${commands.size}\n\n`;
+      let responseText = `╔════════════════════════════════════╗
+📂 ✦『 𝙍𝙄𝙔𝘼𝘿 𝘽𝙊𝙏 𝙈𝙀𝙉𝙐 』✦ 📂
+╚════════════════════════════════════╝
+
+⚡ 𝙋𝙧𝙚𝙛𝙞𝙭 ➜ '${prefix}'
+✨ 𝘾𝙤𝙢𝙢𝙖𝙣𝙙𝙨 ➜ ${commands.size}
+
+`;
 
       for (const [category, cmdsList] of Object.entries(categories)) {
-        responseText += `📁 [ ${category.toUpperCase()} ]\n`;
-        responseText += `  » ${cmdsList.sort().join(', ')}\n\n`;
-      }
+  responseText += `╭━━━━━━━━━━━━━━━╮
+┃ ${getCategoryIcon(category)} 『 ${category.toUpperCase()} 』
+╰━━━━━━━━━━━━━━━╯
+`;
 
-      responseText += `💡 Type '${prefix}help [command]' to get instructions for a specific tool.`;
+  responseText += cmdsList
+    .sort()
+    .map(cmd => `➤ » ${cmd}`)
+    .join("\n");
+
+  responseText += "\n\n";
+}
+
+      responseText += `╔══════════════════════════╗
+💡 𝙏𝙮𝙥𝙚 '${prefix}help [command]' 𝙩𝙤 𝙜𝙚𝙩 𝙘𝙤𝙢𝙢𝙖𝙣𝙙 𝙞𝙣𝙛𝙤.
+╚══════════════════════════╝`;
       await api.sendMessage(responseText, threadID);
     } else {
       const query = args[0].toLowerCase();
@@ -78,7 +95,19 @@ module.exports = {
       helpText += `💡 Guide: ${guideStr.replace(/{pn}/g, prefix + cmd.config.name)}\n`;
       helpText += `━━━━━━━━━━━━━━━━━━━━━`;
 
-      await api.sendMessage(helpText, threadID);
+            await api.sendMessage(helpText, threadID);
     }
   }
 };
+
+function getCategoryIcon(category) {
+  switch (category.toLowerCase()) {
+    case "ai": return "🤖";
+    case "economy": return "💰";
+    case "fun": return "🎮";
+    case "system": return "⚙️";
+    case "utility": return "🛠️";
+    case "info": return "👑";
+    default: return "📁";
+  }
+}
