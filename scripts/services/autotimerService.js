@@ -92,19 +92,22 @@ async function checkAndSend() {
     );
 
     // Download video if not cached
-    if (!fs.existsSync(videoFile)) {
-      try {
-        const response = await axios.get(data.video, {
-          responseType: "arraybuffer",
-          timeout: 30000
-        });
+if (!fs.existsSync(videoFile)) {
+  try {
+    const response = await axios.get(data.video, {
+      responseType: "arraybuffer",
+      timeout: 30000
+    });
 
-        fs.writeFileSync(videoFile, Buffer.from(response.data));
-      } catch (err) {
-        console.error("[AutoTimer] Video download failed:", err.message);
-        return;
-      }
-    }
+    // Ensure cache directory exists
+    fs.ensureDirSync(path.dirname(videoFile));
+
+    fs.writeFileSync(videoFile, Buffer.from(response.data));
+  } catch (err) {
+    console.error("[AutoTimer] Video download failed:", err.message);
+    return;
+  }
+}
 
     const messageBody =
 `◢◤━━━━━━━━━━━━━━━━◥◣
