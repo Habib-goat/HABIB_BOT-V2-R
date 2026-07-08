@@ -14,11 +14,10 @@ if (!global.RiyadBot.onReply) {
 }
 
 const replyManager = {
-  /**
-   * Register a message ID to listen for replies
-   * @param {string} messageID - The ID of the message sent by the bot
-   * @param {object} replyData - Metadata (commandName, senderID, etc.)
-   */
+  set: (messageID, replyData) => {
+    return replyManager.register(messageID, replyData);
+  },
+
   register: (messageID, replyData) => {
     global.RiyadBot.onReply.set(messageID, {
       ...replyData,
@@ -26,7 +25,6 @@ const replyManager = {
     });
     logger.info(`[Reply Manager] Registered reply listener for message ${messageID} (${replyData.commandName})`);
   },
-
   /**
    * Check if a message reply event has an active listener and execute it
    */
@@ -43,11 +41,12 @@ const replyManager = {
         try {
           logger.info(`[Reply Manager] Executing onReply for command '${replyData.commandName}'`);
           await cmd.onReply({
-            api,
-            event,
-            replyData,
-            message: api
-          });
+  api,
+  event,
+  Reply: replyData,
+  replyManager: module.exports,
+  reactionManager: {}
+});
           return true;
         } catch (err) {
           logger.error(`Error in onReply handler of command '${replyData.commandName}':`, err);
