@@ -1,3 +1,4 @@
+console.log("[PP] Command loading...");
 const fs = require("fs-extra");
 const axios = require("axios");
 const path = require("path");
