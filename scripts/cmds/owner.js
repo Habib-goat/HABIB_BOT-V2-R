@@ -29,7 +29,7 @@ module.exports = {
     fs.mkdirSync(cacheDir);
   }
 
-  const imgLink = "https://i.imgur.com/QoryGQW.jpeg";
+  const imgLink = "https://i.imgur.com/kNMyJXk.jpeg";
 
   const ownerInfo = `‎‎╔═ ❖👑 𝑶𝑾𝑵𝑬𝑹 𝑰𝑵𝑭𝑶 👑❖ ═╗
 
