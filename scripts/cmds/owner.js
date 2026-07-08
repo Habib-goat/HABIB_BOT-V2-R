@@ -1,8 +1,29 @@
-const config = require('../../config.json');
-const fs = require("fs-extra");
-const request = require("request");
-const path = require("path");
+try {
+  const response = await axios({
+    url: imgLink,
+    method: "GET",
+    responseType: "stream"
+  });
 
+  response.data.pipe(fs.createWriteStream(imgPath));
+
+  response.data.on("end", () => {
+    api.sendMessage(
+      {
+        body: ownerInfo,
+        attachment: fs.createReadStream(imgPath)
+      },
+      event.threadID,
+      () => {
+        if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
+      },
+      event.messageID
+    );
+  });
+
+} catch (err) {
+  api.sendMessage(ownerInfo, event.threadID, event.messageID);
+}
 module.exports = {
   config: {
     name: "owner",
