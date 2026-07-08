@@ -15,6 +15,7 @@
     "lint": "echo \"Done\""
   },
   "dependencies": {
+    "request": "^2.88.2",
     "@google/genai": "^2.4.0",
     "axios": "^1.18.1",
     "dotenv": "^17.2.3",
