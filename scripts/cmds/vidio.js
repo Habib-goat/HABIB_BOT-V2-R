@@ -15,7 +15,7 @@ async function baseApiUrl(){
 module.exports={
 config:{
 name:"vidio",
-aliases:["ভিডিও","video","vid"],
+aliases:["ভিডিও","vidio","vid"],
 version:"2.1.0",
 author:"Riyad",
 countDown:5,
