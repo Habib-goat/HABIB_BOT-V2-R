@@ -48,6 +48,22 @@ function ensureUserData(api, senderID) {
   }
 }
 
+function ensureThreadData(api, threadID) {
+  if (!threadID) return;
+  const thread = database.getThread(threadID);
+  if (thread.name.startsWith("Group Thread ") && typeof api.getThreadInfo === 'function') {
+    api.getThreadInfo(threadID, (err, info) => {
+      if (!err && info) {
+        const realName = info.threadName || info.name;
+        if (realName) {
+          database.updateThread(threadID, { name: realName });
+          logger.info(`[Database] Automatically resolved and updated name for thread ${threadID}: "${realName}"`);
+        }
+      }
+    });
+  }
+}
+
 // System events dispatcher
 async function dispatchSystemEvent(api, event) {
   const { logMessageType, threadID } = event;
@@ -136,10 +152,10 @@ function startMessenger(app, wsServer) {
 
       // Wrap standard API with our custom promise-based adapter
       const adaptedApi = MessengerAdapterFactory.create(
-        config.messengerLib || "fca-eryxenx",
-        api,
-        wsServer
-      );
+  config.messengerLib || "fca-eryxenx",
+  api,
+  wsServer
+);
 
       // Make API accessible globally or in express app
       app.set('messengerApi', adaptedApi);
@@ -168,6 +184,7 @@ function startMessenger(app, wsServer) {
 
         // Background resolve of display names
         ensureUserData(adaptedApi, event.senderID);
+        ensureThreadData(adaptedApi, event.threadID);
 
         // Process based on type
         try {
