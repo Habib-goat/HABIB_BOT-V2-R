@@ -216,13 +216,15 @@ const botEngine = {
       if (typeof cmd.onChat === 'function') {
         try {
           await cmd.onChat({
-            api,
-            event,
-            args: body.split(/\s+/),
-            message: api,
-            usersData: database,
-            threadsData: database
-          });
+  api,
+  event,
+  args: body.split(/\s+/),
+  message: api,
+  usersData: database,
+  threadsData: database,
+  replyManager,
+  reactionManager
+});
         } catch (err) {
           logger.error(`Error in onChat hook for command '${name}':`, err);
         }
@@ -294,13 +296,15 @@ const botEngine = {
       try {
         database.incrementCommandCount();
         await cmd.onStart({
-          api,
-          event,
-          args,
-          message: api,
-          usersData: database,
-          threadsData: database
-        });
+  api,
+  event,
+  args,
+  message: api,
+  usersData: database,
+  threadsData: database,
+  replyManager,
+  reactionManager
+});
       } catch (err) {
         logger.error(`Error executing command '${cmd.config.name}':`, err);
         await api.sendMessage(`❌ [ERROR] An error occurred while executing the command '${cmd.config.name}': ${err.message}`, threadID, messageID);
