@@ -305,6 +305,7 @@ class MessengerAdapterFactory {
     
     switch (normalizedProvider) {
       case 'fca-unofficial':
+      case 'fca-eryxenx':
       case 'facebook-chat-api':
       case 'fca':
         return new FcaMessengerAdapter(underlyingApi, wsServer, restLogs);

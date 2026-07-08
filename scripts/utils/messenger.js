@@ -9,15 +9,21 @@ const eventLoader = require('../handlers/eventLoader');
 const { MessengerAdapterFactory } = require('./messengerAdapter');
 
 let loginLib;
+
 try {
-  const libName = config.messengerLib || 'fca-unofficial';
+  const libName = config.messengerLib || "fca-eryxenx";
   loginLib = require(libName);
 } catch (err) {
-  logger.warn(`[Messenger] Selected library "${config.messengerLib || 'fca-unofficial'}" not found, falling back to "fca-unofficial"`);
+  logger.warn(
+    `[Messenger] Selected library "${config.messengerLib || "fca-eryxenx"}" not found, falling back to "fca-eryxenx"`
+  );
+
   try {
-    loginLib = require('fca-unofficial');
+    loginLib = require("fca-eryxenx");
   } catch (e) {
-    logger.error("[Messenger] Failed to load 'fca-unofficial'. Running in simulated dashboard mode only.");
+    logger.error(
+      "[Messenger] Failed to load 'fca-eryxenx'. Running in simulated dashboard mode only."
+    );
   }
 }
 
@@ -36,22 +42,6 @@ function ensureUserData(api, senderID) {
         if (realName) {
           database.updateUser(senderID, { name: realName });
           logger.info(`[Database] Automatically resolved and updated name for user ${senderID}: "${realName}"`);
-        }
-      }
-    });
-  }
-}
-
-function ensureThreadData(api, threadID) {
-  if (!threadID) return;
-  const thread = database.getThread(threadID);
-  if (thread.name.startsWith("Group Thread ") && typeof api.getThreadInfo === 'function') {
-    api.getThreadInfo(threadID, (err, info) => {
-      if (!err && info) {
-        const realName = info.threadName || info.name;
-        if (realName) {
-          database.updateThread(threadID, { name: realName });
-          logger.info(`[Database] Automatically resolved and updated name for thread ${threadID}: "${realName}"`);
         }
       }
     });
@@ -123,34 +113,9 @@ function startMessenger(app, wsServer) {
       return;
     }
 
-    const loginOptions = {
-      forceLogin: true,
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    };
-
-    loginLib({ appState }, loginOptions, (err, api) => {
+    loginLib({ appState }, (err, api) => {
       if (err) {
         logger.error("❌ Facebook Messenger authentication failed:", err.error || err.message || err);
-        
-        logger.warn("\n====================================================================");
-        logger.warn("📖 FACEBOOK MESSENGER LOGIN TROUBLESHOOTING GUIDE");
-        logger.warn("====================================================================");
-        logger.warn("1. CHECK FACEBOOK ACCOUNT SECURITY (CHECKPOINT):");
-        logger.warn("   Since your bot is running on a cloud hosting server, Facebook");
-        logger.warn("   frequently flags the new login IP address as suspicious.");
-        logger.warn("   👉 ACTION: Open Facebook on your phone/browser, check your notifications,");
-        logger.warn("      and approve the login by clicking 'Yes, it was me'.");
-        logger.warn("--------------------------------------------------------------------");
-        logger.warn("2. UPDATE EXPIRED COOKIES (appstate.json):");
-        logger.warn("   Your session cookies inside appstate.json may have expired or");
-        logger.warn("   been invalidated by Facebook (e.g. if you logged out).");
-        logger.warn("   👉 ACTION: ");
-        logger.warn("      a. Log in to Facebook in your normal browser.");
-        logger.warn("      b. Use a Chrome extension (e.g. 'Appstate Exporter' or 'EditThisCookie')");
-        logger.warn("         to copy your active cookies as a JSON array.");
-        logger.warn("      c. Overwrite the contents of /appstate.json in this project.");
-        logger.warn("====================================================================\n");
-
         logger.warn("Continuing system startup in simulated/interactive console mode. Auto-reconnection loop active.");
         
         // Retry connection in 30 seconds
@@ -170,7 +135,11 @@ function startMessenger(app, wsServer) {
       });
 
       // Wrap standard API with our custom promise-based adapter
-      const adaptedApi = MessengerAdapterFactory.create(config.messengerLib || 'fca-unofficial', api, wsServer);
+      const adaptedApi = MessengerAdapterFactory.create(
+        config.messengerLib || "fca-eryxenx",
+        api,
+        wsServer
+      );
 
       // Make API accessible globally or in express app
       app.set('messengerApi', adaptedApi);
@@ -199,7 +168,6 @@ function startMessenger(app, wsServer) {
 
         // Background resolve of display names
         ensureUserData(adaptedApi, event.senderID);
-        ensureThreadData(adaptedApi, event.threadID);
 
         // Process based on type
         try {
