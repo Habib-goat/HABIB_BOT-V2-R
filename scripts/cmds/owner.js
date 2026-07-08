@@ -1,4 +1,7 @@
 const config = require('../../config.json');
+const fs = require("fs-extra");
+const request = require("request");
+const path = require("path");
 
 module.exports = {
   config: {
@@ -17,7 +20,17 @@ module.exports = {
     }
   },
 
-  onStart: async function({ api, event }) {
+  onStart: async function ({ api, event }) {
+
+  const cacheDir = path.join(__dirname, "cache");
+  const imgPath = path.join(cacheDir, "owner.jpg");
+
+  if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir);
+  }
+
+  const imgLink = "https://i.imgur.com/QoryGQW.jpeg";
+
   const ownerInfo = `‎‎╔═ ❖👑 𝑶𝑾𝑵𝑬𝑹 𝑰𝑵𝑭𝑶 👑❖ ═╗
 
 ❖ 👤 𝑵𝒂𝒎𝒆        ⟿ 𝑩𝒂𝒅 𝑩𝒐𝒚 𝑹𝒊𝒚𝒂𝒅
@@ -44,5 +57,18 @@ module.exports = {
 
 ╚══ ❖ 💎 𝑻𝒉𝒂𝒏𝒌 𝒀𝒐𝒖 💎 ❖ ══╝`;
 
-  await api.sendMessage(ownerInfo, event.threadID);
-}
+  request(imgLink)
+    .pipe(fs.createWriteStream(imgPath))
+    .on("close", () => {
+      api.sendMessage(
+        {
+          body: ownerInfo,
+          attachment: fs.createReadStream(imgPath)
+        },
+        event.threadID,
+        () => fs.unlinkSync(imgPath),
+        event.messageID
+            );
+    });
+  }
+};
