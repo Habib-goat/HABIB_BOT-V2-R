@@ -156,7 +156,8 @@ function startMessenger(app, wsServer) {
   api,
   wsServer
 );
-
+const autoTimerService = require("../services/autotimerService");
+autoTimerService.setApi(adaptedApi);
       // Make API accessible globally or in express app
       app.set('messengerApi', adaptedApi);
 
