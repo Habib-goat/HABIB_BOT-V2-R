@@ -22,7 +22,7 @@ async function baseApiUrl() {
 module.exports = {
   config: {
     name: "vidio",
-    aliases: ["ভিডিও", "video", "vid"],
+    aliases: ["ভিডিও", "vidio", "vid"],
     version: "2.3.0",
     author: "Riyad",
     countDown: 5,
@@ -51,7 +51,7 @@ module.exports = {
         );
 
       if (typeof api.setMessageReaction === "function")
-        api.setMessageReaction("🐤", event.messageID, () => {}, true);
+        api.setMessageReaction("♻️", event.messageID, () => {}, true);
 
       const apiUrl = await baseApiUrl();
 
