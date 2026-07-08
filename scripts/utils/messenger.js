@@ -163,7 +163,7 @@ autoTimerService.setApi(adaptedApi);
 
       // Listen to incoming messages and events
       logger.info("Messenger live message broker successfully engaged. Listening for events...");
-
+console.log("LISTENER STARTED");
       stopListener = api.listenMqtt(async (listenErr, event) => {
         console.log("[LISTENER]", event.type, event.messageID);
         if (listenErr) {
