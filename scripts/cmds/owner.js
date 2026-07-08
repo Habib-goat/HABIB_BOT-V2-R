@@ -9,7 +9,7 @@ onStart:async function({api,event}){
 const cacheDir=path.join(__dirname,"cache");
 const imgPath=path.join(cacheDir,"owner.jpg");
 if(!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
-const imgLink="https://i.imgur.com/QoryGQW.jpeg";
+const imgLink="https://files.catbox.moe/9m38vj.png";
 const ownerInfo = `‎‎╔═ ❖👑 𝑶𝑾𝑵𝑬𝑹 𝑰𝑵𝑭𝑶 👑❖ ═╗
 
 ❖ 👤 𝑵𝒂𝒎𝒆        ⟿ 𝑩𝒂𝒅 𝑩𝒐𝒚 𝑹𝒊𝒚𝒂𝒅
