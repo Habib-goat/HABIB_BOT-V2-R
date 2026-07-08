@@ -82,12 +82,12 @@ function sendBabyMessage(api, text, threadID, replyToID, replyManager, senderID)
   
   const register = (msgID) => {
     if (!msgID || !replyManager) return;
-    if (typeof replyManager.set === 'function') {
-      replyManager.set(msgID, {
-        commandName: "baby",
-        author: senderID
-      });
-    }
+    if (typeof replyManager.register === 'function') {
+  replyManager.register(msgID, {
+    commandName: "baby",
+    authorID: senderID
+  });
+}
   };
 
   const result = api.sendMessage(formattedText, threadID, (err, info) => {
