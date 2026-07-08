@@ -189,27 +189,46 @@ console.log("LISTENER STARTED");
         ensureThreadData(adaptedApi, event.threadID);
 
         // Process based on type
-        try {
-          if (event.type === "message" || event.type === "message_reply") {
-            // Process message and run command matches
-            await botEngine.processMessage(event, commandLoader, eventLoader, wsServer, null, adaptedApi);
-          } else if (event.type === "message_reaction") {
-            // Normalize as reaction event for botEngine
-            const reactionEvent = {
-              ...event,
-              reaction: event.reaction,
-              messageID: event.messageID,
-              senderID: event.senderID,
-              threadID: event.threadID
-            };
-            await botEngine.processMessage(reactionEvent, commandLoader, eventLoader, wsServer, null, adaptedApi);
-          } else if (event.type === "event") {
-            // System event (subscribe, unsubscribe, group properties, etc.)
-            await dispatchSystemEvent(adaptedApi, event);
-          }
-        } catch (procErr) {
-          logger.error("Error processing incoming Messenger broker event:", procErr);
-        }
+try {
+
+  if (event.type === "message" || event.type === "message_reply") {
+
+    await botEngine.processMessage(
+      event,
+      commandLoader,
+      eventLoader,
+      wsServer,
+      null,
+      adaptedApi
+    );
+
+  } else if (event.type === "message_reaction") {
+
+    console.log("========== REACTION EVENT ==========");
+    console.log(JSON.stringify(event, null, 2));
+    console.log("====================================");
+
+    await botEngine.processMessage(
+      {
+        ...event,
+        reaction: event.reaction
+      },
+      commandLoader,
+      eventLoader,
+      wsServer,
+      null,
+      adaptedApi
+    );
+
+  } else if (event.type === "event") {
+
+    await dispatchSystemEvent(adaptedApi, event);
+
+  }
+
+} catch (procErr) {
+  logger.error("Error processing incoming Messenger broker event:", procErr);
+}
       });
     });
   }
