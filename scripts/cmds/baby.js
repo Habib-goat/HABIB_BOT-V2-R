@@ -66,10 +66,10 @@ function toBoldUnicode(text) {
   return text.split('').map(char => {
     const code = char.charCodeAt(0);
     if (code >= 65 && code <= 90) {
-      // Capital A-Z -> MATHEMATICAL SANS-SERIF BOLD CAPITAL A is U+1D5D4 (120276)
+      // Capital A-Z -> U+1D5D4 (120276)
       return String.fromCodePoint(code + 120211);
     } else if (code >= 97 && code <= 122) {
-      // Small a-z -> MATHEMATICAL SANS-SERIF BOLD SMALL A is U+1D5EE (120302)
+      // Small a-z -> U+1D5EE (120302)
       return String.fromCodePoint(code + 120205);
     }
     return char;
@@ -80,21 +80,44 @@ function toBoldUnicode(text) {
 function sendBabyMessage(api, text, threadID, replyToID, replyManager, senderID) {
   const formattedText = toBoldUnicode(text);
   
-  return api.sendMessage(formattedText, threadID, (err, info) => {
-    if (err) return;
-    if (replyManager) {
-      const registrationData = {
+  const register = (msgID) => {
+    if (!msgID || !replyManager) return;
+    if (typeof replyManager.set === 'function') {
+      replyManager.set(msgID, {
         commandName: "baby",
-        messageID: info.messageID,
         author: senderID
-      };
-      if (typeof replyManager.set === 'function') {
-        replyManager.set(info.messageID, registrationData);
-      } else if (typeof replyManager.register === 'function') {
-        replyManager.register(info.messageID, registrationData);
-      }
+      });
+    }
+  };
+
+  const result = api.sendMessage(formattedText, threadID, (err, info) => {
+    if (err) return;
+    const msgID = info && (info.messageID || info.messageId || (typeof info === 'string' ? info : null));
+    if (msgID) {
+      register(msgID);
+    } else {
+      Promise.resolve(result).then(resVal => {
+        const fallbackID = resVal && (resVal.messageID || resVal.messageId || (typeof resVal === 'string' ? resVal : null));
+        if (fallbackID) {
+          register(fallbackID);
+        }
+      }).catch(() => {});
     }
   }, replyToID);
+
+  if (result) {
+    if (typeof result.then === 'function') {
+      result.then(resVal => {
+        const msgID = resVal && (resVal.messageID || resVal.messageId || (typeof resVal === 'string' ? resVal : null));
+        if (msgID) register(msgID);
+      }).catch(() => {});
+    } else {
+      const msgID = result.messageID || result.messageId || (typeof result === 'string' ? result : null);
+      if (msgID) register(msgID);
+    }
+  }
+
+  return result;
 }
 
 // Helper to call public Baby/Simsimi API
@@ -275,7 +298,7 @@ module.exports = {
       return sendBabyMessage(api, `✅ Removed response for trigger: "${trigger}"`, threadID, messageID, replyManager, senderID);
     }
 
-    // 5. MSG SUBCOMMAND (Checking total taught and general status)
+    // 5. MSG SUBCOMMAND
     if (subCommand === "msg" || subCommand === "status") {
       const count = Object.keys(db.taught).length;
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
@@ -293,17 +316,15 @@ module.exports = {
       );
     }
 
-    // 6. DEFAULT PREFIX AI CHAT (When typing: /baby hello, /baby how are you, etc.)
+    // 6. DEFAULT PREFIX AI CHAT
     const textQuery = args.join(" ");
     const normalizedQuery = textQuery.trim().toLowerCase();
 
-    // Check if we have a custom taught response
     if (db.taught[normalizedQuery]) {
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
       return sendBabyMessage(api, db.taught[normalizedQuery], threadID, messageID, replyManager, senderID);
     }
 
-    // Query external Baby AI API
     const reply = await fetchAIResponse(textQuery);
     if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
 
@@ -319,13 +340,9 @@ module.exports = {
     const body = event.body.trim();
     const bodyLower = body.toLowerCase();
 
-    // Triggers defined by the user: baby, bby, bb, bbz, xan, jan, bot
     const triggers = ["baby", "bby", "bb", "bbz", "xan", "jan", "bot"];
-    
-    // Check if the message is exactly a trigger word (Trigger Only)
     const isTriggerOnly = triggers.includes(bodyLower);
 
-    // Check if message starts with any trigger word or mentions it at the start
     let matchedTrigger = null;
     for (const trigger of triggers) {
       if (bodyLower === trigger || bodyLower.startsWith(trigger + " ")) {
@@ -334,14 +351,12 @@ module.exports = {
       }
     }
 
-    if (!matchedTrigger) return; // If no triggers are matched, ignore
+    if (!matchedTrigger) return;
 
-    // Trigger typing indicator
     if (typeof api.sendTypingIndicator === 'function') {
       api.sendTypingIndicator(true, threadID);
     }
 
-    // 1. TRIGGER ONLY: Send random cute response
     if (isTriggerOnly) {
       const cuteReplies = [
         "Ki bolbe bolo baby? 🥺",
@@ -359,20 +374,17 @@ module.exports = {
       return sendBabyMessage(api, randomReply, threadID, messageID, replyManager, senderID);
     }
 
-    // 2. AUTO CHAT WITH CONTENT: Extract content after the trigger
     let query = body.slice(matchedTrigger.length).trim();
     if (!query) return;
 
     const normalizedQuery = query.toLowerCase();
     const db = getDB();
 
-    // Check custom database
     if (db.taught[normalizedQuery]) {
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
       return sendBabyMessage(api, db.taught[normalizedQuery], threadID, messageID, replyManager, senderID);
     }
 
-    // Fallback to online Baby AI API / Offline Banglish response
     const reply = await fetchAIResponse(query);
     if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
 
@@ -394,13 +406,11 @@ module.exports = {
 
     const db = getDB();
 
-    // Check custom memory
     if (db.taught[normalizedQuery]) {
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
       return sendBabyMessage(api, db.taught[normalizedQuery], threadID, messageID, replyManager, senderID);
     }
 
-    // Call Baby AI API / Offline Banglish response
     const reply = await fetchAIResponse(query);
     if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
 
