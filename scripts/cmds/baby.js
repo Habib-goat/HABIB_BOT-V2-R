@@ -11,6 +11,8 @@
  * - Single-word trigger: replies with cute/funny random messages
  * - Integrated replyManager & reactionManager
  * - Local file persistence for taught words
+ * - Every message automatically registered in replyManager for continuous flow
+ * - Automatic conversion of all English responses to Bold Unicode characters
  */
 
 const fs = require('fs');
@@ -58,6 +60,43 @@ function saveDB(db) {
   }
 }
 
+// Helper to convert English letters to bold Unicode Sans-Serif Bold characters
+function toBoldUnicode(text) {
+  if (typeof text !== 'string') return text;
+  return text.split('').map(char => {
+    const code = char.charCodeAt(0);
+    if (code >= 65 && code <= 90) {
+      // Capital A-Z -> MATHEMATICAL SANS-SERIF BOLD CAPITAL A is U+1D5D4 (120276)
+      return String.fromCodePoint(code + 120211);
+    } else if (code >= 97 && code <= 122) {
+      // Small a-z -> MATHEMATICAL SANS-SERIF BOLD SMALL A is U+1D5EE (120302)
+      return String.fromCodePoint(code + 120205);
+    }
+    return char;
+  }).join('');
+}
+
+// Helper to send formatted message and register in replyManager
+function sendBabyMessage(api, text, threadID, replyToID, replyManager, senderID) {
+  const formattedText = toBoldUnicode(text);
+  
+  return api.sendMessage(formattedText, threadID, (err, info) => {
+    if (err) return;
+    if (replyManager) {
+      const registrationData = {
+        commandName: "baby",
+        messageID: info.messageID,
+        author: senderID
+      };
+      if (typeof replyManager.set === 'function') {
+        replyManager.set(info.messageID, registrationData);
+      } else if (typeof replyManager.register === 'function') {
+        replyManager.register(info.messageID, registrationData);
+      }
+    }
+  }, replyToID);
+}
+
 // Helper to call public Baby/Simsimi API
 async function fetchAIResponse(text) {
   const urls = [
@@ -69,8 +108,7 @@ async function fetchAIResponse(text) {
     // Try SimSimi Net API
     const response = await axios.get(urls[0], { timeout: 4000 });
     if (response.data && response.data.success) {
-      // Simsimi returns English by default, so we can mock/convert or translate if needed,
-      // but if the API returns text, to ensure ALL replies are in Banglish, we will fallback to cute Banglish.
+      // API fallback
     }
   } catch (err) {
     // Fallback or continue
@@ -93,7 +131,7 @@ async function fetchAIResponse(text) {
 module.exports = {
   config: {
     name: "baby",
-    version: "2.5.0",
+    version: "2.6.0",
     author: "Riyad",
     cooldown: 3,
     role: 0,
@@ -131,7 +169,8 @@ module.exports = {
 
     if (args.length === 0) {
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-      return api.sendMessage(
+      return sendBabyMessage(
+        api,
         "🍼 Baby Bot Command Hub 🍼\n\n" +
         "Amake ektu text dao ba subcommands use koro:\n" +
         "• /baby teach [trigger] - [response]\n" +
@@ -140,7 +179,9 @@ module.exports = {
         "• /baby remove [trigger]\n\n" +
         "Or prefix chada direct chat koro! Try: 'baby hi'",
         threadID,
-        messageID
+        messageID,
+        replyManager,
+        senderID
       );
     }
 
@@ -151,7 +192,7 @@ module.exports = {
       const teachContent = args.slice(1).join(" ");
       if (!teachContent.includes("-")) {
         if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-        return api.sendMessage("❌ Invalid format! Use: /baby teach [trigger] - [response]", threadID, messageID);
+        return sendBabyMessage(api, "❌ Invalid format! Use: /baby teach [trigger] - [response]", threadID, messageID, replyManager, senderID);
       }
 
       const parts = teachContent.split("-");
@@ -160,7 +201,7 @@ module.exports = {
 
       if (!trigger || !response) {
         if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-        return api.sendMessage("❌ Both trigger and response are required!", threadID, messageID);
+        return sendBabyMessage(api, "❌ Both trigger and response are required!", threadID, messageID, replyManager, senderID);
       }
 
       db.taught[trigger] = response;
@@ -168,7 +209,7 @@ module.exports = {
 
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
       api.setMessageReaction("❤️", messageID, () => {}, true);
-      return api.sendMessage(`✅ Baby sikhe gese!\n\nTrigger: "${trigger}"\nResponse: "${response}"`, threadID, messageID);
+      return sendBabyMessage(api, `✅ Baby sikhe gese!\n\nTrigger: "${trigger}"\nResponse: "${response}"`, threadID, messageID, replyManager, senderID);
     }
 
     // 2. LIST SUBCOMMAND
@@ -176,7 +217,7 @@ module.exports = {
       const keys = Object.keys(db.taught);
       if (keys.length === 0) {
         if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-        return api.sendMessage("🧸 Baby amon kono kotha ekhono sikhe ni! /baby teach diye shuru koro.", threadID, messageID);
+        return sendBabyMessage(api, "🧸 Baby amon kono kotha ekhono sikhe ni! /baby teach diye shuru koro.", threadID, messageID, replyManager, senderID);
       }
 
       let listMessage = "🍼 Baby's Custom Memory List 🍼\n\n";
@@ -185,7 +226,7 @@ module.exports = {
       });
 
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-      return api.sendMessage(listMessage, threadID, messageID);
+      return sendBabyMessage(api, listMessage, threadID, messageID, replyManager, senderID);
     }
 
     // 3. EDIT SUBCOMMAND
@@ -193,7 +234,7 @@ module.exports = {
       const editContent = args.slice(1).join(" ");
       if (!editContent.includes("-")) {
         if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-        return api.sendMessage("❌ Invalid format! Use: /baby edit [trigger] - [new response]", threadID, messageID);
+        return sendBabyMessage(api, "❌ Invalid format! Use: /baby edit [trigger] - [new response]", threadID, messageID, replyManager, senderID);
       }
 
       const parts = editContent.split("-");
@@ -202,7 +243,7 @@ module.exports = {
 
       if (!db.taught[trigger]) {
         if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-        return api.sendMessage(`❌ Trigger "${trigger}" does not exist in Baby's database! Use teach first.`, threadID, messageID);
+        return sendBabyMessage(api, `❌ Trigger "${trigger}" does not exist in Baby's database! Use teach first.`, threadID, messageID, replyManager, senderID);
       }
 
       db.taught[trigger] = response;
@@ -210,7 +251,7 @@ module.exports = {
 
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
       api.setMessageReaction("📝", messageID, () => {}, true);
-      return api.sendMessage(`✅ Edited successfully!\n\nTrigger: "${trigger}"\nNew Response: "${response}"`, threadID, messageID);
+      return sendBabyMessage(api, `✅ Edited successfully!\n\nTrigger: "${trigger}"\nNew Response: "${response}"`, threadID, messageID, replyManager, senderID);
     }
 
     // 4. REMOVE SUBCOMMAND
@@ -218,12 +259,12 @@ module.exports = {
       const trigger = args.slice(1).join(" ").trim().toLowerCase();
       if (!trigger) {
         if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-        return api.sendMessage("❌ Please specify the trigger word to remove!", threadID, messageID);
+        return sendBabyMessage(api, "❌ Please specify the trigger word to remove!", threadID, messageID, replyManager, senderID);
       }
 
       if (!db.taught[trigger]) {
         if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-        return api.sendMessage(`❌ Trigger "${trigger}" not found in custom database!`, threadID, messageID);
+        return sendBabyMessage(api, `❌ Trigger "${trigger}" not found in custom database!`, threadID, messageID, replyManager, senderID);
       }
 
       delete db.taught[trigger];
@@ -231,21 +272,24 @@ module.exports = {
 
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
       api.setMessageReaction("🗑️", messageID, () => {}, true);
-      return api.sendMessage(`✅ Removed response for trigger: "${trigger}"`, threadID, messageID);
+      return sendBabyMessage(api, `✅ Removed response for trigger: "${trigger}"`, threadID, messageID, replyManager, senderID);
     }
 
     // 5. MSG SUBCOMMAND (Checking total taught and general status)
     if (subCommand === "msg" || subCommand === "status") {
       const count = Object.keys(db.taught).length;
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-      return api.sendMessage(
+      return sendBabyMessage(
+        api,
         `🍼 Baby System Stats 🍼\n\n` +
         `• Total custom taught phrases: ${count}\n` +
         `• AutoTeach Status: ${db.settings.autoTeach ? "Enabled ✅" : "Disabled ❌"}\n` +
         `• Trigger words: baby, bby, bb, bbz, xan, jan, bot\n` +
         `• Active AI Model: SimSimi / baby-sim-v2`,
         threadID,
-        messageID
+        messageID,
+        replyManager,
+        senderID
       );
     }
 
@@ -256,44 +300,14 @@ module.exports = {
     // Check if we have a custom taught response
     if (db.taught[normalizedQuery]) {
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-      return api.sendMessage(db.taught[normalizedQuery], threadID, (err, info) => {
-        if (err) return;
-        if (replyManager && typeof replyManager.set === 'function') {
-          replyManager.set(info.messageID, {
-            commandName: "baby",
-            messageID: info.messageID,
-            author: senderID
-          });
-        } else if (replyManager && typeof replyManager.register === 'function') {
-          replyManager.register(info.messageID, {
-            commandName: "baby",
-            messageID: info.messageID,
-            author: senderID
-          });
-        }
-      }, messageID);
+      return sendBabyMessage(api, db.taught[normalizedQuery], threadID, messageID, replyManager, senderID);
     }
 
     // Query external Baby AI API
     const reply = await fetchAIResponse(textQuery);
     if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
 
-    return api.sendMessage(reply, threadID, (err, info) => {
-      if (err) return;
-      if (replyManager && typeof replyManager.set === 'function') {
-        replyManager.set(info.messageID, {
-          commandName: "baby",
-          messageID: info.messageID,
-          author: senderID
-        });
-      } else if (replyManager && typeof replyManager.register === 'function') {
-        replyManager.register(info.messageID, {
-          commandName: "baby",
-          messageID: info.messageID,
-          author: senderID
-        });
-      }
-    }, messageID);
+    return sendBabyMessage(api, reply, threadID, messageID, replyManager, senderID);
   },
 
   /**
@@ -342,23 +356,7 @@ module.exports = {
       const randomReply = cuteReplies[Math.floor(Math.random() * cuteReplies.length)];
       
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-      
-      return api.sendMessage(randomReply, threadID, (err, info) => {
-        if (err) return;
-        if (replyManager && typeof replyManager.set === 'function') {
-          replyManager.set(info.messageID, {
-            commandName: "baby",
-            messageID: info.messageID,
-            author: senderID
-          });
-        } else if (replyManager && typeof replyManager.register === 'function') {
-          replyManager.register(info.messageID, {
-            commandName: "baby",
-            messageID: info.messageID,
-            author: senderID
-          });
-        }
-      }, messageID);
+      return sendBabyMessage(api, randomReply, threadID, messageID, replyManager, senderID);
     }
 
     // 2. AUTO CHAT WITH CONTENT: Extract content after the trigger
@@ -371,44 +369,14 @@ module.exports = {
     // Check custom database
     if (db.taught[normalizedQuery]) {
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-      return api.sendMessage(db.taught[normalizedQuery], threadID, (err, info) => {
-        if (err) return;
-        if (replyManager && typeof replyManager.set === 'function') {
-          replyManager.set(info.messageID, {
-            commandName: "baby",
-            messageID: info.messageID,
-            author: senderID
-          });
-        } else if (replyManager && typeof replyManager.register === 'function') {
-          replyManager.register(info.messageID, {
-            commandName: "baby",
-            messageID: info.messageID,
-            author: senderID
-          });
-        }
-      }, messageID);
+      return sendBabyMessage(api, db.taught[normalizedQuery], threadID, messageID, replyManager, senderID);
     }
 
     // Fallback to online Baby AI API / Offline Banglish response
     const reply = await fetchAIResponse(query);
     if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
 
-    return api.sendMessage(reply, threadID, (err, info) => {
-      if (err) return;
-      if (replyManager && typeof replyManager.set === 'function') {
-        replyManager.set(info.messageID, {
-          commandName: "baby",
-          messageID: info.messageID,
-          author: senderID
-        });
-      } else if (replyManager && typeof replyManager.register === 'function') {
-        replyManager.register(info.messageID, {
-          commandName: "baby",
-          messageID: info.messageID,
-          author: senderID
-        });
-      }
-    }, messageID);
+    return sendBabyMessage(api, reply, threadID, messageID, replyManager, senderID);
   },
 
   /**
@@ -429,43 +397,13 @@ module.exports = {
     // Check custom memory
     if (db.taught[normalizedQuery]) {
       if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
-      return api.sendMessage(db.taught[normalizedQuery], threadID, (err, info) => {
-        if (err) return;
-        if (replyManager && typeof replyManager.set === 'function') {
-          replyManager.set(info.messageID, {
-            commandName: "baby",
-            messageID: info.messageID,
-            author: senderID
-          });
-        } else if (replyManager && typeof replyManager.register === 'function') {
-          replyManager.register(info.messageID, {
-            commandName: "baby",
-            messageID: info.messageID,
-            author: senderID
-          });
-        }
-      }, messageID);
+      return sendBabyMessage(api, db.taught[normalizedQuery], threadID, messageID, replyManager, senderID);
     }
 
     // Call Baby AI API / Offline Banglish response
     const reply = await fetchAIResponse(query);
     if (typeof api.sendTypingIndicator === 'function') api.sendTypingIndicator(false, threadID);
 
-    return api.sendMessage(reply, threadID, (err, info) => {
-      if (err) return;
-      if (replyManager && typeof replyManager.set === 'function') {
-        replyManager.set(info.messageID, {
-          commandName: "baby",
-          messageID: info.messageID,
-          author: senderID
-        });
-      } else if (replyManager && typeof replyManager.register === 'function') {
-        replyManager.register(info.messageID, {
-          commandName: "baby",
-          messageID: info.messageID,
-          author: senderID
-        });
-      }
-    }, messageID);
+    return sendBabyMessage(api, reply, threadID, messageID, replyManager, senderID);
   }
 };
