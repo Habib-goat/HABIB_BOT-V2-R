@@ -20,7 +20,7 @@ const serviceManager = require('./scripts/services/serviceManager');
 const scheduler = require('./cron/systemBackup');
 const apiRouter = require('./api/routes/api');
 const messenger = require('./scripts/utils/messenger');
-
+const autoTimerService = require('./scripts/services/autotimerService');
 async function startBot() {
   logger.system("Initializing Riyad Bot Framework...");
 
@@ -38,7 +38,10 @@ async function startBot() {
   pluginManager.loadAll();
 
   logger.info("Initializing background microservices...");
-  await serviceManager.startAll();
+
+serviceManager.register("autotimer", autoTimerService);
+
+await serviceManager.startAll();
 
   // 3. Load all system events
   logger.info("Loading system events...");
