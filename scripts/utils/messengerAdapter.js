@@ -304,11 +304,10 @@ class MessengerAdapterFactory {
     const normalizedProvider = (provider || 'simulated').toLowerCase();
     
     switch (normalizedProvider) {
-  case 'fca-unofficial':
-  case 'fca-eryxenx':
-  case 'facebook-chat-api':
-  case 'fca':
-    return new FcaMessengerAdapter(underlyingApi, wsServer, restLogs);
+      case 'fca-unofficial':
+      case 'facebook-chat-api':
+      case 'fca':
+        return new FcaMessengerAdapter(underlyingApi, wsServer, restLogs);
       case 'graph':
       case 'facebook-graph':
         return new GraphMessengerAdapter(underlyingApi, wsServer, restLogs);

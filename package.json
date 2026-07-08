@@ -2,24 +2,18 @@
   "name": "riyad-bot",
   "private": true,
   "version": "1.0.0",
-  "description": "Riyad Bot Framework - Facebook Messenger Bot",
-  "main": "app.js",
-  "engines": {
-    "node": "18.x",
-    "npm": ">=9.0.0"
-  },
   "scripts": {
-    "start": "node app.js",
     "dev": "node app.js",
-    "build": "echo \"Done\"",
-    "lint": "echo \"Done\""
+    "build": "echo 'Done'",
+    "start": "node app.js",
+    "lint": "echo 'Done'"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
     "axios": "^1.18.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "fca-eryxenx": "^35.0.0",
+    "fca-unofficial": "^1.3.10",
     "fs-extra": "^11.3.6",
     "moment-timezone": "^0.6.2",
     "node-cron": "^4.6.0",

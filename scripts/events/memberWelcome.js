@@ -22,7 +22,7 @@ module.exports = {
       const groupName = (threadInfo && threadInfo.name) ? threadInfo.name : "Group Chat";
 
       for (const participant of addedParticipants) {
-        // Skip if the participant is the bot itself (handled by botWelcome)
+        // Skip if the participant is the bot itself
         if (botID && String(participant.userFbId) === String(botID)) {
           continue;
         }

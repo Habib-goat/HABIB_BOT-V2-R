@@ -1,5 +1,5 @@
 const config = require('../../config.json');
-const fs = require("fs");
+
 module.exports = {
   config: {
     name: "help",
@@ -37,36 +37,16 @@ module.exports = {
         }
       }
 
-      let responseText = `╔═══════════════════╗
-📂 ✦『 𝙍𝙄𝙔𝘼𝘿 𝘽𝙊𝙏 𝙈𝙀𝙉𝙐 』✦ 📂
-╚═══════════════════╝
-
-⚡ 𝙋𝙧𝙚𝙛𝙞𝙭 ➜ '${prefix}'
-✨ 𝘾𝙤𝙢𝙢𝙖𝙣𝙙𝙨 ➜ ${commands.size}
-
-`;
+      let responseText = `📂 ━━━━ [ ${config.botName.toUpperCase()} MENU ] ━━━━ 📂\n`;
+      responseText += `✨ Prefix: '${prefix}' | Commands: ${commands.size}\n\n`;
 
       for (const [category, cmdsList] of Object.entries(categories)) {
-  responseText += `╭━━━━━━━━━━━━━━━╮
-┃ ${getCategoryIcon(category)} 『 ${category.toUpperCase()} 』
-╰━━━━━━━━━━━━━━━╯
-`;
+        responseText += `📁 [ ${category.toUpperCase()} ]\n`;
+        responseText += `  » ${cmdsList.sort().join(', ')}\n\n`;
+      }
 
-  responseText += cmdsList
-    .sort()
-    .map(cmd => `➤ » ${cmd}`)
-    .join("\n");
-
-  responseText += "\n\n";
-}
-
-      responseText += `╔═══════════════════╗
-💡 𝙏𝙮𝙥𝙚 '${prefix}help [command]' 𝙩𝙤 𝙜𝙚𝙩 𝙘𝙤𝙢𝙢𝙖𝙣𝙙 𝙞𝙣𝙛𝙤.
-╚═══════════════════╝`;
-      await api.sendMessage({
-  body: responseText,
-  attachment: fs.createReadStream("./assets/help.gif")
-}, threadID);
+      responseText += `💡 Type '${prefix}help [command]' to get instructions for a specific tool.`;
+      await api.sendMessage(responseText, threadID);
     } else {
       const query = args[0].toLowerCase();
       let cmd = commands.get(query);
@@ -98,19 +78,7 @@ module.exports = {
       helpText += `💡 Guide: ${guideStr.replace(/{pn}/g, prefix + cmd.config.name)}\n`;
       helpText += `━━━━━━━━━━━━━━━━━━━━━`;
 
-            await api.sendMessage(helpText, threadID);
+      await api.sendMessage(helpText, threadID);
     }
   }
 };
-
-function getCategoryIcon(category) {
-  switch (category.toLowerCase()) {
-    case "ai": return "🤖";
-    case "economy": return "💰";
-    case "fun": return "🎮";
-    case "system": return "⚙️";
-    case "utility": return "🛠️";
-    case "info": return "👑";
-    default: return "📁";
-  }
-}
