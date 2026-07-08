@@ -1,0 +1,56 @@
+{
+  "botName": "Riyad Bot",
+  "prefix": "/",
+  "messengerLib": "fca-eryxenx",
+  "adminIDs": ["61574930690578", "100012596826153"],
+  "ownerIDs": ["61591664037355"],
+  "language": "en",
+  "theme": "dark",
+  "port": 3000,
+  "webhookVerifyToken": "riyad_bot_verify_token_2026",
+  "antiSpam": {
+    "enabled": true,
+    "limit": 5,
+    "timeWindow": 10000,
+    "blockDuration": 60000
+  },
+  "antiLink": {
+    "enabled": true,
+    "action": "warn"
+  },
+  "antiBadword": {
+    "enabled": true,
+    "words": ["spam", "scam", "hack", "abuse"]
+  },
+  "autoReply": {
+    "enabled": true,
+    "replies": {
+      "hello": "Hello there! I am Riyad Bot. How can I help you today?",
+      "ping": "Pong! The system is running smoothly.",
+      "prefix": "My current prefix is '/'. Type '/help' to see my commands."
+    }
+  },
+  "autoReact": {
+    "enabled": true,
+    "reactions": {
+      "love": "❤️",
+      "like": "👍",
+      "haha": "😆"
+    }
+  },
+  "database": {
+    "type": "json",
+    "mongoURI": ""
+  },
+  "updateChecker": {
+    "enabled": true,
+    "interval": 86400000
+  },
+  "gemini": {
+    "model": "gemini-3.5-flash",
+    "systemInstruction": "You are Riyad Bot, a highly intelligent, premium, and friendly server-side Messenger Bot assistant."
+  },
+  "openai": {
+    "model": "gpt-4"
+  }
+}
