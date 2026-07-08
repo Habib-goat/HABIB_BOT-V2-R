@@ -21,7 +21,7 @@ module.exports = {
     if (!threadID) return;
 
     // Use threadsData to get thread settings and default to enabled (true)
-    const threadData = threadsData.getThread(threadID);
+    const threadData = await threadsData.getThread(threadID);
     const isEnabled = threadData.settings && threadData.settings.autoseen !== false;
 
     if (!isEnabled) return;
@@ -29,17 +29,11 @@ module.exports = {
     try {
       // Safely access the underlying Messenger API or the adapted API
       if (api && api.api && typeof api.api.markAsRead === "function") {
-        api.api.markAsRead(threadID, (err) => {
-          // Runs silently in background
-        });
-      } else if (api && typeof api.markAsRead === "function") {
-        api.markAsRead(threadID, (err) => {
-          // Runs silently in background
-        });
-      } else if (api && api.api && typeof api.api.markAsSeen === "function") {
-        api.api.markAsSeen(threadID, (err) => {
-          // Runs silently in background
-        });
+  await api.api.markAsRead(threadID);
+} else if (api && typeof api.markAsRead === "function") {
+  await api.markAsRead(threadID);
+} else if (api && api.api && typeof api.api.markAsSeen === "function") {
+        await api.api.markAsSeen(threadID);
       }
     } catch (err) {
       // Prevent any background runtime exceptions from affecting other features
@@ -50,7 +44,7 @@ module.exports = {
   onStart: async function({ api, event, args, threadsData }) {
     const threadID = event.threadID;
     const messageID = event.messageID;
-    const threadData = threadsData.getThread(threadID);
+    const threadData = await threadsData.getThread(threadID);
 
     // If no argument is provided, show current status
     if (args.length === 0) {
@@ -68,7 +62,7 @@ module.exports = {
         threadData.settings = {};
       }
       threadData.settings.autoseen = true;
-      threadsData.updateThread(threadID, { settings: threadData.settings });
+await threadsData.updateThread(threadID, { settings: threadData.settings });
 
       return api.sendMessage(
         `✅ **Auto-Seen has been enabled for this thread.**\nIncoming messages will now be automatically marked as read in the background.`,
@@ -80,8 +74,7 @@ module.exports = {
         threadData.settings = {};
       }
       threadData.settings.autoseen = false;
-      threadsData.updateThread(threadID, { settings: threadData.settings });
-
+await threadsData.updateThread(threadID, { settings: threadData.settings });
       return api.sendMessage(
         `❌ **Auto-Seen has been disabled for this thread.**\nMessages will no longer be automatically marked as seen in this chat.`,
         threadID,
