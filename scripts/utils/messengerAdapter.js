@@ -184,7 +184,24 @@ class FcaMessengerAdapter extends BaseMessengerAdapter {
       if (typeof callback === 'function') callback(new Error("getThreadInfo not supported"), null);
     }
   }
+async editMessage(messageID, text) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.editMessage !== "function") {
+      return reject(new Error("Underlying FCA editMessage function is not available."));
+    }
 
+    // Try signature: (messageID, text, callback)
+    this.api.editMessage(messageID, text, (err) => {
+      if (!err) return resolve(true);
+
+      // Fallback: (text, messageID, callback)
+      this.api.editMessage(text, messageID, (err2) => {
+        if (err2) return reject(err2);
+        resolve(true);
+      });
+    });
+  });
+}
   async getThreadList(limit = 100, timestamp = null, tags = ["INBOX"]) {
     return new Promise((resolve, reject) => {
       if (typeof this.api.getThreadList !== "function") {
