@@ -1,4 +1,5 @@
 const config = require('../../config.json');
+const database = require("../../utils/database");
 
 module.exports = {
   config: {
@@ -19,9 +20,14 @@ console.log("usersData methods:", Object.keys(usersData || {}));
 const thread = threadsData.getThread(threadID);
 
     const leftParticipantID = String(event.logMessageData.leftParticipantFbId);
-    const leftParticipantName =
-      event.logMessageData.leftParticipantName ||
-      `User ${leftParticipantID.slice(-4)}`;
+    let leftParticipantName;
+
+try {
+  leftParticipantName = database.getUser(leftParticipantID).name;
+  console.log("Goodbye Name:", leftParticipantName);
+} catch (err) {
+  leftParticipantName = `User ${leftParticipantID.slice(-4)}`;
+}
 
     const msg = `╭━━━〔 🥀 𝐆𝐎𝐎𝐃𝐁𝐘𝐄 🥀 〕━━━╮
 
