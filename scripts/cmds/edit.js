@@ -28,15 +28,19 @@ async function urlToBase64(url){
 async function progress(api, msgId, p, t) {
   console.log("Progress:", p);
 
-  if (!api.editMessage || !msgId) {
-    console.log("editMessage not found");
-    return;
-  }
+  if (!msgId) return;
 
   const bars = {
-    10:"▓░░░░░░░░░",20:"▓▓░░░░░░░░",30:"▓▓▓░░░░░░░",40:"▓▓▓▓░░░░░░",
-    50:"▓▓▓▓▓░░░░░",60:"▓▓▓▓▓▓░░░░",70:"▓▓▓▓▓▓▓░░░",80:"▓▓▓▓▓▓▓▓░░",
-    90:"▓▓▓▓▓▓▓▓▓░",100:"▓▓▓▓▓▓▓▓▓▓"
+    10:"▓░░░░░░░░░",
+    20:"▓▓░░░░░░░░",
+    30:"▓▓▓░░░░░░░",
+    40:"▓▓▓▓░░░░░░",
+    50:"▓▓▓▓▓░░░░░",
+    60:"▓▓▓▓▓▓░░░░",
+    70:"▓▓▓▓▓▓▓░░░",
+    80:"▓▓▓▓▓▓▓▓░░",
+    90:"▓▓▓▓▓▓▓▓▓░",
+    100:"▓▓▓▓▓▓▓▓▓▓"
   };
 
   const body = `🖌️ Editing Image...
@@ -45,20 +49,10 @@ ${bars[p]} ${p}%
 ${t}`;
 
   try {
-    await new Promise((resolve, reject) => {
-      api.editMessage(msgId, body, (err) => err ? reject(err) : resolve());
-    });
+    await api.editMessage(msgId, body);
     console.log("Updated:", p);
-  } catch (e1) {
-    console.log("Method-1 Failed:", e1);
-    try {
-      await new Promise((resolve, reject) => {
-        api.editMessage(body, msgId, (err) => err ? reject(err) : resolve());
-      });
-      console.log("Updated (Method-2):", p);
-    } catch (e2) {
-      console.log("Method-2 Failed:", e2);
-    }
+  } catch (err) {
+    console.log("editMessage Error:", err);
   }
 }
 
