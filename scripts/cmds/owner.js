@@ -6,9 +6,11 @@ const path=require("path");
 module.exports={
 config:{name:"owner",aliases:["admin","developer","creator","info"],version:"1.0.0",author:"Riyad Bot",countDown:3,role:0,category:"info",guide:{en:"{pn}"},description:{en:"View developer and project contact links."}},
 onStart:async function({api,event}){
-const cacheDir=path.join(__dirname,"cache");
+const cacheDir = path.join(process.cwd(), "cache");
 const imgPath=path.join(cacheDir,"owner.jpg");
-if(!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
+if (!fs.existsSync(cacheDir)) {
+  fs.mkdirSync(cacheDir, { recursive: true });
+}
 const imgLink="https://files.catbox.moe/9m38vj.png";
 const ownerInfo = `‎‎╔═ ❖👑 𝑶𝑾𝑵𝑬𝑹 𝑰𝑵𝑭𝑶 👑❖ ═╗
 
@@ -30,14 +32,40 @@ const ownerInfo = `‎‎╔═ ❖👑 𝑶𝑾𝑵𝑬𝑹 𝑰𝑵𝑭𝑶 �
 
 ╚══ ❖ 💎 𝑻𝒉𝒂𝒏𝒌 𝒀𝒐𝒖 💎 ❖ ══╝`;
 
-try{
- const res=await axios({url:imgLink,method:"GET",responseType:"stream"});
- const w=fs.createWriteStream(imgPath);
- res.data.pipe(w);
- w.on("finish",()=>api.sendMessage({body:ownerInfo,attachment:fs.createReadStream(imgPath)},event.threadID,()=>{if(fs.existsSync(imgPath))fs.unlinkSync(imgPath);},event.messageID));
- w.on("error",async()=>await api.sendMessage(ownerInfo,event.threadID,event.messageID));
-}catch(e){
- await api.sendMessage(ownerInfo,event.threadID,event.messageID);
+try {
+  const res = await axios({
+    url: imgLink,
+    method: "GET",
+    responseType: "arraybuffer"
+  });
+
+  fs.writeFileSync(imgPath, Buffer.from(res.data));
+
+
+  const stream = fs.createReadStream(imgPath);
+
+stream.on("close", () => {
+  if (fs.existsSync(imgPath)) {
+    fs.unlinkSync(imgPath);
+  }
+});
+
+await api.sendMessage(
+  {
+    body: ownerInfo,
+    attachment: stream
+  },
+  event.threadID,
+  event.messageID
+);
+} catch (e) {
+  console.error(e);
+
+  await api.sendMessage(
+    ownerInfo,
+    event.threadID,
+    event.messageID
+  );
 }
 }
 };
