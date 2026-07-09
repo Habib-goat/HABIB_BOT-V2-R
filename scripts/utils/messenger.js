@@ -138,6 +138,7 @@ function startMessenger(app, wsServer) {
         reconnectTimer = setTimeout(doConnect, 30000);
         return;
       }
+      console.log("editMessage:", typeof api.editMessage);
 
       logger.success("✅ Connected successfully to Facebook Messenger API!");
       isConnected = true;
