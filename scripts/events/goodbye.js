@@ -13,7 +13,10 @@ module.exports = {
       return;
 
     const { threadID } = event;
-    const thread = threadsData.getThread(threadID);
+
+console.log("usersData methods:", Object.keys(usersData || {}));
+
+const thread = threadsData.getThread(threadID);
 
     const leftParticipantID = String(event.logMessageData.leftParticipantFbId);
     const leftParticipantName =
