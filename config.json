@@ -8,12 +8,12 @@
   "theme": "dark",
   "port": 3000,
   "webhookVerifyToken": "riyad_bot_verify_token_2026",
-  "antiSpam": {
-    "enabled": true,
-    "limit": 5,
-    "timeWindow": 10000,
-    "blockDuration": 60000
-  },
+"antiSpam": {
+  "enabled": false,
+  "limit": 5,
+  "timeWindow": 10000,
+  "blockDuration": 60000
+}
   "antiLink": {
     "enabled": true,
     "action": "warn"
