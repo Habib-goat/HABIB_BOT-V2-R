@@ -252,11 +252,12 @@ module.exports = {
       await new Promise((resolve, reject) => {
         api.sendMessage(
           {
-            body: "╭───『 RIYAD BOT 』───╮\n" +
-                  "│ 📥 Media Delivery Active\n" +
-                  `│ Platform: ${isDirectFile ? "Direct Link" : "Social Media"}\n` +
-                  `│ File Type: ${fileExtension.toUpperCase()}\n" +
-                  "╰─────────────────────╯",
+            body:
+`╭───『 RIYAD BOT 』───╮
+│ 📥 Media Delivery Active
+│ Platform: ${isDirectFile ? "Direct Link" : "Social Media"}
+│ File Type: ${fileExtension.toUpperCase()}
+╰─────────────────────╯`,
             attachment: fs.createReadStream(tempFilePath)
           },
           threadID,
