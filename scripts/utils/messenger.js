@@ -197,6 +197,12 @@ console.log("unsendMessage:", typeof api.unsendMessage);
 console.log("markAsRead:", typeof api.markAsRead);
 console.log("markAsSeen:", typeof api.markAsSeen);
 console.log("removeUserFromGroup:", typeof api.removeUserFromGroup);
+
+console.log("markAsRead source:");
+console.log(api.markAsRead?.toString());
+
+console.log("markAsSeen source:");
+console.log(api.markAsSeen?.toString());
       // Set options
       api.setOptions({
         listenEvents: true,
