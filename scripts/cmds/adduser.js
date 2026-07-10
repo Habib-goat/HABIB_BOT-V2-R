@@ -77,11 +77,20 @@ module.exports = {
         } else {
           success.push(uid);
         }
-      } catch (err) {
-        failed.push({ item: item, reason: "The bot is blocked from adding, or user privacy settings prevent strangers from adding them." });
-      }
-    }
+} catch (err) {
+  console.log("===== ADD USER ERROR =====");
+  console.log(err);
+  console.log("==========================");
 
+  failed.push({
+    item: item,
+    reason: err?.errorDescription ||
+            err?.error ||
+            err?.message ||
+            JSON.stringify(err)
+  });
+}
+    }
     let msg = "";
     if (success.length > 0) {
       msg += "✅ Successfully added " + success.length + " member(s) to the group.\n";
