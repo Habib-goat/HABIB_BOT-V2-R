@@ -189,20 +189,10 @@ function startMessenger(app, wsServer) {
         reconnectTimer = setTimeout(doConnect, 30000);
         return;
       }
-      console.log("editMessage:", typeof api.editMessage);
 
       logger.success("✅ Connected successfully to Facebook Messenger API!");
       isConnected = true;
-console.log("unsendMessage:", typeof api.unsendMessage);
-console.log("markAsRead:", typeof api.markAsRead);
-console.log("markAsSeen:", typeof api.markAsSeen);
-console.log("removeUserFromGroup:", typeof api.removeUserFromGroup);
-
-console.log("markAsRead source:");
-console.log(api.markAsRead?.toString());
-
-console.log("markAsSeen source:");
-console.log(api.markAsSeen?.toString());
+      
       // Set options
       api.setOptions({
         listenEvents: true,
@@ -224,33 +214,27 @@ autoTimerService.setApi(adaptedApi);
 
       // Listen to incoming messages and events
       logger.info("Messenger live message broker successfully engaged. Listening for events...");
-console.log("LISTENER STARTED");
-      stopListener = api.listenMqtt(async (listenErr, event) => {
-        console.log("[LISTENER]", event.type, event.messageID);
 
-console.log("========== EVENT ==========");
-console.log(JSON.stringify(event, null, 2));
-console.log("===========================");
+stopListener = api.listenMqtt(async (listenErr, event) => {
+  if (listenErr) {
+    logger.error("Broker connection encountered error:", listenErr);
+    isConnected = false;
 
-if (listenErr) {
-  logger.error("Broker connection encountered error:", listenErr);
-  isConnected = false;
+    if (typeof stopListener === "function") {
+      try {
+        stopListener();
+      } catch (e) {}
+    }
 
-  if (typeof stopListener === 'function') {
-    try {
-      stopListener();
-    } catch (e) {}
+    reconnectTimer = setTimeout(doConnect, 10000);
+    return;
   }
 
-  logger.warn("Broker disconnected. Scheduling reconnection in 10 seconds...");
-  reconnectTimer = setTimeout(doConnect, 10000);
-  return;
-}
+  if (!event) return;
 
-        // Safe type casts and string formats
-        event.senderID = event.senderID ? String(event.senderID) : "";
-        event.threadID = event.threadID ? String(event.threadID) : "";
-        event.messageID = event.messageID ? String(event.messageID) : "";
+  event.senderID = String(event.senderID || "");
+  event.threadID = String(event.threadID || "");
+  event.messageID = String(event.messageID || "");
 
         // Background resolve of display names
         ensureUserData(adaptedApi, event.senderID);
@@ -259,15 +243,6 @@ if (
   event.type === "message" ||
   event.type === "message_reply"
 ) {
-console.log("DIRECT TEST");
-
-api.markAsRead(event.threadID, (err) => {
-  if (err) {
-    console.log("DIRECT ERROR", err);
-  } else {
-    console.log("DIRECT SUCCESS");
-  }
-});
   ensureThreadData(adaptedApi, event.threadID);
 }
 
@@ -298,10 +273,6 @@ try {
     );
 
   } else if (event.type === "message_reaction") {
-
-    console.log("========== REACTION EVENT ==========");
-    console.log(JSON.stringify(event, null, 2));
-    console.log("====================================");
 
     await botEngine.processMessage(
       {
