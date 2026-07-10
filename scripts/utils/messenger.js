@@ -193,7 +193,10 @@ function startMessenger(app, wsServer) {
 
       logger.success("✅ Connected successfully to Facebook Messenger API!");
       isConnected = true;
-
+console.log("unsendMessage:", typeof api.unsendMessage);
+console.log("markAsRead:", typeof api.markAsRead);
+console.log("markAsSeen:", typeof api.markAsSeen);
+console.log("removeUserFromGroup:", typeof api.removeUserFromGroup);
       // Set options
       api.setOptions({
         listenEvents: true,
