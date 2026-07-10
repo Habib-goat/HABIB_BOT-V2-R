@@ -339,7 +339,7 @@ module.exports = {
 ┃ 📂 File Type  : ${fileInfo.typeLabel}
 ┃ 📦 Size       : ${formatSize(sizeInBytes)}
 ┃ ⚡ Speed      : ${speed}s
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯
+╰━━━━━━━━━━━━━━━━━━━━━━━━╯
 
 ✨ Download Completed Successfully
 🤖 Powered By RIYAD BOT`;
