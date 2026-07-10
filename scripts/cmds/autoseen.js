@@ -11,13 +11,15 @@ module.exports = {
     console.log("[AUTOSEEN] markAsRead =", typeof api.markAsRead);
     console.log("[AUTOSEEN] markAsSeen =", typeof api.markAsSeen);
 
-    if (typeof api.markAsRead === "function") {
-      await api.markAsRead(event.threadID);
-      console.log("[AUTOSEEN] markAsRead OK");
-    } else if (typeof api.markAsSeen === "function") {
-      await api.markAsSeen();
-      console.log("[AUTOSEEN] markAsSeen OK");
-    }
+    console.log("[AUTOSEEN] PASS");
+
+// if (typeof api.markAsRead === "function") {
+//   await api.markAsRead(event.threadID);
+// } else if (typeof api.markAsSeen === "function") {
+//   await api.markAsSeen();
+// }
+
+console.log("[AUTOSEEN] END");
 
   } catch (e) {
     console.log("[AUTOSEEN ERROR]", e);
