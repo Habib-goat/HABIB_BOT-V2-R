@@ -1,97 +1,128 @@
-const A = require("axios");
-const B = require("fs-extra");
-const C = require("path");
-const S = require("yt-search");
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
 
-const nix = "https://raw.githubusercontent.com/aryannix/stuffs/master/raw/apis.json";
+let cachedApi = null;
+
+async function baseApiUrl() {
+  if (cachedApi) return cachedApi;
+
+  try {
+    const r = await axios.get(
+      "https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json",
+      { timeout: 5000 }
+    );
+
+    if (r.data && r.data.mahmud) {
+      cachedApi = r.data.mahmud;
+      return cachedApi;
+    }
+  } catch (e) {}
+
+  return "https://mahmud-rest-api-v9.onrender.com";
+}
 
 module.exports = {
   config: {
     name: "sing",
     aliases: ["song", "music", "play"],
-    version: "1.0.0",
-    author: "ArYAN (Fixed)",
-    countDown: 10,
+    version: "2.0.0",
+    author: "Riyad + ChatGPT",
+    countDown: 5,
     role: 0,
-    category: "media"
+    category: "media",
+    description: {
+      en: "Search and download song"
+    },
+    guide: {
+      en: "{pn} <song name>"
+    }
   },
 
   onStart: async function ({ api, event, args }) {
-    const { threadID: t, messageID: m } = event;
-    const q = args.join(" ");
-    if (!q) {
-      return api.sendMessage("❌ Please provide a song name or link.\nExample: sing Faded", t, m);
-    }
-
-    const cacheDir = C.join(__dirname, "cache");
-    await B.ensureDir(cacheDir);
-
-    const uniqueFileId = "sing_" + event.senderID + "_" + Date.now();
-    const filePath = C.join(cacheDir, uniqueFileId + ".mp3");
-
     try {
-      api.setMessageReaction("⏳", m, () => {}, true);
-    } catch (e) {}
+      if (!args.length)
+        return api.sendMessage(
+          "🎵 Please enter a song name.",
+          event.threadID,
+          event.messageID
+        );
 
-    try {
-      let E;
-      try {
-        const D = await A.get(nix, { timeout: 8000 });
-        E = D.data.api;
-      } catch (err) {
-        E = "https://api.nixhost.top/aryan";
-      }
+      if (typeof api.setMessageReaction === "function")
+        api.setMessageReaction("⏳", event.messageID, () => {}, true);
 
-      let u = q;
-      if (!q.startsWith("http")) {
-        const r = await S(q);
-        const v = r.videos[0];
-        if (!v) {
-          throw new Error("No YouTube video matches found for your query.");
-        }
-        u = v.url;
-      }
+      api.sendMessage(
+        "🔎 Searching song...",
+        event.threadID,
+        event.messageID
+      );
 
-      const F = await A.get(E + "/ytdl", {
-        params: { url: u, type: "audio" },
+      const apiUrl = await baseApiUrl();
+
+      const search = await axios.get(
+        `${apiUrl}/api/video/search?songName=${encodeURIComponent(args.join(" "))}`,
+        { timeout: 10000 }
+      );
+
+      if (!Array.isArray(search.data) || !search.data.length)
+        return api.sendMessage(
+          "❌ Song not found.",
+          event.threadID,
+          event.messageID
+        );
+
+      const videoID = search.data[0].id;
+
+      // তোমার API যদি format=mp3 সমর্থন করে তাহলে কাজ করবে
+      const info = await axios.get(
+        `${apiUrl}/api/video/download?link=${videoID}&format=mp3`,
+        { timeout: 15000 }
+      );
+
+      if (!info.data || !info.data.downloadLink)
+        return api.sendMessage(
+          "❌ Audio download link not found.",
+          event.threadID,
+          event.messageID
+        );
+
+      const cache = path.join(__dirname, "cache");
+      if (!fs.existsSync(cache))
+        fs.mkdirSync(cache, { recursive: true });
+
+      const file = path.join(cache, `song_${Date.now()}.mp3`);
+
+      const audio = await axios.get(info.data.downloadLink, {
+        responseType: "arraybuffer",
         timeout: 30000
       });
 
-      if (!F.data || !F.data.status || !F.data.downloadUrl) {
-        throw new Error("YouTube conversion helper failed.");
-      }
+      fs.writeFileSync(file, audio.data);
 
-      const DL = F.data.downloadUrl;
-      const title = F.data.title || "Song";
+      if (typeof api.setMessageReaction === "function")
+        api.setMessageReaction("✅", event.messageID, () => {}, true);
 
-      const res = await A.get(DL, { responseType: "arraybuffer", timeout: 40000 });
-      await B.outputFile(filePath, Buffer.from(res.data));
+      api.sendMessage(
+        {
+          body: `🎵 ${info.data.title || "Song"}`,
+          attachment: fs.createReadStream(file)
+        },
+        event.threadID,
+        () => fs.unlink(file, () => {}),
+        event.messageID
+      );
 
-      try {
-        api.setMessageReaction("✅", m, () => {}, true);
-      } catch (e) {}
+    } catch (err) {
+      console.error("[SING ERROR]", err);
 
-      return api.sendMessage({
-        body: "🎵 Title: " + title,
-        attachment: B.createReadStream(filePath)
-      }, t, async () => {
-        try {
-          if (await B.pathExists(filePath)) {
-            await B.remove(filePath);
-          }
-        } catch (cleanupErr) {}
-      }, m);
+      if (typeof api.setMessageReaction === "function")
+        api.setMessageReaction("❌", event.messageID, () => {}, true);
 
-    } catch (e) {
-      try {
-        api.setMessageReaction("❌", m, () => {}, true);
-      } catch (err) {}
-      try {
-        if (await B.pathExists(filePath)) {
-          await B.remove(filePath);
-        }
-      } catch (err) {}
-      return api.sendMessage("❌ Error: " + (e.message || "An unknown error occurred."), t, m);
+      api.sendMessage(
+        `❌ ${err.message}`,
+        event.threadID,
+        event.messageID
+      );
     }
   }
 };
