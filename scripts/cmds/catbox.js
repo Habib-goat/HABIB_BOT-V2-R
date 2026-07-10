@@ -3,11 +3,34 @@ const fs = require("fs");
 const path = require("path");
 const FormData = require("form-data");
 
+function getMimeType(ext) {
+  const mimeTypes = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".mp4": "video/mp4",
+    ".mkv": "video/x-matroska",
+    ".avi": "video/x-msvideo",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+    ".m4a": "audio/mp4",
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+    ".zip": "application/zip",
+    ".rar": "application/vnd.rar",
+    ".apk": "application/vnd.android.package-archive"
+  };
+  return mimeTypes[ext.toLowerCase()] || "application/octet-stream";
+}
+
 module.exports = {
   config: {
     name: "catbox",
-    version: "1.1.0",
-    author: "EryXenX (Fixed)",
+    version: "1.2.0",
+    author: "EryXenX & Kshitiz",
     role: 0,
     shortDescription: "Upload media to Catbox.",
     longDescription: "Reply to any image, video, audio, or attachment file to upload it directly to Catbox.",
@@ -29,7 +52,6 @@ module.exports = {
 
     const attachment = messageReply.attachments[0];
     
-    // EXTREMELY ROBUST EXTENSION MAPPING
     let ext = ".png";
     if (attachment.type === "photo") {
       ext = ".png";
@@ -56,29 +78,56 @@ module.exports = {
     });
 
     try {
-      const response = await axios.get(attachment.url, { 
-        responseType: "arraybuffer",
-        timeout: 25000 
+      const response = await axios({
+        method: "get",
+        url: attachment.url,
+        responseType: "stream",
+        timeout: 30000
       });
-      
-      const buffer = Buffer.from(response.data);
-      // Synchronous write ensures file is fully flushed on all disk/OS targets
-      fs.writeFileSync(filePath, buffer);
+
+      const writer = fs.createWriteStream(filePath);
+      response.data.pipe(writer);
+
+      await new Promise((resolve, reject) => {
+        writer.on("finish", resolve);
+        writer.on("error", reject);
+      });
+
+      if (!fs.existsSync(filePath)) {
+        throw new Error("Downloaded file could not be saved to disk.");
+      }
+
+      const stats = fs.statSync(filePath);
+      if (stats.size === 0) {
+        throw new Error("Downloaded file is empty (0 bytes).");
+      }
 
       const form = new FormData();
       form.append("reqtype", "fileupload");
       form.append("fileToUpload", fs.createReadStream(filePath), {
-        filename: "file" + ext
+        filename: "file" + ext,
+        contentType: getMimeType(ext)
+      });
+
+      const formLength = await new Promise((resolve, reject) => {
+        form.getLength((err, length) => {
+          if (err) reject(err);
+          else resolve(length);
+        });
       });
 
       const uploadResponse = await axios.post(
         "https://catbox.moe/user/api.php",
         form,
         {
-          headers: form.getHeaders(),
+          headers: {
+            ...form.getHeaders(),
+            "Content-Length": formLength,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+          },
           maxBodyLength: Infinity,
           maxContentLength: Infinity,
-          timeout: 45000
+          timeout: 60000
         }
       );
 
@@ -89,8 +138,13 @@ module.exports = {
       if (processingMsg) {
         try { await api.unsendMessage(processingMsg.messageID); } catch (e) {}
       }
-console.log("CATBOX RESPONSE:", uploadResponse.data);
-      const directLink = uploadResponse.data.trim();
+
+      const directLink = uploadResponse.data ? uploadResponse.data.toString().trim() : "";
+      
+      if (!directLink || !directLink.startsWith("https://files.catbox.moe/")) {
+        throw new Error("Catbox returned an invalid response.\nServer Response: " + directLink);
+      }
+
       return api.sendMessage(
         "📤 Catbox Upload Success!\n\n🔗 Direct Link:\n" + directLink,
         threadID,
@@ -100,16 +154,28 @@ console.log("CATBOX RESPONSE:", uploadResponse.data);
     } catch (err) {
       console.error("Catbox Upload Failed:", err);
       if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+        try { fs.unlinkSync(filePath); } catch (e) {}
       }
       if (processingMsg) {
         try { await api.unsendMessage(processingMsg.messageID); } catch (e) {}
       }
-      return api.sendMessage(
-        "❌ Catbox Upload Failed: " + (err.message || "Timeout or Network error"),
-        threadID,
-        messageID
-      );
+
+      let reason = err.message || "An unknown network or execution error occurred.";
+      let serverResponse = "";
+
+      if (err.response) {
+        reason = "HTTP Error Code " + err.response.status + " (" + err.response.statusText + ")";
+        serverResponse = typeof err.response.data === "object" 
+          ? JSON.stringify(err.response.data) 
+          : err.response.data ? err.response.data.toString() : "";
+      }
+
+      let errorMsg = "❌ Catbox Upload Failed\n\nReason:\n" + reason;
+      if (serverResponse) {
+        errorMsg += "\n\nServer Response:\n" + serverResponse;
+      }
+
+      return api.sendMessage(errorMsg, threadID, messageID);
     }
   }
 };
