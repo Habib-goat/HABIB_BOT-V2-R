@@ -7,7 +7,7 @@ const FormData = require("form-data");
 module.exports = {
   config: {
     name: "link",
-    aliases: ["upload","0x0","0x0st"],
+    aliases: ["upload","0x0","link"],
     version: "1.0.0",
     author: "ChatGPT",
     role: 0,
