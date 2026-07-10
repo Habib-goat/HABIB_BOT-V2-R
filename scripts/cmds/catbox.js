@@ -89,7 +89,7 @@ module.exports = {
       if (processingMsg) {
         try { await api.unsendMessage(processingMsg.messageID); } catch (e) {}
       }
-
+console.log("CATBOX RESPONSE:", uploadResponse.data);
       const directLink = uploadResponse.data.trim();
       return api.sendMessage(
         "📤 Catbox Upload Success!\n\n🔗 Direct Link:\n" + directLink,
