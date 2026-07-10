@@ -72,7 +72,6 @@ console.log("LOADED COMMAND:", cmdName);
   console.log("FAILED FILE:", file);
   console.log(err);
 }
-      }
     }
 
     logger.success(`Loaded ${count} commands with ${aliases.size} aliases.`);
