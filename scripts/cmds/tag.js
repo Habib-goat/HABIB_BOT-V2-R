@@ -15,15 +15,18 @@ module.exports = {
 
     try {
       let threadInfo;
-      try {
-        threadInfo = await threadsData.getThread(threadID) || {};
-      } catch (e) {
-        threadInfo = {};
-      }
+try {
+  threadInfo = await threadsData.getThread(threadID) || {};
+} catch (e) {
+  threadInfo = {};
+}
 
-      const members = (threadInfo.members || [])
-        .filter(m => m.inGroup)
-        .map(m => ({ id: m.userID, name: m.name }));
+console.log("THREAD INFO:");
+console.log(JSON.stringify(threadInfo, null, 2));
+
+const members = (threadInfo.members || [])
+  .filter(m => m.inGroup)
+  .map(m => ({ id: m.userID, name: m.name }));
 
       if (members.length === 0) {
         return api.sendMessage("❌ Could not load thread participants list.", threadID, messageID);
