@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "uid",
     version: "1.0.1",
-    author: "ArYAN (Optimized)",
+    author: "ArYAN (Fixed)",
     description: "Get user ID of yourself, mentioned users, or replied sender.",
     category: "utility",
     cooldowns: 5
@@ -21,10 +21,10 @@ module.exports = {
     }
 
     try {
-      await api.shareContact(`ℹ️ User ID: \${uid}`, uid, threadID, messageID);
+      await api.shareContact(`ℹ️ User ID: ${uid}`, uid, threadID, messageID);
     } catch (error) {
       console.warn("api.shareContact failed, falling back to message text:", error.message);
-      return api.sendMessage(`🆔 ID: \${uid}`, threadID, messageID);
+      return api.sendMessage(`🆔 ID: ${uid}`, threadID, messageID);
     }
   }
 };
