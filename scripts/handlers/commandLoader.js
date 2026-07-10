@@ -53,10 +53,11 @@ const commandLoader = {
 
           const cmdName = cmd.config.name.toLowerCase();
           commands.set(cmdName, {
-            ...cmd,
-            filePath: file
-          });
+  ...cmd,
+  filePath: file
+});
 
+console.log("LOADED COMMAND:", cmdName);
           // Register aliases if present
           if (cmd.config.aliases && Array.isArray(cmd.config.aliases)) {
             for (const alias of cmd.config.aliases) {
@@ -67,7 +68,10 @@ const commandLoader = {
           count++;
         }
       } catch (err) {
-        logger.error(`Failed to load command file ${path.relative(cmdsDir, file)}:`, err);
+  logger.error(`Failed to load command file ${path.relative(cmdsDir, file)}:`, err);
+  console.log("FAILED FILE:", file);
+  console.log(err);
+}
       }
     }
 
