@@ -205,32 +205,40 @@ async unsendMessage(messageID) {
     });
   });
 }
-  async markAsRead(threadID) {
-  if (typeof this.api.markAsRead !== "function") {
-    return false;
-  }
+async markAsRead(threadID) {
+  return new Promise((resolve) => {
+    if (typeof this.api.markAsRead !== "function") {
+      logger.warn("[FcaAdapter] markAsRead not supported.");
+      return resolve(false);
+    }
 
-  try {
-    this.api.markAsRead(threadID);
-    return true;
-  } catch (err) {
-    logger.error("[FcaAdapter] markAsRead:", err);
-    return false;
-  }
+    this.api.markAsRead(threadID, (err) => {
+      if (err) {
+        logger.error("[FcaAdapter] markAsRead:", err);
+        return resolve(false);
+      }
+
+      resolve(true);
+    });
+  });
 }
 
 async markAsSeen() {
-  if (typeof this.api.markAsSeen !== "function") {
-    return false;
-  }
+  return new Promise((resolve) => {
+    if (typeof this.api.markAsSeen !== "function") {
+      logger.warn("[FcaAdapter] markAsSeen not supported.");
+      return resolve(false);
+    }
 
-  try {
-    this.api.markAsSeen();
-    return true;
-  } catch (err) {
-    logger.error("[FcaAdapter] markAsSeen:", err);
-    return false;
-  }
+    this.api.markAsSeen((err) => {
+      if (err) {
+        logger.error("[FcaAdapter] markAsSeen:", err);
+        return resolve(false);
+      }
+
+      resolve(true);
+    });
+  });
 }
 async addUserToGroup(userID, threadID) {
   return new Promise((resolve, reject) => {
