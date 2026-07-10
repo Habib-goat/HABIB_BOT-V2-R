@@ -40,16 +40,26 @@ if (botID && botMember && botMember.isAdmin === false) {
     messageID
   );
 }
+const kickAndCheckError = async (uid) => {
+  try {
+    await api.removeUserFromGroup(uid, threadID);
+    return true;
+  } catch (e) {
+    console.log("===== KICK ERROR =====");
+    console.log(e);
+    console.log("======================");
 
-    const kickAndCheckError = async (uid) => {
-      try {
-        await api.removeUserFromGroup(uid, threadID);
-        return true;
-      } catch (e) {
-        api.sendMessage("❌ Could not kick user with ID " + uid + ". Make sure they are still in the group and the bot has correct permissions.", threadID, messageID);
-        return false;
-      }
-    };
+    return api.sendMessage(
+      "❌ " +
+      (e?.errorDescription ||
+       e?.error ||
+       e?.message ||
+       JSON.stringify(e)),
+      threadID,
+      messageID
+    );
+  }
+};
 
     if (!args[0]) {
       if (!messageReply) {
