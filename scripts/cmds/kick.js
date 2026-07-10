@@ -24,19 +24,22 @@ module.exports = {
     } catch (e) {
       botID = api.getCurrentUserID || "";
     }
+let threadInfo = {};
+try {
+  threadInfo = await threadsData.getThread(threadID) || {};
+} catch (e) {}
 
-    let threadInfo;
-    try {
-      threadInfo = await threadsData.getThread(threadID) || {};
-    } catch (err) {
-      threadInfo = {};
-    }
+const botMember = (threadInfo.members || []).find(
+  m => String(m.userID) === String(botID)
+);
 
-    const adminIDs = threadInfo.adminIDs || [];
-    
-    if (!adminIDs.includes(botID)) {
-      return api.sendMessage("⚠️ Permission Denied: The bot needs to be a Group Administrator to remove members.", threadID, messageID);
-    }
+if (botID && botMember && botMember.isAdmin === false) {
+  return api.sendMessage(
+    "⚠️ Permission Denied: The bot needs to be a Group Administrator to remove members.",
+    threadID,
+    messageID
+  );
+}
 
     const kickAndCheckError = async (uid) => {
       try {
