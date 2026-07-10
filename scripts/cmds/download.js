@@ -4,51 +4,87 @@ const path = require('path');
 
 module.exports = {
   config: {
-    name: "download",
-    aliases: ["dl"],
-    version: "2.0.0",
+    name: "autolink",
+    aliases: ["al"],
+    version: "1.0.0",
     author: "Riyad",
     countDown: 5,
     role: 0,
     category: "media"
   },
 
-  onStart: async function ({ api, event, args }) {
-    const { threadID, messageID } = event;
-    const url = args[0];
+  onStart: async function ({ api, event }) {
+    return api.sendMessage(
+      "╭───『 RIYAD BOT 』───╮\n" +
+      "│ 🤖 AutoLink System Active\n" +
+      "│ I automatically detect and download\n" +
+      "│ links from your chat! Supports:\n" +
+      "│ • FB, TikTok, IG, YT, X, Threads\n" +
+      "│ • Direct files (mp4, mp3, webp, etc.)\n" +
+      "│ Just send any link to begin.\n" +
+      "╰─────────────────────╯",
+      event.threadID,
+      event.messageID
+    );
+  },
 
-    if (!url) {
-      return api.sendMessage(
-        "╭───『 RIYAD BOT 』───╮\n" +
-        "│ ⚠️ Error: Please provide a URL!\n" +
-        "│ Usage: download [link]\n" +
-        "╰─────────────────────╯",
-        threadID,
-        messageID
-      );
+  onChat: async function ({ api, event }) {
+    const { threadID, messageID, body, senderID } = event;
+    
+    // Ignore if no message text or if sent by the bot itself
+    if (!body || senderID === api.getCurrentUserID()) return;
+
+    // Detect URL in the message body
+    const urlRegex = /(https?:\/\/[^\s]+)/gi;
+    const match = body.match(urlRegex);
+    if (!match) return;
+
+    const url = match[0];
+
+    // Identify platform or direct link
+    const isFB = /facebook\.com|fb\.watch/i.test(url);
+    const isTikTok = /tiktok\.com/i.test(url);
+    const isIG = /instagram\.com/i.test(url);
+    const isYT = /youtube\.com|youtu\.be/i.test(url);
+    const isTwitter = /twitter\.com|x\.com/i.test(url);
+    const isThreads = /threads\.net/i.test(url);
+    const isPinterest = /pinterest\.com|pin\.it/i.test(url);
+    const isSnapchat = /snapchat\.com/i.test(url);
+    const isVimeo = /vimeo\.com/i.test(url);
+    const isDailymotion = /dailymotion\.com|dai\.ly/i.test(url);
+
+    // Direct extensions
+    const directExtensions = ["mp4", "mp3", "jpg", "jpeg", "png", "gif", "webp", "pdf", "zip", "txt"];
+    let isDirectFile = false;
+    let fileExtension = "";
+
+    try {
+      const parsed = new URL(url);
+      const extMatch = parsed.pathname.match(/\.([a-zA-Z0-9]+)$/);
+      if (extMatch) {
+        fileExtension = extMatch[1].toLowerCase();
+        if (directExtensions.includes(fileExtension)) {
+          isDirectFile = true;
+        }
+      }
+    } catch (e) {
+      // Non-critical parsing error
     }
 
-    // URL validation
-    const urlPattern = /^(https?:\/\/[^\s/$.?#].[^\s]*)$/i;
-    if (!urlPattern.test(url)) {
-      return api.sendMessage(
-        "╭───『 RIYAD BOT 』───╮\n" +
-        "│ ⚠️ Error: Invalid URL format!\n" +
-        "│ Please enter a valid HTTP/HTTPS link.\n" +
-        "╰─────────────────────╯",
-        threadID,
-        messageID
-      );
+    // If it's neither a direct file nor a supported social platform, ignore it
+    if (!isDirectFile && !isFB && !isTikTok && !isIG && !isYT && !isTwitter && !isThreads && !isPinterest && !isSnapchat && !isVimeo && !isDailymotion) {
+      return;
     }
 
-    // Send visual loading status
+    // Send processing loader message
     let loadingMessageID = null;
     try {
       const infoMsg = await new Promise((resolve) => {
         api.sendMessage(
           "╭───『 RIYAD BOT 』───╮\n" +
-          "│ 📥 Fetching media details...\n" +
-          "│ Please wait, processing download...\n" +
+          "│ 📥 AutoLink Detected Link!\n" +
+          "│ Fetching and processing media...\n" +
+          "│ Please hold on tightly.\n" +
           "╰─────────────────────╯",
           threadID,
           (err, info) => {
@@ -63,95 +99,135 @@ module.exports = {
       console.error("Failed to send loading message:", err);
     }
 
-    // Define direct download file types
-    const supportedExtensions = [
-      "mp4", "mp3", "jpg", "jpeg", "png", "gif", "pdf", "zip", "txt", "docx"
-    ];
-
-    // Helper to get extension from url or headers
-    let fileExtension = "";
-    try {
-      const parsedUrl = new URL(url);
-      const pathname = parsedUrl.pathname;
-      const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
-      if (match) {
-        fileExtension = match[1].toLowerCase();
-      }
-    } catch (e) {
-      // Ignore URL parsing errors and let axios handle it
-    }
-
-    // Setup temporary files cache directory
     const cacheDir = path.join(process.cwd(), "cache");
     await fs.ensureDir(cacheDir);
-    const tempFileName = `riyad_dl_${Date.now()}`;
+    const tempFileName = `riyad_autolink_${Date.now()}`;
+    const MAX_SIZE = 80 * 1024 * 1024; // 80MB limit
 
-    // Request with timeout & size checking
+    // Helper function to safely delete temp files
+    const safeDelete = async (filePath) => {
+      try {
+        if (filePath && await fs.exists(filePath)) {
+          await fs.remove(filePath);
+        }
+      } catch (e) {
+        console.error("Error during temp file deletion:", e);
+      }
+    };
+
+    // Helper to unsend loader message
+    const safeUnsend = (msgID) => {
+      if (msgID) {
+        try {
+          api.unsendMessage(msgID);
+        } catch (e) {
+          // Gracefully fail
+        }
+      }
+    };
+
     try {
-      // 1. Head request to verify content-length & content-type if extension not found
+      let downloadUrl = url;
+      let forceType = "";
+
+      // 1. Process social media platforms using free fallback public downloader APIs
+      if (!isDirectFile) {
+        let success = false;
+        
+        // List of reliable free public social media downloader gateways
+        const apis = [
+          `https://api.samir.xyz/download?url=${encodeURIComponent(url)}`,
+          `https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`,
+          `https://aall.ironman.my.id/all?url=${encodeURIComponent(url)}`,
+          `https://api.vyturex.com/downloader?url=${encodeURIComponent(url)}`
+        ];
+
+        for (const gatewayUrl of apis) {
+          try {
+            const res = await axios.get(gatewayUrl, { timeout: 12000 });
+            const data = res.data;
+
+            // Handle standard response wrappers
+            if (data && (data.status === true || data.success || data.url || data.result)) {
+              const result = data.result || data;
+              
+              // Extract best download URL based on common gateway properties
+              const potentialUrl = result.video || result.video_url || result.mp4 || result.nowatermark || result.no_watermark || result.hd || result.sd || result.url || (result.links && result.links[0] && result.links[0].url);
+              
+              if (potentialUrl) {
+                downloadUrl = potentialUrl;
+                if (result.title) forceType = result.title;
+                success = true;
+                break;
+              }
+            }
+          } catch (err) {
+            console.warn(`Gateway ${gatewayUrl} failed to process URL:`, err.message);
+          }
+        }
+
+        // If no API gateway succeeded, fall back to direct file inspection
+        if (!success) {
+          console.log("No social media gateway succeeded. Falling back to direct stream check.");
+        }
+      }
+
+      // 2. Fetch resource headers to determine content length and true extension
       let contentLength = 0;
       let contentType = "";
-      
       try {
-        const headRes = await axios.head(url, { timeout: 10000 });
+        const headRes = await axios.head(downloadUrl, { timeout: 8000 });
         contentLength = parseInt(headRes.headers['content-length'] || "0", 10);
         contentType = headRes.headers['content-type'] || "";
       } catch (headErr) {
-        console.warn("HEAD request failed, fallback to GET headers:", headErr.message);
+        console.warn("HEAD check failed, continuing with GET fallback headers:", headErr.message);
       }
 
-      // Check content size limit: 80MB (80 * 1024 * 1024 bytes)
-      const MAX_SIZE = 80 * 1024 * 1024;
       if (contentLength > MAX_SIZE) {
-        if (loadingMessageID) {
-          try { api.unsendMessage(loadingMessageID); } catch (e) {}
-        }
+        safeUnsend(loadingMessageID);
         return api.sendMessage(
           "╭───『 RIYAD BOT 』───╮\n" +
-          "│ ⚠️ Error: File is too large!\n" +
-          `│ Maximum limit: 80MB.\n` +
-          `│ Target size: ${(contentLength / (1024 * 1024)).toFixed(2)}MB.\n` +
+          "│ ⚠️ Limit Exceeded!\n" +
+          `│ Detected file exceeds our 80MB size cap.\n` +
+          `│ File size: ${(contentLength / (1024 * 1024)).toFixed(2)}MB.\n` +
           "╰─────────────────────╯",
           threadID,
           messageID
         );
       }
 
-      // Determine extension from content-type if not found in url
-      if (!fileExtension || !supportedExtensions.includes(fileExtension)) {
+      // Detect file extension from content-type if missing or direct file
+      if (!fileExtension) {
         if (contentType.includes("video/mp4")) fileExtension = "mp4";
         else if (contentType.includes("audio/mpeg") || contentType.includes("audio/mp3")) fileExtension = "mp3";
         else if (contentType.includes("image/jpeg")) fileExtension = "jpg";
         else if (contentType.includes("image/png")) fileExtension = "png";
         else if (contentType.includes("image/gif")) fileExtension = "gif";
+        else if (contentType.includes("image/webp")) fileExtension = "webp";
         else if (contentType.includes("application/pdf")) fileExtension = "pdf";
         else if (contentType.includes("application/zip")) fileExtension = "zip";
         else if (contentType.includes("text/plain")) fileExtension = "txt";
         else if (contentType.includes("application/vnd.openxmlformats-officedocument.wordprocessingml.document")) fileExtension = "docx";
-        else {
-          fileExtension = "bin";
-        }
+        else fileExtension = "bin";
       }
 
       const tempFilePath = path.join(cacheDir, `${tempFileName}.${fileExtension}`);
 
-      // 2. Download file as stream
-      const response = await axios({
+      // 3. Initiate Stream Download
+      const streamResponse = await axios({
         method: 'get',
-        url: url,
+        url: downloadUrl,
         responseType: 'stream',
-        timeout: 45000 // 45 seconds download timeout
+        timeout: 45000 // 45 seconds timeout
       });
 
-      // Confirm size again from GET headers if HEAD request was incomplete
-      const getLength = parseInt(response.headers['content-length'] || "0", 10);
+      const getLength = parseInt(streamResponse.headers['content-length'] || "0", 10);
       if (getLength > MAX_SIZE) {
-        if (loadingMessageID) {
-          try { api.unsendMessage(loadingMessageID); } catch (e) {}
-        }
+        safeUnsend(loadingMessageID);
         return api.sendMessage(
           "╭───『 RIYAD BOT 』───╮\n" +
-          "│ ⚠️ Error: File exceeds 80MB limit!\n" +
+          "│ ⚠️ Limit Exceeded!\n" +
+          "│ Download aborted: File exceeds 80MB.\n" +
           "╰─────────────────────╯",
           threadID,
           messageID
@@ -159,38 +235,34 @@ module.exports = {
       }
 
       const writer = fs.createWriteStream(tempFilePath);
-      response.data.pipe(writer);
+      streamResponse.data.pipe(writer);
 
       await new Promise((resolve, reject) => {
         writer.on('finish', resolve);
         writer.on('error', reject);
       });
 
-      // Verify file downloaded correctly
+      // Confirm downloaded size
       const fileStats = await fs.stat(tempFilePath);
       if (fileStats.size === 0) {
-        throw new Error("Downloaded file is empty.");
+        throw new Error("Empty media payload downloaded from link.");
       }
 
-      // Send file to Messenger thread
+      // 4. Send attachment back to Messenger thread
       await new Promise((resolve, reject) => {
         api.sendMessage(
           {
             body: "╭───『 RIYAD BOT 』───╮\n" +
-                  "│ ✅ Download completed successfully!\n" +
-                  "│ File has been delivered below.\n" +
+                  "│ 📥 Media Delivery Active\n" +
+                  `│ Platform: ${isDirectFile ? "Direct Link" : "Social Media"}\n` +
+                  `│ File Type: ${fileExtension.toUpperCase()}\n" +
                   "╰─────────────────────╯",
             attachment: fs.createReadStream(tempFilePath)
           },
           threadID,
           async (err) => {
-            // Safe cleanup
-            try {
-              await fs.remove(tempFilePath);
-            } catch (cleanupErr) {
-              console.error("Cleanup error:", cleanupErr);
-            }
-
+            // Guarantee file cleanup immediately
+            await safeDelete(tempFilePath);
             if (err) reject(err);
             else resolve(true);
           },
@@ -198,28 +270,12 @@ module.exports = {
         );
       });
 
-      // Clean up the loading message
-      if (loadingMessageID) {
-        try {
-          api.unsendMessage(loadingMessageID);
-        } catch (e) {
-          // Continue gracefully
-        }
-      }
+      safeUnsend(loadingMessageID);
 
-    } catch (error) {
-      console.error("Download execution error:", error);
-      if (loadingMessageID) {
-        try { api.unsendMessage(loadingMessageID); } catch (e) {}
-      }
-      return api.sendMessage(
-        "╭───『 RIYAD BOT 』───╮\n" +
-        "│ ⚠️ Download failed!\n" +
-        `│ Reason: ${error.message || "Request timed out or invalid link"}\n` +
-        "╰─────────────────────╯",
-        threadID,
-        messageID
-      );
+    } catch (err) {
+      console.error("AutoLink processing failed:", err.message);
+      safeUnsend(loadingMessageID);
+      // Fail silently without posting annoying errors for regular text chatter that includes non-downloadable links
     }
   }
 };
