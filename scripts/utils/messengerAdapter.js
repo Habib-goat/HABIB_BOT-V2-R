@@ -42,6 +42,9 @@ class BaseMessengerAdapter {
 async removeUserFromGroup(userID, threadID) {
   throw new Error("Method 'removeUserFromGroup' must be implemented by the adapter subclass.");
 }
+  async unsendMessage(messageID) {
+  throw new Error("Method 'unsendMessage' must be implemented by the adapter subclass.");
+}
   async addUserToGroup(userID, threadID) {
   throw new Error("Method 'addUserToGroup' must be implemented by the adapter subclass.");
 }
@@ -183,7 +186,18 @@ async removeUserFromGroup(userID, threadID) {
     });
   });
 }
+async unsendMessage(messageID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.unsendMessage !== "function") {
+      return reject(new Error("Underlying FCA unsendMessage function is not available."));
+    }
 
+    this.api.unsendMessage(messageID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
 async addUserToGroup(userID, threadID) {
   return new Promise((resolve, reject) => {
     if (typeof this.api.addUserToGroup !== "function") {
