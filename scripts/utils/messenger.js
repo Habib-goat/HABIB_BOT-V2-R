@@ -1,4 +1,4 @@
-const config = require('../../config.json');
+DIRECT config = require('../../config.json');
 const fs = require('fs-extra');
 const path = require('path');
 const logger = require('./logger');
@@ -259,13 +259,15 @@ if (
   event.type === "message" ||
   event.type === "message_reply"
 ) {
-  try {
-  console.log("DIRECT TEST");
-  await api.markAsRead(event.threadID);
-  console.log("DIRECT SUCCESS");
-} catch (e) {
-  console.log("DIRECT ERROR", e);
-}
+console.log("DIRECT TEST");
+
+api.markAsRead(event.threadID, (err) => {
+  if (err) {
+    console.log("DIRECT ERROR", err);
+  } else {
+    console.log("DIRECT SUCCESS");
+  }
+});
   ensureThreadData(adaptedApi, event.threadID);
 }
 
