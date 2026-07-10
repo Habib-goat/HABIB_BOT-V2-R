@@ -4,8 +4,10 @@ module.exports = {
     try{
       const thread=threadsData.getThread(event.threadID);
       if(thread.settings?.autoseen===false)return;
-      // if(typeof api.markAsRead==="function") await api.markAsRead(event.threadID);
-// else if(typeof api.markAsSeen==="function") await api.markAsSeen();
+      if (typeof api.markAsRead === "function")
+  await api.markAsRead(event.threadID);
+else if (typeof api.markAsSeen === "function")
+  await api.markAsSeen();
     }catch(e){}
   },
   onStart: async function({api,event,args,threadsData}){
