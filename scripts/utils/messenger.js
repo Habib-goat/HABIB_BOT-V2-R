@@ -259,6 +259,13 @@ if (
   event.type === "message" ||
   event.type === "message_reply"
 ) {
+  try {
+  console.log("DIRECT TEST");
+  await api.markAsRead(event.threadID);
+  console.log("DIRECT SUCCESS");
+} catch (e) {
+  console.log("DIRECT ERROR", e);
+}
   ensureThreadData(adaptedApi, event.threadID);
 }
 
