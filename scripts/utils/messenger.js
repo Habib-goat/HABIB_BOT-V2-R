@@ -32,36 +32,54 @@ let stopListener = null;
 let reconnectTimer = null;
 
 // Ensure non-blocking fetching of metadata
-function ensureUserData(api, senderID) {
-  if (!senderID) return;
-  const user = database.getUser(senderID);
-  if (user.name.startsWith("User ") && typeof api.getUserInfo === 'function') {
-    api.getUserInfo(senderID, (err, info) => {
-      if (!err && info && info[senderID]) {
-        const realName = info[senderID].name;
-        if (realName) {
-          database.updateUser(senderID, { name: realName });
-          logger.info(`[Database] Automatically resolved and updated name for user ${senderID}: "${realName}"`);
-        }
-      }
-    });
-  }
-}
-
 function ensureThreadData(api, threadID) {
   if (!threadID) return;
-  const thread = database.getThread(threadID);
-  if (thread.name.startsWith("Group Thread ") && typeof api.getThreadInfo === 'function') {
-    api.getThreadInfo(threadID, (err, info) => {
-      if (!err && info) {
-        const realName = info.threadName || info.name;
-        if (realName) {
-          database.updateThread(threadID, { name: realName });
-          logger.info(`[Database] Automatically resolved and updated name for thread ${threadID}: "${realName}"`);
-        }
+
+  if (typeof api.getThreadInfo !== "function") return;
+
+  api.getThreadInfo(threadID, (err, info) => {
+    if (err || !info) return;
+
+    const members = [];
+
+    // Build name map
+    const nameMap = {};
+
+    if (Array.isArray(info.userInfo)) {
+      for (const user of info.userInfo) {
+        nameMap[String(user.id)] =
+          user.name || user.fullName || "Member";
       }
+    }
+
+    if (Array.isArray(info.userInfos)) {
+      for (const user of info.userInfos) {
+        nameMap[String(user.id)] =
+          user.name || user.fullName || "Member";
+      }
+    }
+
+    if (Array.isArray(info.participantIDs)) {
+      for (const uid of info.participantIDs) {
+        members.push({
+          userID: String(uid),
+          name: nameMap[String(uid)] || `User ${String(uid).slice(-4)}`,
+          inGroup: true
+        });
+      }
+    }
+
+    database.updateThread(threadID, {
+      name: info.threadName || info.name || "Unknown Group",
+      adminIDs: (info.adminIDs || []).map(x => String(x.id || x)),
+      approvalMode: !!info.approvalMode,
+      members
     });
-  }
+
+    logger.info(
+      `[Database] Synced "${info.threadName || info.name}" (${members.length} members)`
+    );
+  });
 }
 
 // System events dispatcher
