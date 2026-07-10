@@ -227,18 +227,25 @@ autoTimerService.setApi(adaptedApi);
 console.log("LISTENER STARTED");
       stopListener = api.listenMqtt(async (listenErr, event) => {
         console.log("[LISTENER]", event.type, event.messageID);
-        if (listenErr) {
-          logger.error("Broker connection encountered error:", listenErr);
-          isConnected = false;
-          
-          if (typeof stopListener === 'function') {
-            try { stopListener(); } catch(e) {}
-          }
-          
-          logger.warn("Broker disconnected. Scheduling reconnection in 10 seconds...");
-          reconnectTimer = setTimeout(doConnect, 10000);
-          return;
-        }
+
+console.log("========== EVENT ==========");
+console.log(JSON.stringify(event, null, 2));
+console.log("===========================");
+
+if (listenErr) {
+  logger.error("Broker connection encountered error:", listenErr);
+  isConnected = false;
+
+  if (typeof stopListener === 'function') {
+    try {
+      stopListener();
+    } catch (e) {}
+  }
+
+  logger.warn("Broker disconnected. Scheduling reconnection in 10 seconds...");
+  reconnectTimer = setTimeout(doConnect, 10000);
+  return;
+}
 
         // Safe type casts and string formats
         event.senderID = event.senderID ? String(event.senderID) : "";
