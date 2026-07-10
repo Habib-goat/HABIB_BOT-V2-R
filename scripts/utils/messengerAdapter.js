@@ -39,6 +39,13 @@ class BaseMessengerAdapter {
   async changeNickname(nickname, threadID, userID) {
     throw new Error("Method 'changeNickname' must be implemented by the adapter subclass.");
   }
+  async markAsRead(threadID) {
+  throw new Error("Method 'markAsRead' must be implemented by the adapter subclass.");
+}
+
+async markAsSeen() {
+  throw new Error("Method 'markAsSeen' must be implemented by the adapter subclass.");
+}
 async removeUserFromGroup(userID, threadID) {
   throw new Error("Method 'removeUserFromGroup' must be implemented by the adapter subclass.");
 }
@@ -193,6 +200,31 @@ async unsendMessage(messageID) {
     }
 
     this.api.unsendMessage(messageID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
+  async markAsRead(threadID) {
+  if (typeof this.api.markAsRead !== "function") {
+    return false;
+  }
+
+  return new Promise((resolve, reject) => {
+    this.api.markAsRead(threadID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
+
+async markAsSeen() {
+  if (typeof this.api.markAsSeen !== "function") {
+    return false;
+  }
+
+  return new Promise((resolve, reject) => {
+    this.api.markAsSeen((err) => {
       if (err) return reject(err);
       resolve(true);
     });
