@@ -30,7 +30,35 @@ try {
 let isConnected = false;
 let stopListener = null;
 let reconnectTimer = null;
+// Ensure non-blocking fetching of user metadata
+function ensureUserData(api, senderID) {
+  if (!senderID) return;
 
+  const user = database.getUser(senderID);
+
+  if (
+    user.name.startsWith("User ") &&
+    typeof api.getUserInfo === "function"
+  ) {
+    api.getUserInfo(senderID, (err, info) => {
+      if (err || !info || !info[senderID]) return;
+
+      const realName =
+        info[senderID].name ||
+        info[senderID].fullName;
+
+      if (!realName) return;
+
+      database.updateUser(senderID, {
+        name: realName
+      });
+
+      logger.info(
+        `[Database] Synced user "${realName}" (${senderID})`
+      );
+    });
+  }
+}
 // Ensure non-blocking fetching of metadata
 function ensureThreadData(api, threadID) {
   if (!threadID) return;
@@ -62,19 +90,24 @@ function ensureThreadData(api, threadID) {
     if (Array.isArray(info.participantIDs)) {
       for (const uid of info.participantIDs) {
         members.push({
-          userID: String(uid),
-          name: nameMap[String(uid)] || `User ${String(uid).slice(-4)}`,
-          inGroup: true
-        });
+  userID: String(uid),
+  name: nameMap[String(uid)] || `User ${String(uid).slice(-4)}`,
+  inGroup: true,
+  isAdmin: (info.adminIDs || []).some(
+    x => String(x.id || x) === String(uid)
+  )
+});
       }
     }
 
     database.updateThread(threadID, {
-      name: info.threadName || info.name || "Unknown Group",
-      adminIDs: (info.adminIDs || []).map(x => String(x.id || x)),
-      approvalMode: !!info.approvalMode,
-      members
-    });
+  id: String(threadID),
+  name: info.threadName || info.name || "Unknown Group",
+  adminIDs: (info.adminIDs || []).map(x => String(x.id || x)),
+  approvalMode: Boolean(info.approvalMode),
+  members,
+  lastSync: Date.now()
+});
 
     logger.info(
       `[Database] Synced "${info.threadName || info.name}" (${members.length} members)`
@@ -205,8 +238,26 @@ console.log("LISTENER STARTED");
 
         // Background resolve of display names
         ensureUserData(adaptedApi, event.senderID);
-        ensureThreadData(adaptedApi, event.threadID);
 
+if (
+  event.type === "message" ||
+  event.type === "message_reply"
+) {
+  ensureThreadData(adaptedApi, event.threadID);
+}
+
+if (
+  event.type === "event" &&
+  [
+    "log:subscribe",
+    "log:unsubscribe",
+    "log:thread-name",
+    "log:thread-admins",
+    "log:thread-approval-mode"
+  ].includes(event.logMessageType)
+) {
+  ensureThreadData(adaptedApi, event.threadID);
+}
         // Process based on type
 try {
 
@@ -239,11 +290,11 @@ try {
       adaptedApi
     );
 
-  } else if (event.type === "event") {
+} else if (event.type === "event") {
 
-    await dispatchSystemEvent(adaptedApi, event);
+  await dispatchSystemEvent(adaptedApi, event);
 
-  }
+}
 
 } catch (procErr) {
   logger.error("Error processing incoming Messenger broker event:", procErr);
