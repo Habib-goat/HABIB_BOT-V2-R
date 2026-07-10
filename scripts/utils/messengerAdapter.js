@@ -39,22 +39,16 @@ class BaseMessengerAdapter {
   async changeNickname(nickname, threadID, userID) {
     throw new Error("Method 'changeNickname' must be implemented by the adapter subclass.");
   }
-
+async removeUserFromGroup(userID, threadID) {
+  throw new Error("Method 'removeUserFromGroup' must be implemented by the adapter subclass.");
+}
   async addUserToGroup(userID, threadID) {
-    throw new Error("Method 'addUserToGroup' must be implemented by the adapter subclass.");
-  }
+  throw new Error("Method 'addUserToGroup' must be implemented by the adapter subclass.");
+}
 
   /**
    * Get user information
    */
-  
-  async addUserToGroup(userID, threadID) {
-    return new Promise((resolve,reject)=>{
-      if (typeof this.api.addUserToGroup !== 'function')
-        return reject(new Error('Underlying FCA addUserToGroup function is not available.'));
-      this.api.addUserToGroup(userID, threadID, err=> err?reject(err):resolve(true));
-    });
-  }
 
   getUserInfo(userID, callback) {
     throw new Error("Method 'getUserInfo' must be implemented by the adapter subclass.");
@@ -164,22 +158,44 @@ class FcaMessengerAdapter extends BaseMessengerAdapter {
   }
 
   async changeNickname(nickname, threadID, userID) {
-    return new Promise((resolve, reject) => {
-      if (typeof this.api.changeNickname !== 'function') {
-        logger.warn("[FcaAdapter] changeNickname function not available on underlying API.");
-        return resolve({ success: false, error: 'changeNickname not supported' });
-      }
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.changeNickname !== "function") {
+      logger.warn("[FcaAdapter] changeNickname function not available on underlying API.");
+      return resolve({ success: false, error: "changeNickname not supported" });
+    }
 
-      this.api.changeNickname(nickname, threadID, userID, (err) => {
-        if (err) {
-          logger.error(`[FcaAdapter] Error changing nickname for user ${userID} in thread ${threadID}:`, err);
-          return reject(err);
-        }
-        resolve({ success: true });
-      });
+    this.api.changeNickname(nickname, threadID, userID, (err) => {
+      if (err) return reject(err);
+      resolve({ success: true });
     });
-  }
+  });
+}
+      
+async removeUserFromGroup(userID, threadID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.removeUserFromGroup !== "function") {
+      return reject(new Error("Underlying FCA removeUserFromGroup function is not available."));
+    }
 
+    this.api.removeUserFromGroup(userID, threadID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
+
+async addUserToGroup(userID, threadID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.addUserToGroup !== "function") {
+      return reject(new Error("Underlying FCA addUserToGroup function is not available."));
+    }
+
+    this.api.addUserToGroup(userID, threadID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
   getUserInfo(userID, callback) {
     if (typeof this.api.getUserInfo === 'function') {
       return this.api.getUserInfo(userID, callback);
