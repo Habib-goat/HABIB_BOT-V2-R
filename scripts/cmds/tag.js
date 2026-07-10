@@ -1,46 +1,44 @@
 module.exports = {
   config: {
     name: "tag",
+    version: "1.0.0",
+    author: "Nayan (Fixed)",
+    role: 1,
+    description: "Mention members of the group chat with a custom message.",
     category: "box chat",
-    role: 0,
-    author: "EryXenX (Converted)",
-    countDown: 3,
-    description: "Tag members in the group by keyword, reply, or mention everyone.",
-    guide: "{pn} [name] [message] | {pn} all [message] | Reply + {pn} [message]"
+    guide: "{pn} [all | message | reply]",
+    cooldowns: 5
   },
 
-  onStart: async ({ api, event, usersData, threadsData, args }) => {
-    const { threadID, messageID, messageReply } = event;
+  onStart: async function ({ api, event, args, threadsData }) {
+    const { threadID, messageID, mentions: eventMentions, messageReply } = event;
 
     try {
-      let threadData;
+      let threadInfo;
       try {
-        threadData = await threadsData.getThread(threadID);
+        threadInfo = await threadsData.getThread(threadID) || {};
       } catch (e) {
-        threadData = null;
+        threadInfo = {};
       }
 
-      if (!threadData) {
-        return api.sendMessage("❌ Failed to fetch thread information from custom framework database.", threadID, messageID);
-      }
+      const members = (threadInfo.members || [])
+        .filter(m => m.inGroup)
+        .map(m => ({ id: m.userID, name: m.name }));
 
-      const rawMembers = threadData.members || [];
-      const members = rawMembers
-        .filter(member => member && member.inGroup)
-        .map(member => ({
-          name: member.name || "Group Member",
-          id: member.userID
-        }));
+      if (members.length === 0) {
+        return api.sendMessage("❌ Could not load thread participants list.", threadID, messageID);
+      }
 
       let tagUsers = [];
       let text = "";
 
       if (messageReply) {
         const uid = messageReply.senderID;
-        let name = "User";
+        let name = "Member";
         try {
-          if (usersData && typeof usersData.getName === "function") {
-            name = await usersData.getName(uid);
+          if (api.getUserInfoV2) {
+            const info = await api.getUserInfoV2(uid);
+            name = info.name || "Member";
           } else {
             const matched = members.find(m => m.id == uid);
             name = matched ? matched.name : "Member";
@@ -50,7 +48,7 @@ module.exports = {
           name = matched ? matched.name : "Member";
         }
 
-        tagUsers.push({ name, id: uid });
+        tagUsers.push({ name: name, id: uid });
         text = args.join(" ");
       } 
       else if (args[0] && ["all", "everyone", "cdi"].includes(args[0].toLowerCase())) {
@@ -70,7 +68,7 @@ module.exports = {
         text = args.slice(1).join(" ");
 
         tagUsers = members.filter(member =>
-          member.name.toLowerCase().includes(searchName)
+          member.name && member.name.toLowerCase().includes(searchName)
         );
 
         if (tagUsers.length === 0) {
@@ -84,23 +82,23 @@ module.exports = {
       }));
 
       const namesText = tagUsers
-        .map(user => `• @\${user.name}`)
+        .map(user => `• @${user.name}`)
         .join("\n");
 
       const body = text
-        ? `╭─ 📢 Tag Notification\n\${namesText}\n├──────────────\n💬 Message: \${text}\n╰──────────────`
-        : `╭─ 📢 Tag Notification\n\${namesText}\n╰──────────────`;
+        ? `╭─ 📢 Tag Notification\n${namesText}\n├──────────────\n💬 Message: ${text}\n╰──────────────`
+        : `╭─ 📢 Tag Notification\n${namesText}\n╰──────────────`;
 
       return api.sendMessage(
         {
-          body,
-          mentions
+          body: body,
+          mentions: mentions
         },
         threadID,
         messageReply ? messageReply.messageID : messageID
       );
     } catch (error) {
-      return api.sendMessage(`❌ Error: \${error.message}`, threadID, messageID);
+      return api.sendMessage("❌ Error: " + error.message, threadID, messageID);
     }
   }
 };
