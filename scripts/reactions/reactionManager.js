@@ -62,16 +62,7 @@ module.exports = {
 
       if (admins.includes(reactor)) {
         try {
-          if (api.unsendMessage.length >= 2) {
-            await new Promise((resolve, reject) => {
-              api.unsendMessage(messageID, err => {
-                if (err) return reject(err);
-                resolve();
-              });
-            });
-          } else {
-            await api.unsendMessage(messageID);
-          }
+          await api.unsendMessage(messageID);
 
           reactions.delete(String(messageID));
           return true;
