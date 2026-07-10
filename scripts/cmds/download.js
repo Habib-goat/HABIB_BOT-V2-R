@@ -145,7 +145,11 @@ module.exports = {
         for (const gatewayUrl of apis) {
           try {
             const res = await axios.get(gatewayUrl, { timeout: 12000 });
-            const data = res.data;
+
+console.log("API:", gatewayUrl);
+console.log(JSON.stringify(res.data, null, 2));
+
+const data = res.data;
 
             // Handle standard response wrappers
             if (data && (data.status === true || data.success || data.url || data.result)) {
@@ -215,11 +219,15 @@ module.exports = {
 
       // 3. Initiate Stream Download
       const streamResponse = await axios({
-        method: 'get',
-        url: downloadUrl,
-        responseType: 'stream',
-        timeout: 45000 // 45 seconds timeout
-      });
+  method: 'get',
+  url: downloadUrl,
+  responseType: 'stream',
+  timeout: 45000
+});
+
+console.log("DOWNLOAD URL:", downloadUrl);
+console.log("CONTENT TYPE:", streamResponse.headers["content-type"]);
+console.log("CONTENT LENGTH:", streamResponse.headers["content-length"]);
 
       const getLength = parseInt(streamResponse.headers['content-length'] || "0", 10);
       if (getLength > MAX_SIZE) {
