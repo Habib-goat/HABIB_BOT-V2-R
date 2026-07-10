@@ -13,8 +13,8 @@
   "limit": 5,
   "timeWindow": 10000,
   "blockDuration": 60000
-}
-  "antiLink": {
+},
+"antiLink": {
     "enabled": true,
     "action": "warn"
   },
