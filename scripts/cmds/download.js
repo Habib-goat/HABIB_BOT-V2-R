@@ -32,7 +32,7 @@ module.exports = {
     const { threadID, messageID, body, senderID } = event;
     
     // Ignore if no message text or if sent by the bot itself
-    if (!body || senderID === api.getCurrentUserID()) return;
+    if (!body) return;
 
     // Detect URL in the message body
     const urlRegex = /(https?:\/\/[^\s]+)/gi;
