@@ -1,4 +1,4 @@
-DIRECT config = require('../../config.json');
+const config = require('../../config.json');
 const fs = require('fs-extra');
 const path = require('path');
 const logger = require('./logger');
