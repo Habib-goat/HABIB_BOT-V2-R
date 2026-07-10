@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "adduser",
     version: "1.5.0",
-    author: "NTKhang (Converted & Optimized)",
+    author: "NTKhang (Converted & Fixed)",
     countDown: 5,
     role: 1,
     description: "Add a member to the chat group using Facebook Link or UID.",
@@ -12,7 +12,18 @@ module.exports = {
 
   onStart: async function ({ api, event, args, threadsData }) {
     const { threadID, messageID } = event;
-    const botID = api.getCurrentUserID();
+    
+    // FRAMEWORK-COMPATIBLE BOT ID RESOLUTION (Fixes 'api.getCurrentUserID is not a function')
+    let botID = "";
+    try {
+      if (api.getCurrentUserID && typeof api.getCurrentUserID === "function") {
+        botID = api.getCurrentUserID();
+      } else {
+        botID = api.getCurrentUserID || api.botID || "";
+      }
+    } catch (e) {
+      botID = api.getCurrentUserID || "";
+    }
 
     if (args.length === 0) {
       return api.sendMessage("⚠️ Please enter a Facebook profile link or User ID to add.\nExample: adduser 100000000000000", threadID, messageID);
@@ -43,19 +54,19 @@ module.exports = {
         if (idParamMatch) {
           uid = idParamMatch[1];
         } else {
-          failed.push({ item, reason: "Converting custom FB Links to UID requires 'global.utils' which is removed. Please use direct numeric UID." });
+          failed.push({ item: item, reason: "Converting custom FB Links to UID requires 'global.utils' which is removed. Please use direct numeric UID." });
           continue;
         }
       }
 
       if (isNaN(uid)) {
-        failed.push({ item, reason: "Invalid UID format. Please use a direct numeric ID." });
+        failed.push({ item: item, reason: "Invalid UID format. Please use a direct numeric ID." });
         continue;
       }
 
       const isAlreadyMember = members.some(m => m.userID == uid && m.inGroup);
       if (isAlreadyMember) {
-        failed.push({ item, reason: "This user is already in this group." });
+        failed.push({ item: item, reason: "This user is already in this group." });
         continue;
       }
 
@@ -67,19 +78,19 @@ module.exports = {
           success.push(uid);
         }
       } catch (err) {
-        failed.push({ item, reason: "The bot is blocked from adding, or user privacy settings prevent strangers from adding them." });
+        failed.push({ item: item, reason: "The bot is blocked from adding, or user privacy settings prevent strangers from adding them." });
       }
     }
 
     let msg = "";
     if (success.length > 0) {
-      msg += `✅ Successfully added \${success.length} member(s) to the group.\n`;
+      msg += "✅ Successfully added " + success.length + " member(s) to the group.\n";
     }
     if (waitApproval.length > 0) {
-      msg += `⏳ Added \${waitApproval.length} member(s) to the approval queue.\n`;
+      msg += "⏳ Added " + waitApproval.length + " member(s) to the approval queue.\n";
     }
     if (failed.length > 0) {
-      msg += `❌ Failed to add some member(s):\n` + failed.map(f => `  • \${f.item}: \${f.reason}`).join("\n");
+      msg += "❌ Failed to add some member(s):\n" + failed.map(f => "  • " + f.item + ": " + f.reason).join("\n");
     }
 
     return api.sendMessage(msg.trim() || "⚠️ No action was taken.", threadID, messageID);
