@@ -1,97 +1,97 @@
-const axios = require("axios");
-const fs = require("fs-extra");
-const path = require("path");
-const ytSearch = require("yt-search");
+const A = require("axios");
+const B = require("fs-extra");
+const C = require("path");
+const S = require("yt-search");
 
-const apiListUrl = "https://raw.githubusercontent.com/aryannix/stuffs/master/raw/apis.json";
+const nix = "https://raw.githubusercontent.com/aryannix/stuffs/master/raw/apis.json";
 
 module.exports = {
   config: {
     name: "sing",
     aliases: ["song", "music", "play"],
-    version: "1.1.0",
-    author: "ArYAN (Optimized)",
+    version: "1.0.0",
+    author: "ArYAN (Fixed)",
     countDown: 10,
     role: 0,
-    category: "media",
-    description: "Search YouTube and download raw audio track streams.",
-    guide: "{pn} [Song Title or YouTube URL]"
+    category: "media"
   },
 
   onStart: async function ({ api, event, args }) {
-    const { threadID, messageID } = event;
-    const query = args.join(" ");
-    if (!query) {
-      return api.sendMessage("⚠️ Please provide a song name or YouTube link.\nExample: sing Faded", threadID, messageID);
+    const { threadID: t, messageID: m } = event;
+    const q = args.join(" ");
+    if (!q) {
+      return api.sendMessage("❌ Please provide a song name or link.\nExample: sing Faded", t, m);
     }
 
-    const cacheDir = path.join(__dirname, "cache");
-    await fs.ensureDir(cacheDir);
+    const cacheDir = C.join(__dirname, "cache");
+    await B.ensureDir(cacheDir);
 
-    const uniqueFileId = `sing_${event.senderID}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    const tempAudioPath = path.join(cacheDir, `${uniqueFileId}.mp3`);
-
-    api.setMessageReaction("⏳", messageID, () => {}, true);
+    const uniqueFileId = "sing_" + event.senderID + "_" + Date.now();
+    const filePath = C.join(cacheDir, uniqueFileId + ".mp3");
 
     try {
-      const apiResponse = await axios.get(apiListUrl, { timeout: 8000 });
-      const apiServerBase = apiResponse.data?.api;
-      if (!apiServerBase) throw new Error("Could not fetch healthy API downloader nodes.");
-      
-      let videoUrl = query;
-      let videoTitle = "Song Attachment";
+      api.setMessageReaction("⏳", m, () => {}, true);
+    } catch (e) {}
 
-      if (!query.startsWith("http")) {
-        const searchResults = await ytSearch(query);
-        const topVideo = searchResults?.videos?.[0];
-        if (!topVideo) throw new Error("No video results found on YouTube. Check spelling.");
-        videoUrl = topVideo.url;
-        videoTitle = topVideo.title;
+    try {
+      let E;
+      try {
+        const D = await A.get(nix, { timeout: 8000 });
+        E = D.data.api;
+      } catch (err) {
+        E = "https://api.nixhost.top/aryan";
       }
 
-      const ytdlResponse = await axios.get(`${apiServerBase}/ytdl`, {
-        params: { url: videoUrl, type: "audio" },
-        timeout: 25000
-      });
-
-      if (!ytdlResponse.data?.status || !ytdlResponse.data?.downloadUrl) {
-        throw new Error("The third-party YouTube API returned an invalid stream link.");
+      let u = q;
+      if (!q.startsWith("http")) {
+        const r = await S(q);
+        const v = r.videos[0];
+        if (!v) {
+          throw new Error("No YouTube video matches found for your query.");
+        }
+        u = v.url;
       }
 
-      const downloadUrl = ytdlResponse.data.downloadUrl;
-      const finalTitle = ytdlResponse.data.title || videoTitle;
-
-      const audioBuffer = await axios.get(downloadUrl, { 
-        responseType: "arraybuffer",
-        timeout: 45000 
+      const F = await A.get(E + "/ytdl", {
+        params: { url: u, type: "audio" },
+        timeout: 30000
       });
 
-      await fs.outputFile(tempAudioPath, Buffer.from(audioBuffer.data));
+      if (!F.data || !F.data.status || !F.data.downloadUrl) {
+        throw new Error("YouTube conversion helper failed.");
+      }
 
-      api.setMessageReaction("✅", messageID, () => {}, true);
+      const DL = F.data.downloadUrl;
+      const title = F.data.title || "Song";
+
+      const res = await A.get(DL, { responseType: "arraybuffer", timeout: 40000 });
+      await B.outputFile(filePath, Buffer.from(res.data));
+
+      try {
+        api.setMessageReaction("✅", m, () => {}, true);
+      } catch (e) {}
 
       return api.sendMessage({
-        body: `🎵 Title: ${finalTitle}\n🔗 Source: &videoUrl`,
-        attachment: fs.createReadStream(tempAudioPath)
-      }, threadID, async () => {
+        body: "🎵 Title: " + title,
+        attachment: B.createReadStream(filePath)
+      }, t, async () => {
         try {
-          if (await fs.pathExists(tempAudioPath)) {
-            await fs.remove(tempAudioPath);
+          if (await B.pathExists(filePath)) {
+            await B.remove(filePath);
           }
         } catch (cleanupErr) {}
-      }, messageID);
+      }, m);
 
-    } catch (err) {
-      console.error("Sing Command Failed:", err.message);
-      api.setMessageReaction("❌", messageID, () => {}, true);
-      
+    } catch (e) {
       try {
-        if (await fs.pathExists(tempAudioPath)) {
-          await fs.remove(tempAudioPath);
+        api.setMessageReaction("❌", m, () => {}, true);
+      } catch (err) {}
+      try {
+        if (await B.pathExists(filePath)) {
+          await B.remove(filePath);
         }
-      } catch (cleanupErr) {}
-
-      return api.sendMessage(`❌ Sing Error: ${err.message || "Network timeout"}`, threadID, messageID);
+      } catch (err) {}
+      return api.sendMessage("❌ Error: " + (e.message || "An unknown error occurred."), t, m);
     }
   }
 };
