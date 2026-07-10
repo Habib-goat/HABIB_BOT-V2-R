@@ -214,9 +214,14 @@ const botEngine = {
 
     console.log("[DEBUG] COMMAND:", commandName);
 
-    // Map command files to events if required (onChat for any message)
-    for (const [name, cmd] of commandLoader.commands.entries()) {
-      if (typeof cmd.onChat === 'function') {
+console.log("HAS AUTOSEEN:", commandLoader.commands.has("autoseen"));
+
+for (const [name, cmd] of commandLoader.commands.entries()) {
+
+  console.log("CHECK:", name, "onChat =", typeof cmd.onChat);
+
+  if (typeof cmd.onChat === "function") {
+    
         try {
           await cmd.onChat({
   api,
