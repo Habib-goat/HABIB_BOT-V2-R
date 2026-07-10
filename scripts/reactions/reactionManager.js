@@ -26,11 +26,13 @@ setInterval(() => {
 
 module.exports = {
   register(messageID, data) {
-    reactions.set(String(messageID), {
-      ...data,
-      timestamp: Date.now()
-    });
-  },
+  console.log("[REGISTER]", messageID, data);
+
+  reactions.set(String(messageID), {
+    ...data,
+    timestamp: Date.now()
+  });
+},
 
   set(messageID, data) {
     this.register(messageID, data);
@@ -51,8 +53,11 @@ module.exports = {
 
     const reactionData = reactions.get(String(messageID));
 
-    // 🤬 Auto Unsend
-    if (reaction === "🤬" && reactionData) {
+console.log("[REACTION]", messageID);
+console.log("[FOUND]", reactionData);
+
+// 🤬 Auto Unsend
+if (reaction === "🤬" && reactionData) {
       const reactor = String(event.userID || event.senderID || "");
 
       const admins = [
