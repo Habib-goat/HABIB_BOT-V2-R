@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "kick",
     version: "1.4.0",
-    author: "NTKhang (Converted)",
+    author: "NTKhang (Converted & Fixed)",
     countDown: 5,
     role: 1,
     description: "Remove members from the chat box.",
@@ -12,7 +12,18 @@ module.exports = {
 
   onStart: async function ({ api, event, args, threadsData }) {
     const { threadID, messageID, messageReply, mentions } = event;
-    const botID = api.getCurrentUserID();
+    
+    // FRAMEWORK-COMPATIBLE BOT ID RESOLUTION (Fixes getCurrentUserID is not a function)
+    let botID = "";
+    try {
+      if (api.getCurrentUserID && typeof api.getCurrentUserID === "function") {
+        botID = api.getCurrentUserID();
+      } else {
+        botID = api.getCurrentUserID || api.botID || "";
+      }
+    } catch (e) {
+      botID = api.getCurrentUserID || "";
+    }
 
     let threadInfo;
     try {
@@ -32,7 +43,7 @@ module.exports = {
         await api.removeUserFromGroup(uid, threadID);
         return true;
       } catch (e) {
-        api.sendMessage(`❌ Could not kick user with ID \${uid}. Make sure they are still in the group and the bot has correct permissions.`, threadID, messageID);
+        api.sendMessage("❌ Could not kick user with ID " + uid + ". Make sure they are still in the group and the bot has correct permissions.", threadID, messageID);
         return false;
       }
     };
@@ -48,7 +59,6 @@ module.exports = {
         return api.sendMessage("⚠️ Please tag the member you want to kick.", threadID, messageID);
       }
       
-      const success = 0;
       await Promise.all(uids.map(async (uid) => {
         await kickAndCheckError(uid);
       }));
