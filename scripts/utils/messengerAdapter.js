@@ -208,10 +208,11 @@ async unsendMessage(messageID) {
 async markAsRead(threadID) {
   return new Promise((resolve) => {
     if (typeof this.api.markAsRead !== "function") {
+      logger.warn("[FcaAdapter] markAsRead not supported.");
       return resolve(false);
     }
 
-    this.api.markAsRead(threadID, true, (err) => {
+    this.api.markAsRead(threadID, (err) => {
       if (err) {
         logger.error("[FcaAdapter] markAsRead:", err);
         return resolve(false);
@@ -225,6 +226,7 @@ async markAsRead(threadID) {
 async markAsSeen() {
   return new Promise((resolve) => {
     if (typeof this.api.markAsSeen !== "function") {
+      logger.warn("[FcaAdapter] markAsSeen not supported.");
       return resolve(false);
     }
 
