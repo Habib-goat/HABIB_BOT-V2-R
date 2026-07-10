@@ -7,7 +7,7 @@ module.exports = {
   config: {
     name: "catbox",
     version: "1.1.0",
-    author: "EryXenX (Optimized)",
+    author: "EryXenX (Fixed)",
     role: 0,
     shortDescription: "Upload media to Catbox.",
     longDescription: "Reply to any image, video, audio, or attachment file to upload it directly to Catbox.",
@@ -28,39 +28,48 @@ module.exports = {
     }
 
     const attachment = messageReply.attachments[0];
-    const originalName = attachment.filename || "";
-    const ext = originalName ? path.extname(originalName) : ".png";
+    
+    // EXTREMELY ROBUST EXTENSION MAPPING
+    let ext = ".png";
+    if (attachment.type === "photo") {
+      ext = ".png";
+    } else if (attachment.type === "video") {
+      ext = ".mp4";
+    } else if (attachment.type === "audio") {
+      ext = ".mp3";
+    } else if (attachment.filename) {
+      ext = path.extname(attachment.filename) || ".png";
+    } else {
+      const match = (attachment.url || "").match(/\.(png|jpg|jpeg|gif|mp4|mp3|pdf|txt|zip|apk|bin)/i);
+      if (match) ext = "." + match[1].toLowerCase();
+    }
 
     const cacheDir = path.join(__dirname, "cache");
     if (!fs.existsSync(cacheDir)) {
       fs.mkdirSync(cacheDir, { recursive: true });
     }
 
-    const filePath = path.join(cacheDir, `catbox_${event.senderID}_${Date.now()}${ext}`);
+    const filePath = path.join(cacheDir, "catbox_" + event.senderID + "_" + Date.now() + ext);
 
     const processingMsg = await new Promise((resolve) => {
       api.sendMessage("⏳ Downloading file and uploading to Catbox. Please wait...", threadID, (err, info) => resolve(info), messageID);
     });
 
     try {
-      const fileStream = await axios({
-        url: attachment.url,
-        method: "GET",
-        responseType: "stream",
-        timeout: 20000
+      const response = await axios.get(attachment.url, { 
+        responseType: "arraybuffer",
+        timeout: 25000 
       });
-
-      const writer = fs.createWriteStream(filePath);
-      fileStream.data.pipe(writer);
-
-      await new Promise((resolve, reject) => {
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-      });
+      
+      const buffer = Buffer.from(response.data);
+      // Synchronous write ensures file is fully flushed on all disk/OS targets
+      fs.writeFileSync(filePath, buffer);
 
       const form = new FormData();
       form.append("reqtype", "fileupload");
-      form.append("fileToUpload", fs.createReadStream(filePath));
+      form.append("fileToUpload", fs.createReadStream(filePath), {
+        filename: "file" + ext
+      });
 
       const uploadResponse = await axios.post(
         "https://catbox.moe/user/api.php",
@@ -69,7 +78,7 @@ module.exports = {
           headers: form.getHeaders(),
           maxBodyLength: Infinity,
           maxContentLength: Infinity,
-          timeout: 30000
+          timeout: 45000
         }
       );
 
@@ -83,7 +92,7 @@ module.exports = {
 
       const directLink = uploadResponse.data.trim();
       return api.sendMessage(
-        `📤 Catbox Upload Success!\n\n🔗 Direct Link:\n${directLink}`,
+        "📤 Catbox Upload Success!\n\n🔗 Direct Link:\n" + directLink,
         threadID,
         messageID
       );
@@ -97,7 +106,7 @@ module.exports = {
         try { await api.unsendMessage(processingMsg.messageID); } catch (e) {}
       }
       return api.sendMessage(
-        `❌ Catbox Upload Failed: ${err.message || "Timeout or Network error"}`,
+        "❌ Catbox Upload Failed: " + (err.message || "Timeout or Network error"),
         threadID,
         messageID
       );
