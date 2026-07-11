@@ -197,15 +197,13 @@ if (config.autoReply.enabled) {
   const text = body.trim().toLowerCase();
   const replyMatch = config.autoReply.replies[text];
 
-if (replyMatch) {
+  if (replyMatch) {
 
-  if (text === "prefix" || text === "/prefix") {
-    const axios = require("axios");
+    if (text === "prefix" || text === "/prefix") {
+      const axios = require("axios");
+      const os = require("os");
 
-    const gifPath = path.join(process.cwd(), "cache", "prefix.gif");
-
-    if (!fs.existsSync(gifPath)) {
-      fs.ensureDirSync(path.dirname(gifPath));
+      const tempPath = path.join(os.tmpdir(), `prefix_${Date.now()}.gif`);
 
       const response = await axios({
         url: "https://files.catbox.moe/uzw5yu.gif",
@@ -214,24 +212,26 @@ if (replyMatch) {
       });
 
       await new Promise((resolve, reject) => {
-        const writer = fs.createWriteStream(gifPath);
+        const writer = fs.createWriteStream(tempPath);
         response.data.pipe(writer);
         writer.on("finish", resolve);
         writer.on("error", reject);
       });
+
+      const result = await api.sendMessage(
+        {
+          body: replyMatch,
+          attachment: fs.createReadStream(tempPath)
+        },
+        threadID
+      );
+
+      fs.unlink(tempPath, () => {});
+      return result;
     }
 
-    return await api.sendMessage(
-      {
-        body: replyMatch,
-        attachment: fs.createReadStream(gifPath)
-      },
-      threadID
-    );
+    return await api.sendMessage(replyMatch, threadID);
   }
-
-  return await api.sendMessage(replyMatch, threadID);
-}
 }
 // 6. Command Execution and Parsing
 const prefix = threadData.prefix || config.prefix;
