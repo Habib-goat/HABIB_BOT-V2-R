@@ -91,9 +91,11 @@ const botEngine = {
     const threadID = event.threadID;
     const messageID = event.messageID;
     const body = event.body ? event.body.trim() : '';
-    console.log("[DEBUG] BODY:", body);
 
-    if (!senderID || !threadID) return;
+console.log("[DEBUG] BODY:", body);
+console.log("AUTO:", body.toLowerCase(), config.autoReply.replies[body.toLowerCase()]);
+
+if (!senderID || !threadID) return;
 
     // Intercept reactions
     if (event.reaction) {
