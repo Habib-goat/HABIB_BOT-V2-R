@@ -9,19 +9,19 @@ module.exports = {
   config: {
     name: "antileave",
     version: "1.0.0",
-    role: 1, // Admin only by default to toggle (0 = All, 1 = Admins, 2 = Thread Owners)
-    credits: "Riyad Bot Framework",
-    description: "টগল করুন এবং গ্রুপ থেকে চলে যাওয়া মেম্বারকে পুনরায় যুক্ত করার চেষ্টা করুন।",
-    category: "group",
-    usages: "/antileave on/off",
-    countdlDowns: 5,
+eventType: ["log:unsubscribe"],
+version: "1.0.0",
+author: "Riyad Bot",
+role: 1,
+category: "group",
+countDown: 5
   },
 
   onStart: async function ({ api, event, args, threadsData, usersData }) {
     const { threadID, messageID } = event;
 
     // Check if the trigger is a log event (someone leaving the group)
-    if (event.type === "event" && event.logMessageType === "log:unsubscribe") {
+    if (event.logMessageType === "log:unsubscribe")
       try {
         const leftUserId = event.logMessageData.leftParticipantFbId;
         if (!leftUserId) return;
