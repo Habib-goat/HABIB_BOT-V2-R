@@ -24,12 +24,23 @@ const systemCommands = [
       description: "Display project information, licensing, and credentials."
     },
     onStart: async ({ api, event }) => {
-      await api.sendMessage(`🤖 **Riyad Bot Framework V1.0.0**\n` +
-        `• Developer: Hasan Riyad\n` +
-        `• License: MIT Open Source\n` +
-        `• Repository: https://github.com/namebdmy/Riyad_Pro/\n` +
-        `• Tech Stack: Node.js, Express, WebSockets, JSON Local DB`, event.threadID);
-    }
+  const msg = `╔════════════════╗
+║      ⚡ 𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 ⚡
+║     ◈ 𝐕𝐄𝐑𝐒𝐈𝐎𝐍: 𝟏.𝟎.𝟎 ◈
+╠════════════════╣
+║⚛️ 𝐃𝐄𝐕 : 𝐑𝐢𝐲𝐚𝐝 👑
+║🛡️ 𝐋𝐈𝐂 : 𝐌𝐈𝐓 📜
+║⚙️ 𝐄𝐍𝐆 : 𝐍𝐨𝐝𝐞 ⚡
+║⛓️ 𝐒𝐓𝐊 : 𝐄𝐱𝐩𝐫𝐞𝐬𝐬 📡
+║🗄️ 𝐃𝐁𝐒 : 𝐉𝐒𝐎𝐍 💾
+╠════════════════╣
+║🔗 𝐑𝐄𝐏𝐎 :🔒𝐋𝐎𝐂𝐊⚠️
+╠════════════════╣
+║🟢 𝐒𝐘𝐒𝐓𝐄𝐌–𝐀𝐂𝐓𝐈𝐕𝐄
+╚════════════════╝`;
+
+  return api.sendMessage(msg, event.threadID);
+}
   },
   {
     config: {
