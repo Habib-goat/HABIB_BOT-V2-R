@@ -287,6 +287,8 @@ module.exports = {
 
         const data = res.data;
         downloadUrl = extractVideo(data);
+        console.log("Download URL:", downloadUrl);
+console.log("API Response:", JSON.stringify(data, null, 2));
         const resultInfo = data.result || data;
         if (resultInfo) {
           info = {
@@ -308,11 +310,22 @@ module.exports = {
 
       const buffer = response.data;
       const contentType = response.headers["content-type"] || "";
-      const sizeInBytes = response.headers["content-length"] ? parseInt(response.headers["content-length"], 10) : buffer.length;
+const sizeInBytes = response.headers["content-length"]
+  ? parseInt(response.headers["content-length"], 10)
+  : buffer.length;
 
-      // Determine accurate extension and category
-      const fileInfo = getFileInfo(contentType, downloadUrl || finalUrl);
-      filePath = path.join(cacheDir, `autodl_${Date.now()}.${fileInfo.ext}`);
+let fileInfo = getFileInfo(contentType, downloadUrl || finalUrl);
+
+// Instagram video fix
+if (
+  detectPlatform(finalUrl) === "𝙄𝙣𝙨𝙩𝙖𝙜𝙧𝙖𝙢" &&
+  fileInfo.typeLabel === "Document"
+) {
+  fileInfo.ext = "mp4";
+  fileInfo.typeLabel = "Video";
+}
+
+filePath = path.join(cacheDir, `autodl_${Date.now()}.${fileInfo.ext}`);
 
       await fs.writeFile(filePath, Buffer.from(buffer));
 
