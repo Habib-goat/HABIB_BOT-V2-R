@@ -206,7 +206,7 @@ if (config.autoReply.enabled) {
       const tempPath = path.join(os.tmpdir(), `prefix_${Date.now()}.gif`);
 
       const response = await axios({
-        url: "https://files.catbox.moe/uzw5yu.gif",
+        url: "https://files.catbox.moe/kmqwfy.gif",
         method: "GET",
         responseType: "stream"
       });
