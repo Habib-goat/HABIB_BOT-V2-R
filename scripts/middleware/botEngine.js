@@ -242,26 +242,23 @@ console.log("HAS AUTOSEEN:", commandLoader.commands.has("autoseen"));
 
 for (const [name, cmd] of commandLoader.commands.entries()) {
 
-  console.log("CHECK:", name, "onChat =", typeof cmd.onChat);
-
   if (typeof cmd.onChat === "function") {
-    
-        try {
-          await cmd.onChat({
-  api,
-  event,
-  args: body.split(/\s+/),
-  message: api,
-  usersData: database,
-  threadsData: database,
-  replyManager,
-  reactionManager
-});
-        } catch (err) {
-          logger.error(`Error in onChat hook for command '${name}':`, err);
-        }
-      }
+    try {
+      await cmd.onChat({
+        api,
+        event,
+        args: body.split(/\s+/),
+        message: api,
+        usersData: database,
+        threadsData: database,
+        replyManager,
+        reactionManager
+      });
+    } catch (err) {
+      logger.error(`Error in onChat hook for command '${name}':`, err);
     }
+  }
+}
 
     if (!isCommand || !commandName) return;
 
