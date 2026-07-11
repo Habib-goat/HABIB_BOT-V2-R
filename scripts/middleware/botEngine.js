@@ -199,21 +199,24 @@ const replyMatch = config.autoReply.replies[text];
 
 console.log("AUTO REPLY:", text, replyMatch);
 
-  if (replyMatch) {
-    if (text === "prefix" || text === "/prefix") {
-      const gifPath = path.join(__dirname, "../../assets/prefix.gif");
+if (replyMatch) {
+  if (text === "prefix" || text === "/prefix") {
+    const gifPath = path.join(__dirname, "../../assets/prefix.gif");
 
-      return await api.sendMessage(
-        {
-          body: replyMatch,
-          attachment: fs.createReadStream(gifPath)
-        },
-        threadID
-      );
-    }
+    console.log("GIF EXISTS:", fs.existsSync(gifPath));
+    console.log("GIF PATH:", gifPath);
 
-    return await api.sendMessage(replyMatch, threadID);
+    return await api.sendMessage(
+      {
+        body: replyMatch,
+        attachment: fs.createReadStream(gifPath)
+      },
+      threadID
+    );
   }
+
+  return await api.sendMessage(replyMatch, threadID);
+}
 }
 
 // ← এখান থেকেই ৬ নম্বর অংশ শুরু হবে
