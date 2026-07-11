@@ -189,7 +189,7 @@ const botEngine = {
     }
 
     // 5. Auto-Reply Matcher
-    if (config.autoReply.enabled && threadData.settings.autoReply) {
+    if (config.autoReply.enabled) {
       const replyMatch = config.autoReply.replies[body.toLowerCase()];
       if (replyMatch) {
 
