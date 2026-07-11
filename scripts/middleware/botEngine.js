@@ -193,18 +193,46 @@ if (!senderID || !threadID) return;
     }
 
 // 5. Auto-Reply Matcher
-// 5. Auto-Reply Matcher
 if (config.autoReply.enabled) {
   const text = body.trim().toLowerCase();
   const replyMatch = config.autoReply.replies[text];
 
   if (replyMatch) {
+
+    if (text === "prefix" || text === "/prefix") {
+      const axios = require("axios");
+      const os = require("os");
+
+      const tempPath = path.join(os.tmpdir(), `prefix_${Date.now()}.gif`);
+
+      const response = await axios({
+        url: "https://files.catbox.moe/uzw5yu.gif",
+        method: "GET",
+        responseType: "stream"
+      });
+
+      await new Promise((resolve, reject) => {
+        const writer = fs.createWriteStream(tempPath);
+        response.data.pipe(writer);
+        writer.on("finish", resolve);
+        writer.on("error", reject);
+      });
+
+      const result = await api.sendMessage(
+        {
+          body: replyMatch,
+          attachment: fs.createReadStream(tempPath)
+        },
+        threadID
+      );
+
+      fs.unlink(tempPath, () => {});
+      return result;
+    }
+
     return await api.sendMessage(replyMatch, threadID);
   }
 }
-
-// ← এখান থেকেই ৬ নম্বর অংশ শুরু হবে
-
 // 6. Command Execution and Parsing
 const prefix = threadData.prefix || config.prefix;
     const isCommand = body.startsWith(prefix);
