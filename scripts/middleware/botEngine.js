@@ -190,32 +190,34 @@ if (!senderID || !threadID) return;
       }
     }
 
-    // 5. Auto-Reply Matcher
-    if (config.autoReply.enabled) {
-      const replyMatch = config.autoReply.replies[body.toLowerCase()];
-      if (replyMatch) {
+// 5. Auto-Reply Matcher
+if (config.autoReply.enabled) {
+  const text = body.trim().toLowerCase();
+const replyMatch = config.autoReply.replies[text];
 
-  // Prefix reply with GIF
-if (["prefix", "/prefix"].includes(body.toLowerCase())) {
-    const gifPath = path.join(__dirname, "../../assets/prefix.gif");
+console.log("AUTO REPLY:", text, replyMatch);
 
-    await api.sendMessage(
-  {
-    body: replyMatch,
-    attachment: fs.createReadStream(gifPath)
-  },
-  threadID
-);
+  if (replyMatch) {
+    if (text === "prefix" || text === "/prefix") {
+      const gifPath = path.join(__dirname, "../../assets/prefix.gif");
 
-    return;
-  }
-
-  await api.sendMessage(replyMatch, threadID, messageID);
-  return;
-}
+      return await api.sendMessage(
+        {
+          body: replyMatch,
+          attachment: fs.createReadStream(gifPath)
+        },
+        threadID
+      );
     }
-    // 6. Command Execution and Parsing
-    const prefix = threadData.prefix || config.prefix;
+
+    return await api.sendMessage(replyMatch, threadID);
+  }
+}
+
+// ← এখান থেকেই ৬ নম্বর অংশ শুরু হবে
+
+// 6. Command Execution and Parsing
+const prefix = threadData.prefix || config.prefix;
     const isCommand = body.startsWith(prefix);
     
     // Command variables
