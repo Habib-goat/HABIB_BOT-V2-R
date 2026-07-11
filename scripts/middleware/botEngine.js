@@ -87,13 +87,15 @@ const botEngine = {
   processMessage: async (event, commandLoader, eventLoader, wsServer, restLogs, customApi = null) => {
     const api = customApi || createApiWrapper(wsServer, restLogs);
     
-    const senderID = event.senderID;
-    const threadID = event.threadID;
-    const messageID = event.messageID;
-    const body = event.body ? event.body.trim() : '';
+const senderID = event.senderID;
+const threadID = event.threadID;
+const messageID = event.messageID;
+const body = event.body ? event.body.trim() : '';
 
-console.log("[DEBUG] BODY:", body);
-console.log("AUTO:", body.toLowerCase(), config.autoReply.replies[body.toLowerCase()]);
+console.log("BODY =", body);
+console.log("AUTOREPLY ENABLED =", config.autoReply.enabled);
+console.log("REPLIES =", Object.keys(config.autoReply.replies));
+console.log("PREFIX VALUE =", config.autoReply.replies["prefix"]);
 
 if (!senderID || !threadID) return;
 
