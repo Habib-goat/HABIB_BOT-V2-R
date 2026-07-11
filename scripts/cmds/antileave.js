@@ -9,12 +9,12 @@ module.exports = {
   config: {
     name: "antileave",
     version: "1.0.0",
-    hasPermission: 1, // Admin only by default to toggle (0 = All, 1 = Admins, 2 = Thread Owners)
+    role: 1, // Admin only by default to toggle (0 = All, 1 = Admins, 2 = Thread Owners)
     credits: "Riyad Bot Framework",
     description: "টগল করুন এবং গ্রুপ থেকে চলে যাওয়া মেম্বারকে পুনরায় যুক্ত করার চেষ্টা করুন।",
-    commandCategory: "Group",
+    category: "group",
     usages: "/antileave on/off",
-    cooldowns: 5,
+    countdlDowns: 5,
   },
 
   onStart: async function ({ api, event, args, threadsData, usersData }) {
