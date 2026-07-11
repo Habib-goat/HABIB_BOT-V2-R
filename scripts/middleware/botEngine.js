@@ -194,7 +194,7 @@ const botEngine = {
       if (replyMatch) {
 
   // Prefix reply with GIF
-  if (body.toLowerCase() === "prefix") {
+if (["prefix", "/prefix"].includes(body.toLowerCase())) {
     const gifPath = path.join(__dirname, "../../assets/prefix.gif");
 
     await api.sendMessage(
