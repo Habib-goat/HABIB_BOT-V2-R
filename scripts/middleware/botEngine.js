@@ -192,11 +192,26 @@ const botEngine = {
     if (config.autoReply.enabled && threadData.settings.autoReply) {
       const replyMatch = config.autoReply.replies[body.toLowerCase()];
       if (replyMatch) {
-        await api.sendMessage(replyMatch, threadID, messageID);
-        return;
-      }
-    }
 
+  // Prefix reply with GIF
+  if (body.toLowerCase() === "prefix") {
+    const gifPath = path.join(__dirname, "../../assets/prefix.gif");
+
+    await api.sendMessage(
+  {
+    body: replyMatch,
+    attachment: fs.createReadStream(gifPath)
+  },
+  threadID
+);
+
+    return;
+  }
+
+  await api.sendMessage(replyMatch, threadID, messageID);
+  return;
+}
+    }
     // 6. Command Execution and Parsing
     const prefix = threadData.prefix || config.prefix;
     const isCommand = body.startsWith(prefix);
