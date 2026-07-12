@@ -56,13 +56,18 @@ const systemCommands = [
     },
     onStart: async ({ api, event }) => {
       const memory = process.memoryUsage();
-      const info = `⚙️ **SERVER METRICS**:\n` +
-        `• OS: ${os.platform()} ${os.release()} (${os.arch()})\n` +
-        `• RAM Used: ${(memory.heapUsed / 1024 / 1024).toFixed(2)} MB\n` +
-        `• CPU Cores: ${os.cpus().length}\n` +
-        `• Node Engine: ${process.version}\n` +
-        `• Load Average: ${os.loadavg().map(v => v.toFixed(2)).join(', ')}`;
-      await api.sendMessage(info, event.threadID);
+const info =
+`╔══════════════════╗
+║   ⚙️ 𝐒𝐄𝐑𝐕𝐄𝐑 𝐌𝐄𝐓𝐑𝐈𝐂𝐒 📊
+╠══════════════════╣
+║ 🐧 𝐎𝐒 : ${os.platform()} ${os.release()} (${os.arch()}) 🐧
+║ 🐏 𝐑𝐀𝐌 : ${(memory.heapUsed / 1024 / 1024).toFixed(2)} 𝐌𝐁 📉
+║ 🖥️ 𝐂𝐏𝐔 : ${os.cpus().length} 𝐂𝐨𝐫𝐞𝐬 ⚡
+║ 🚀 𝐍𝐎𝐃𝐄 : ${process.version} ⚙️
+║ 📊 𝐋𝐎𝐀𝐃 : ${os.loadavg().map(v => v.toFixed(2)).join(", ")} 📈
+╚══════════════════╝`;
+
+await api.sendMessage(info, event.threadID);
     }
   },
   {
