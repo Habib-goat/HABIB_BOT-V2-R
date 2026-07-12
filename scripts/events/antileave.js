@@ -1,60 +1,86 @@
 module.exports = {
   config: {
     name: "antileave",
-    eventType: ["log:unsubscribe"],
     version: "1.0.0",
-    author: "Riyad Bot"
+    author: "Riyad Bot",
+    eventType: ["log:unsubscribe"]
   },
 
   onStart: async function ({ api, event, threadsData }) {
     if (event.logMessageType !== "log:unsubscribe")
       return;
 
-    const { threadID } = event;
+    const threadID = String(event.threadID);
     const leftUserID = String(event.logMessageData.leftParticipantFbId);
 
     const botID =
       typeof api.getCurrentUserID === "function"
-        ? api.getCurrentUserID()
-        : null;
+        ? String(api.getCurrentUserID())
+        : "";
 
-    if (String(botID) === leftUserID)
+    if (leftUserID === botID)
       return;
 
     const thread = await threadsData.getThread(threadID);
 
     if (
       !thread ||
-      !(thread.antileave ||
-        (thread.data && thread.data.antileave))
-    )
+      !(
+        thread.antileave === true ||
+        (thread.data && thread.data.antileave === true)
+      )
+    ) {
       return;
-console.log("[ANTILEAVE] API METHODS:");
-console.log(
-  Object.keys(api).filter(x =>
-    x.toLowerCase().includes("group") ||
-    x.toLowerCase().includes("user")
-  )
-);
-    console.log("[ANTILEAVE] Adding:", leftUserID);
+    }
+
+    console.log("[ANTILEAVE] Re-adding:", leftUserID);
 
     try {
       await new Promise((resolve, reject) => {
-  api.addUserToGroup(leftUserID, threadID, (err) => {
-    if (err) return reject(err);
-    resolve();
-  });
-});
+        api.addUserToGroup(leftUserID, threadID, err => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
 
-      await api.sendMessage(
-        "✅ সদস্যকে আবার গ্রুপে যোগ করা হয়েছে।",
-        threadID
-      );
+      let userName = "Member";
+
+      try {
+        const info = await new Promise(resolve => {
+          api.getUserInfo(leftUserID, (err, data) => {
+            if (err) return resolve(null);
+            resolve(data);
+          });
+        });
+
+        if (info && info[leftUserID])
+          userName = info[leftUserID].name;
+      } catch {}
+
+      await api.sendMessage({
+        body:
+`🛡️ RIYAD BOT SECURITY
+
+👋 ${userName}
+
+❌ আপনি গ্রুপ থেকে বের হওয়ার চেষ্টা করেছিলেন।
+
+🤖 Riyad Bot-এর অনুমতি ছাড়া এই গ্রুপ ত্যাগ করা যাবে না।
+
+✅ আপনাকে পুনরায় গ্রুপে যুক্ত করা হয়েছে।
+
+❤️ ধন্যবাদ আমাদের সাথে থাকার জন্য।`,
+        mentions: [{
+          tag: userName,
+          id: leftUserID
+        }]
+      }, threadID);
+
     } catch (err) {
       console.error("[ANTILEAVE ERROR]", err);
 
       await api.sendMessage(
-        "❌ সদস্যকে আবার যোগ করা যায়নি।",
+        "❌ সদস্যকে পুনরায় গ্রুপে যোগ করা যায়নি।",
         threadID
       );
     }
