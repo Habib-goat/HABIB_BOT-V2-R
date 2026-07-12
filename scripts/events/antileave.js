@@ -57,24 +57,29 @@ module.exports = {
           userName = info[leftUserID].name;
       } catch {}
 
-      await api.sendMessage({
-        body:
-`🛡️ RIYAD BOT SECURITY
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-👋 ${userName}
-
-❌ আপনি গ্রুপ থেকে বের হওয়ার চেষ্টা করেছিলেন।
-
-🤖 Riyad Bot-এর অনুমতি ছাড়া এই গ্রুপ ত্যাগ করা যাবে না।
-
-✅ আপনাকে পুনরায় গ্রুপে যুক্ত করা হয়েছে।
-
-❤️ ধন্যবাদ আমাদের সাথে থাকার জন্য।`,
-        mentions: [{
-          tag: userName,
-          id: leftUserID
-        }]
-      }, threadID);
+await api.sendMessage(
+`╔═══════════════════╗
+║🔥𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 𝐒𝐄𝐂𝐔𝐑𝐈𝐓𝐘⚡║
+╠═══════════════════╣
+║
+║ 👋 ${userName}
+║                                   
+║ ⚠️ আপনি গ্রুপ থেকে বের হওয়ার
+║ চেষ্টা করেছিলেন! 🚫                
+║    
+║ ⚡ Riyad Bot-এর অনুমতি ব্যতীত  
+║এই গ্রুপ ত্যাগ করা অসম্ভব। 🔒     
+║                                   
+║ ✅ আপনাকে পুনরায় গ্রুপে             
+║ সংযুক্ত করা হয়েছে। 🔄             
+║        ❤️💎 🚀 ⚛️     
+╠════════════════════╣
+║⚡ 𝐁𝐎𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐄 ⚡   ║
+╚════════════════════╝`,
+threadID
+);
 
     } catch (err) {
       console.error("[ANTILEAVE ERROR]", err);
