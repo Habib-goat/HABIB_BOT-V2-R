@@ -1,3 +1,4 @@
+const reactionManager = require("../reactions/reactionManager");
 const logger = require('./logger');
 
 /**
@@ -142,9 +143,18 @@ async react(emoji, messageID) {
         }
 
         if (callback) {
-          try { callback(null, messageInfo); } catch(e) {}
-        }
-        resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
+  try {
+    callback(null, messageInfo);
+  } catch (e) {}
+}
+
+if (messageInfo && messageInfo.messageID) {
+  reactionManager.register(messageInfo.messageID, {
+    commandName: "__global__"
+  });
+}
+
+resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
       }, replyMessageID);
     });
   }
@@ -347,7 +357,11 @@ async react(emoji, messageID) {
       this.restLogs.push({ sender: 'Bot', text, threadId: threadID, timestamp: Date.now() });
     }
 
-    return { messageID };
+    reactionManager.register(messageID, {
+  commandName: "__global__"
+});
+
+return { messageID };
   }
 
   async setReaction(emoji, messageID) {
@@ -411,10 +425,20 @@ class GraphMessengerAdapter extends BaseMessengerAdapter {
     }
 
     if (this.restLogs) {
-      this.restLogs.push({ sender: 'Bot', text, threadId: threadID, timestamp: Date.now() });
-    }
+  this.restLogs.push({
+    sender: 'Bot',
+    text,
+    threadId: threadID,
+    timestamp: Date.now()
+  });
+}
 
-    return { messageID };
+// Register every bot message for global reactions
+reactionManager.register(messageID, {
+  commandName: "__global__"
+});
+
+return { messageID };
   }
 
   async setReaction(emoji, messageID) {
