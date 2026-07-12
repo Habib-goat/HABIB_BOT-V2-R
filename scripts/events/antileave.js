@@ -36,15 +36,19 @@ module.exports = {
     console.log("[ANTILEAVE] Re-adding:", leftUserID);
 
     try {
-      await new Promise((resolve, reject) => {
-        api.addUserToGroup(leftUserID, threadID, err => {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
+  await api.addUserToGroup(leftUserID, threadID);
 
-      let userName = "Member";
+  // User add হওয়ার জন্য অপেক্ষা
+  await new Promise(resolve => setTimeout(resolve, 3000));
 
+  let userName = "Member";
+
+      console.log("ADD SUCCESS");
+
+await new Promise(resolve => setTimeout(resolve, 3000));
+
+console.log("SENDING MESSAGE");
+      
       try {
         const info = await new Promise(resolve => {
           api.getUserInfo(leftUserID, (err, data) => {
@@ -75,7 +79,9 @@ module.exports = {
           id: leftUserID
         }]
       }, threadID);
-
+      
+console.log("MESSAGE SENT");
+      
     } catch (err) {
       console.error("[ANTILEAVE ERROR]", err);
 
