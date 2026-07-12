@@ -35,14 +35,12 @@ module.exports = {
 
     console.log("[ANTILEAVE] Re-adding:", leftUserID);
 
-    try {
+try {
   await api.addUserToGroup(leftUserID, threadID);
 
   console.log("ADD SUCCESS");
 
   await new Promise(resolve => setTimeout(resolve, 3000));
-
-  console.log("SENDING MESSAGE");
 
   let userName = "Member";
 
@@ -54,8 +52,9 @@ module.exports = {
       });
     });
 
-    if (info && info[leftUserID])
+    if (info && info[leftUserID]) {
       userName = info[leftUserID].name;
+    }
   } catch {}
 
   await api.sendMessage({
@@ -82,7 +81,7 @@ module.exports = {
   console.error("[ANTILEAVE ERROR]", err);
 
   await api.sendMessage(
-    "❌ সদস্যকে পুনরায় গ্রুপে যোগ করা যায়নি।",
+    `❌ সদস্যকে পুনরায় গ্রুপে যোগ করা যায়নি:\n${err.message || err}`,
     threadID
   );
 }
