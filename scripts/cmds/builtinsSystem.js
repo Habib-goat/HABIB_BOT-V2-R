@@ -383,7 +383,7 @@ await api.sendMessage(info, event.threadID);
       version: "1.0.0",
       author: "Riyad Bot",
       countDown: 3,
-      role: 3, // Owner only
+role: 2, // Bot Admin + Owner
       category: "system",
       guide: "{pn} [userID]",
       description: "Add a user ID to the administrative register."
@@ -407,7 +407,7 @@ await api.sendMessage(info, event.threadID);
       version: "1.0.0",
       author: "Riyad Bot",
       countDown: 3,
-      role: 3,
+      role: 2,
       category: "system",
       guide: "{pn} [userID]",
       description: "Remove administrative clearance from a user ID."
