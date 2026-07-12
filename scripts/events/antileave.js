@@ -29,11 +29,22 @@ module.exports = {
         (thread.data && thread.data.antileave))
     )
       return;
-
+console.log("[ANTILEAVE] API METHODS:");
+console.log(
+  Object.keys(api).filter(x =>
+    x.toLowerCase().includes("group") ||
+    x.toLowerCase().includes("user")
+  )
+);
     console.log("[ANTILEAVE] Adding:", leftUserID);
 
     try {
-      await api.addUserToGroup(leftUserID, threadID);
+      await new Promise((resolve, reject) => {
+  api.addUserToGroup(leftUserID, threadID, (err) => {
+    if (err) return reject(err);
+    resolve();
+  });
+});
 
       await api.sendMessage(
         "✅ সদস্যকে আবার গ্রুপে যোগ করা হয়েছে।",
