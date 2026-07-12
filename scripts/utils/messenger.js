@@ -240,6 +240,8 @@ stopListener = api.listenMqtt(async (listenErr, event) => {
   event.threadID = String(event.threadID || "");
   event.messageID = String(event.messageID || "");
 
+  console.log("EVENT TYPE:", event.type);
+console.log("LOG TYPE:", event.logMessageType);
         // Background resolve of display names
         ensureUserData(adaptedApi, event.senderID);
 
