@@ -91,7 +91,13 @@ const senderID = event.senderID;
 const threadID = event.threadID;
 const messageID = event.messageID;
 const body = event.body ? event.body.trim() : '';
+if (event.type === "message_reply") {
+  logger.info("[BOTENGINE] Reply event received");
+}
 
+if (event.type === "message_reaction") {
+  logger.info("[BOTENGINE] Reaction event received");
+}
 console.log("BODY =", body);
 console.log("AUTOREPLY ENABLED =", config.autoReply.enabled);
 console.log("REPLIES =", Object.keys(config.autoReply.replies));
