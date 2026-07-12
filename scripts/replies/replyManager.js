@@ -19,7 +19,9 @@ const replyManager = {
   set: (messageID, replyData) => {
     return replyManager.register(messageID, replyData);
   },
-
+delete: (messageID) => {
+  return global.RiyadBot.onReply.delete(messageID);
+},
   register: (messageID, replyData) => {
     global.RiyadBot.onReply.set(messageID, {
       ...replyData,
@@ -46,7 +48,12 @@ const replyManager = {
 await cmd.onReply({
   api,
   event,
-  Reply: replyData,
+
+  Reply: {
+    ...replyData,
+    messageID: targetMessageID
+  },
+
   replyData,
 
   args: event.body ? event.body.trim().split(/\s+/).slice(1) : [],
