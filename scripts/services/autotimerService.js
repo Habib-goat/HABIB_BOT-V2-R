@@ -147,7 +147,9 @@ for (const thread of groups) {
   },
   threadID
 );
-
+    
+console.log("[AUTOTIMER MESSAGE]", info);
+    
 if (info && info.messageID) {
   const reactionManager = require("../reactions/reactionManager");
 
