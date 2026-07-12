@@ -66,26 +66,28 @@ cleanExpired() {
 console.log("[REACTION]", messageID);
 console.log("[FOUND]", reactionData);
 
-// 🤬 Auto Unsend
-if (reaction === "🤬" && reactionData) {
-      const reactor = String(event.userID || event.senderID || "");
+// 🤬 / 😡 = Admin/Owner Only Unsend
+if ((reaction === "🤬" || reaction === "😡") && reactionData) {
+  const reactor = String(event.userID || event.senderID || "");
 
-      const admins = [
-        ...(config.adminIDs || []),
-        ...(config.ownerIDs || [])
-      ].map(String);
+  const admins = [
+    ...(config.adminIDs || []),
+    ...(config.ownerIDs || [])
+  ].map(String);
 
-      if (admins.includes(reactor)) {
-        try {
-          await api.unsendMessage(messageID);
+  if (!admins.includes(reactor)) {
+    return false;
+  }
 
-          reactions.delete(String(messageID));
-          return true;
-        } catch (err) {
-          logger.error("Reaction unsend failed:", err);
-        }
-      }
-    }
+  try {
+    await api.unsendMessage(messageID);
+    reactions.delete(String(messageID));
+    return true;
+  } catch (err) {
+    logger.error("Reaction unsend failed:", err);
+    return false;
+  }
+}
 
     if (!reactionData) return false;
 
