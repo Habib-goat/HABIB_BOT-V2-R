@@ -17,8 +17,16 @@ module.exports = {
 
 console.log("usersData methods:", Object.keys(usersData || {}));
 
-const thread = threadsData.getThread(threadID);
-
+const thread = await threadsData.getThread(threadID);
+const groupName = thread?.name || "Unknown Group";
+// AntiLeave চালু থাকলে Goodbye message পাঠাবে না
+if (
+  thread &&
+  (thread.antileave === true ||
+    (thread.data && thread.data.antileave === true))
+) {
+  return;
+}
     const leftParticipantID = String(event.logMessageData.leftParticipantFbId);
     let leftParticipantName;
 
