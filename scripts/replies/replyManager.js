@@ -3,7 +3,9 @@
  * Standard management for onReply hooks.
  */
 
-const logger = require('../utils/logger');
+const logger = require("../utils/logger");
+const database = require("../utils/database");
+const reactionManager = require("../reactions/reactionManager");
 
 // Initialize global reply register
 if (!global.RiyadBot) {
@@ -40,12 +42,22 @@ const replyManager = {
       if (cmd && typeof cmd.onReply === 'function') {
         try {
           logger.info(`[Reply Manager] Executing onReply for command '${replyData.commandName}'`);
-          await cmd.onReply({
+
+await cmd.onReply({
   api,
   event,
   Reply: replyData,
+  replyData,
+
+  args: event.body ? event.body.trim().split(/\s+/).slice(1) : [],
+
+  message: api,
+
+  usersData: database,
+  threadsData: database,
+
   replyManager: module.exports,
-  reactionManager: {}
+  reactionManager
 });
           return true;
         } catch (err) {
