@@ -1007,7 +1007,8 @@ const pending = pendingConfirmations.get(Reply.messageID);
 
     const answer = body.trim().toLowerCase();
     if (answer === "yes" || answer === "y") {
-      pendingConfirmations.delete(Reply.messageID);
+    pendingConfirmations.delete(Reply.messageID);
+    replyManager.delete(Reply.messageID);
       const { type, data } = pending;
       if (type === "install_overwrite") {
         const { fileName, rawCode } = data;
@@ -1025,7 +1026,8 @@ const pending = pendingConfirmations.get(Reply.messageID);
         }
       }
     } else if (answer === "no" || answer === "n") {
-      pendingConfirmations.delete(Reply.messageID);
+    pendingConfirmations.delete(Reply.messageID);
+    replyManager.delete(Reply.messageID);
       await sendMessage(api, threadID, "❌ [𝐂𝐀𝐍𝐂𝐄𝐋𝐋𝐄𝐃] ➜ Overwrite cancelled by user.", messageID);
     }
   }
