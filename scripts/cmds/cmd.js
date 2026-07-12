@@ -87,7 +87,7 @@ function validateCommandSource(tempName, rawCode) {
         fs.removeSync(tempPath);
       }
     } catch (_) {}
-    return { valid: false, error: error.error || error.message };
+    return { valid: false, error: error.message };
   }
 }
 
@@ -143,7 +143,7 @@ module.exports = {
     role: 2,
     category: "system",
     description: "Manage, reload, install, backup, and diagnose bot commands",
-    guide: "/cmd\n/cmd list [page]\n/cmd info [command]\n/cmd search [query]\n/cmd reload [all/command]\n/cmd install\n/cmd enable/disable [command]\n/cmd backup/restore\n/cmd check/doctor"
+    guide: "/cmd\n/cmd list [page]\n/cmd info [command]\n/cmd search [query]\n/cmd reload [all/command]\n/cmd load [all/command]\n/cmd unload [command]\n/cmd install\n/cmd enable/disable [command]\n/cmd backup/restore\n/cmd check/doctor"
   },
 
   onStart: async function({ api, event, args }) {
@@ -700,6 +700,109 @@ module.exports = {
         }
       } catch (error) {
         return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Reloading "${targetName}" failed: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // LOAD COMMAND
+    // -------------------------------------------------------------
+    if (sub === "load") {
+      const targetName = args[1];
+      if (!targetName) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Please supply a command to load or use 'all'.", messageID);
+      }
+
+      if (targetName === "all") {
+        try {
+          const files = fs.readdirSync(__dirname).filter(f => f.endsWith(".js") && !f.startsWith("_temp_"));
+          let loadedCount = 0;
+          let failedCount = 0;
+          const errors = [];
+
+          for (const file of files) {
+            const filePath = path.join(__dirname, file);
+            const cmdName = file.replace(".js", "");
+            try {
+              const loaded = loadCommandIntoRegistry(filePath, cmdName);
+              if (loaded) loadedCount++;
+              else failedCount++;
+            } catch (err) {
+              failedCount++;
+              errors.push(`${cmdName}: ${err.message}`);
+            }
+          }
+
+          let msg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Load All Complete:\n──────────────────────────\n`;
+          msg += `  • 𝐒𝐮𝐜𝐜𝐞𝐬𝐬𝐟𝐮𝐥𝐥𝐲 𝐋𝐨𝐚𝐝𝐞𝐝: ${loadedCount}\n`;
+          msg += `  • 𝐅𝐚𝐢𝐥𝐞𝐝: ${failedCount}`;
+          if (errors.length > 0) {
+            msg += `\n\n─── [ Failures ] ───\n` + errors.join("\n");
+          }
+          return await sendMessage(api, threadID, msg, messageID);
+        } catch (error) {
+          return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Load all failed: ${error.message}`, messageID);
+        }
+      }
+
+      let cmdName = targetName;
+      if (cmdName.endsWith(".js")) {
+        cmdName = cmdName.slice(0, -3);
+      }
+      const filePath = path.join(__dirname, `${cmdName}.js`);
+      if (!fs.existsSync(filePath)) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Command file "${cmdName}.js" not found.`, messageID);
+      }
+
+      try {
+        const loaded = loadCommandIntoRegistry(filePath, cmdName);
+        if (loaded) {
+          return await sendMessage(api, threadID, `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Command "${cmdName}" loaded into registry successfully.`, messageID);
+        } else {
+          return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to load command "${cmdName}". The file might be corrupt or missing config.`, messageID);
+        }
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Loading "${cmdName}" failed: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // UNLOAD COMMAND
+    // -------------------------------------------------------------
+    if (sub === "unload") {
+      const targetName = args[1];
+      if (!targetName) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Please enter the name of the command to unload.", messageID);
+      }
+
+      let cmdName = targetName;
+      if (cmdName.endsWith(".js")) {
+        cmdName = cmdName.slice(0, -3);
+      }
+
+      if (cmdName === "cmd") {
+        return await sendMessage(api, threadID, "❌ [𝐄𝐑𝐑𝐎𝐑] ➜ For security reasons, you cannot unload the command manager itself.", messageID);
+      }
+
+      // Check if command is registered or file exists
+      const registries = findRegistries();
+      let isRegistered = false;
+      for (const reg of registries) {
+        if (reg.commands.has(cmdName)) {
+          isRegistered = true;
+          break;
+        }
+      }
+
+      const filePath = path.join(__dirname, `${cmdName}.js`);
+      if (!isRegistered && !fs.existsSync(filePath)) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Command "${cmdName}" is not loaded in registry and file does not exist.`, messageID);
+      }
+
+      try {
+        unloadCommandFromRegistry(cmdName);
+        return await sendMessage(api, threadID, `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Command "${cmdName}" has been successfully unloaded from registry.`, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to unload command: ${error.message}`, messageID);
       }
     }
 
