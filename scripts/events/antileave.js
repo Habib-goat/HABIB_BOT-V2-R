@@ -56,7 +56,9 @@ module.exports = {
         if (info && info[leftUserID])
           userName = info[leftUserID].name;
       } catch {}
-
+// User-কে add করার পর ৩ সেকেন্ড অপেক্ষা
+await new Promise(resolve => setTimeout(resolve, 3000));
+      
       await api.sendMessage({
         body:
 `╔═══════════════════╗
