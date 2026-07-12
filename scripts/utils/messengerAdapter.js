@@ -84,7 +84,18 @@ class FcaMessengerAdapter extends BaseMessengerAdapter {
   constructor(underlyingApi, wsServer, restLogs) {
     super(underlyingApi, wsServer, restLogs);
   }
+  
+async reply(message, event) {
+  return this.sendMessage(
+    message,
+    event.threadID,
+    event.messageID
+  );
+}
 
+async react(emoji, messageID) {
+  return this.setReaction(emoji, messageID);
+}
   async sendMessage(message, threadID, callbackOrReply = null, replyMessageID = null) {
     return new Promise((resolve, reject) => {
       let callback = null;
@@ -307,6 +318,17 @@ class SimulatedMessengerAdapter extends BaseMessengerAdapter {
   constructor(underlyingApi, wsServer, restLogs) {
     super(underlyingApi, wsServer, restLogs);
   }
+  async reply(message, event) {
+  return this.sendMessage(
+    message,
+    event.threadID,
+    event.messageID
+  );
+}
+
+async react(emoji, messageID) {
+  return this.setReaction(emoji, messageID);
+}
 
   async sendMessage(message, threadID, replyMessageID = null) {
     const text = typeof message === 'object' ? (message.body || '[Rich Object]') : message;
