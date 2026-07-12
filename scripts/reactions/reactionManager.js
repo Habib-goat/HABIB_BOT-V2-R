@@ -5,6 +5,8 @@
 const logger = require("../utils/logger");
 const path = require("path");
 
+const database = require("../utils/database");
+const replyManager = require("../replies/replyManager");
 let config = {};
 try {
   config = global.config || require(path.join(process.cwd(), "config.json"));
@@ -93,13 +95,23 @@ if (reaction === "🤬" && reactionData) {
       return false;
 
     try {
-      await cmd.onReaction({
-        api,
-        event,
-        Reaction: reactionData,
-        reactionData,
-        reactionManager: module.exports
-      });
+await cmd.onReaction({
+  api,
+  event,
+
+  Reaction: reactionData,
+  reactionData,
+
+  args: event.body ? event.body.trim().split(/\s+/).slice(1) : [],
+
+  message: api,
+
+  usersData: database,
+  threadsData: database,
+
+  replyManager,
+  reactionManager: module.exports
+});
 
       return true;
     } catch (err) {
