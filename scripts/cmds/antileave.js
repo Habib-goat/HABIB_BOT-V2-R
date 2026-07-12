@@ -5,74 +5,17 @@ module.exports = {
     author: "Riyad Bot",
     role: 1,
     category: "group",
-    countDown: 5,
-    eventType: ["log:unsubscribe"]
+    countDown: 5
   },
 
   onStart: async function ({ api, event, args, threadsData }) {
     const { threadID, messageID } = event;
 
-    // ==========================
-    // LEAVE EVENT
-    // ==========================
-    if (event.logMessageType === "log:unsubscribe") {
-      try {
-        const leftUserID = event.logMessageData.leftParticipantFbId;
-        if (!leftUserID) return;
-
-        const botID =
-          typeof api.getCurrentUserID === "function"
-            ? api.getCurrentUserID()
-            : null;
-
-        if (leftUserID == botID) return;
-
-        let thread = await threadsData.getThread(threadID);
-        if (!thread) return;
-
-        const enabled =
-          thread.antileave === true ||
-          (thread.data && thread.data.antileave === true);
-
-        if (!enabled) return;
-
-        try {
-  console.log("[ANTILEAVE] Adding:", leftUserID);
-
-  await new Promise((resolve, reject) => {
-    api.addUserToGroup(leftUserID, threadID, (err) => {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
-
-  api.sendMessage(
-    "✅ সদস্যকে আবার গ্রুপে যোগ করা হয়েছে।",
-    threadID
-  );
-} catch (err) {
-  console.error("[ANTILEAVE ERROR]", err);
-
-  api.sendMessage(
-    "❌ সদস্যকে পুনরায় যোগ করা যায়নি।",
-    threadID
-  );
-}
-      } catch (err) {
-        console.error("[ANTILEAVE]", err);
-      }
-      return;
-    }
-
-    // ==========================
-    // COMMAND
-    // ==========================
-
-    const option = (args[0] || "").toLowerCase();
-
     let thread = await threadsData.getThread(threadID);
     if (!thread) thread = {};
     if (!thread.data) thread.data = {};
+
+    const option = (args[0] || "").toLowerCase();
 
     if (option === "on") {
       thread.antileave = true;
@@ -81,7 +24,7 @@ module.exports = {
       await threadsData.updateThread(threadID, thread);
 
       return api.sendMessage(
-        "✅ AntiLeave চালু হয়েছে।",
+        "🛡️ AntiLeave সফলভাবে চালু হয়েছে।",
         threadID,
         messageID
       );
@@ -94,14 +37,15 @@ module.exports = {
       await threadsData.updateThread(threadID, thread);
 
       return api.sendMessage(
-        "❌ AntiLeave বন্ধ হয়েছে।",
+        "❌ AntiLeave সফলভাবে বন্ধ হয়েছে।",
         threadID,
         messageID
       );
     }
 
     const status =
-      thread.antileave || (thread.data && thread.data.antileave)
+      thread.antileave ||
+      (thread.data && thread.data.antileave)
         ? "🟢 ON"
         : "🔴 OFF";
 
