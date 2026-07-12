@@ -181,17 +181,21 @@ function startMessenger(app, wsServer) {
     }
 
     loginLib({ appState }, (err, api) => {
-      if (err) {
-        logger.error("❌ Facebook Messenger authentication failed:", err.error || err.message || err);
-        logger.warn("Continuing system startup in simulated/interactive console mode. Auto-reconnection loop active.");
-        
-        // Retry connection in 30 seconds
-        reconnectTimer = setTimeout(doConnect, 30000);
-        return;
-      }
+  if (err) {
+    logger.error("❌ Facebook Messenger authentication failed:", err.error || err.message || err);
+    return;
+  }
 
-      logger.success("✅ Connected successfully to Facebook Messenger API!");
-      isConnected = true;
+  console.log("========== RAW API ==========");
+  console.log("addUserToGroup:", typeof api.addUserToGroup);
+  console.log("removeUserFromGroup:", typeof api.removeUserFromGroup);
+  console.log("getThreadInfo:", typeof api.getThreadInfo);
+  console.log("API Keys:", Object.keys(api));
+  console.log("=============================");
+
+  logger.success("✅ Connected successfully to Facebook Messenger API!");
+
+  isConnected = true;
       
       // Set options
       api.setOptions({
