@@ -38,32 +38,28 @@ module.exports = {
     try {
   await api.addUserToGroup(leftUserID, threadID);
 
-  // User add হওয়ার জন্য অপেক্ষা
+  console.log("ADD SUCCESS");
+
   await new Promise(resolve => setTimeout(resolve, 3000));
+
+  console.log("SENDING MESSAGE");
 
   let userName = "Member";
 
-      console.log("ADD SUCCESS");
+  try {
+    const info = await new Promise(resolve => {
+      api.getUserInfo(leftUserID, (err, data) => {
+        if (err) return resolve(null);
+        resolve(data);
+      });
+    });
 
-await new Promise(resolve => setTimeout(resolve, 3000));
+    if (info && info[leftUserID])
+      userName = info[leftUserID].name;
+  } catch {}
 
-console.log("SENDING MESSAGE");
-      
-      try {
-        const info = await new Promise(resolve => {
-          api.getUserInfo(leftUserID, (err, data) => {
-            if (err) return resolve(null);
-            resolve(data);
-          });
-        });
-
-        if (info && info[leftUserID])
-          userName = info[leftUserID].name;
-      } catch {}
-
-      await api.sendMessage({
-        body:
-`🛡️ RIYAD BOT SECURITY
+  await api.sendMessage({
+    body: `🛡️ RIYAD BOT SECURITY
 
 👋 ${userName}
 
@@ -74,21 +70,21 @@ console.log("SENDING MESSAGE");
 ✅ আপনাকে পুনরায় গ্রুপে যুক্ত করা হয়েছে।
 
 ❤️ ধন্যবাদ আমাদের সাথে থাকার জন্য।`,
-        mentions: [{
-          tag: userName,
-          id: leftUserID
-        }]
-      }, threadID);
-      
-console.log("MESSAGE SENT");
-      
-    } catch (err) {
-      console.error("[ANTILEAVE ERROR]", err);
+    mentions: [{
+      tag: userName,
+      id: leftUserID
+    }]
+  }, threadID);
 
-      await api.sendMessage(
-        "❌ সদস্যকে পুনরায় গ্রুপে যোগ করা যায়নি।",
-        threadID
-      );
-    }
-  }
+  console.log("MESSAGE SENT");
+
+} catch (err) {
+  console.error("[ANTILEAVE ERROR]", err);
+
+  await api.sendMessage(
+    "❌ সদস্যকে পুনরায় গ্রুপে যোগ করা যায়নি।",
+    threadID
+  );
+}
+      }
 };
