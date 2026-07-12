@@ -35,7 +35,7 @@ try {
 
 ⚡ 𝗠𝗘𝗠𝗕𝗘𝗥: ◤ ${leftParticipantName} ◢ 🔥
 
-⚛️ 𝗚𝗥𝗢𝗨𝗣: ◤ ${thread.name} ◢ ❄️
+⚛️ 𝗚𝗥𝗢𝗨𝗣: ◤ ${groupName} ◢ ❄️
 
 ◈ ━━━━━━ ⸙ ━━━━━━ ◈
 
