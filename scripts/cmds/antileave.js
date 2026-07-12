@@ -36,12 +36,28 @@ module.exports = {
 
         if (!enabled) return;
 
-        await api.addUserToGroup(leftUserID, threadID);
+        try {
+  console.log("[ANTILEAVE] Adding:", leftUserID);
 
-        api.sendMessage(
-          "🛡️ AntiLeave সক্রিয় ছিল। সদস্যকে পুনরায় গ্রুপে যুক্ত করা হয়েছে।",
-          threadID
-        );
+  await new Promise((resolve, reject) => {
+    api.addUserToGroup(leftUserID, threadID, (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+
+  api.sendMessage(
+    "✅ সদস্যকে আবার গ্রুপে যোগ করা হয়েছে।",
+    threadID
+  );
+} catch (err) {
+  console.error("[ANTILEAVE ERROR]", err);
+
+  api.sendMessage(
+    "❌ সদস্যকে পুনরায় যোগ করা যায়নি।",
+    threadID
+  );
+}
       } catch (err) {
         console.error("[ANTILEAVE]", err);
       }
