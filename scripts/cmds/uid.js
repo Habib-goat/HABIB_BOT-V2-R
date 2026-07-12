@@ -24,7 +24,7 @@ module.exports = {
       await api.shareContact(`ℹ️ User ID: ${uid}`, uid, threadID, messageID);
     } catch (error) {
       console.warn("api.shareContact failed, falling back to message text:", error.message);
-      return api.sendMessage(`🆔 ID: ${uid}`, threadID, messageID);
+      return api.sendMessage(` ${uid}`, threadID, messageID);
     }
   }
 };
