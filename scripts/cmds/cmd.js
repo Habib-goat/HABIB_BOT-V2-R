@@ -3,1093 +3,925 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const fs = require('fs');
-const path = require('path');
+// Command Manager ("cmd.js") for Riyad Bot
+// Professional, robust, and full-featured command manager.
 
-let fse;
-try {
-  fse = require('fs-extra');
-} catch (e) {
-  fse = {
-    ...fs,
-    copy: function (src, dest, cb) {
-      try {
-        fs.copyFileSync(src, dest);
-        if (cb) cb();
-      } catch (err) {
-        if (cb) cb(err);
-      }
-    },
-    remove: function (dir, cb) {
-      try {
-        if (fs.rmSync) {
-          fs.rmSync(dir, { recursive: true, force: true });
-        } else {
-          fs.rmdirSync(dir, { recursive: true });
-        }
-        if (cb) cb();
-      } catch (err) {
-        if (cb) cb(err);
-      }
-    }
-  };
+const axios = require("axios");
+const { execSync } = require("child_process");
+const fs = require("fs-extra");
+const path = require("path");
+
+// Local cache for pending confirmations
+const pendingConfirmations = new Map();
+
+// Helper to safely send message
+function sendMessage(api, threadID, text, messageID) {
+  return new Promise((resolve) => {
+    api.sendMessage(text, threadID, (err, info) => {
+      resolve(info || null);
+    }, messageID);
+  });
 }
 
-// Global storage for confirmations
-if (!global.riyadCmdPendingConfirmations) {
-  global.riyadCmdPendingConfirmations = {};
-}
-
-// Unicode Bold letters helper
-function bold(text) {
-  const chars = {
-    'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠',
-    'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
-    'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺',
-    'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝗫', 'y': '𝘆', 'z': '𝘇',
-    '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵'
-  };
-  return text.split('').map(c => chars[c] || c).join('');
-}
-
-// UI Headers
-const HEADER = `━━━━━━━━━━━━━━━━━━━━━━\n⚙️ 𝗥𝗶𝘆𝗮𝗱 𝗖𝗼𝗺𝗺𝗮𝗻𝗱 𝗠𝗮𝗻𝗮𝗴𝗲𝗿\n━━━━━━━━━━━━━━━━━━━━━━`;
-const FOOTER = `━━━━━━━━━━━━━━━━━━━━━━`;
-
-// Helper to extract config of any command (both active and disabled)
-function extractConfig(fileName, dirPath) {
-  const filePath = path.join(dirPath, fileName);
-  let checkPath = filePath;
-  let isTemp = false;
-  let config = null;
-
-  if (fileName.endsWith('.disabled')) {
-    const tempName = `temp_extract_${Date.now()}_${Math.floor(Math.random() * 1000)}.js`;
-    checkPath = path.join(dirPath, tempName);
-    try {
-      fs.copyFileSync(filePath, checkPath);
-      isTemp = true;
-    } catch (e) {
-      return null;
+// Find all command & alias registries in the environment
+function findRegistries() {
+  const registries = [];
+  if (global.client) {
+    if (global.client.commands instanceof Map) {
+      registries.push({
+        commands: global.client.commands,
+        aliases: global.client.aliases || new Map()
+      });
     }
   }
+  if (global.commands instanceof Map) {
+    registries.push({
+      commands: global.commands,
+      aliases: global.aliases || new Map()
+    });
+  }
+  if (global.RiyadBot && global.RiyadBot.commands instanceof Map) {
+    registries.push({
+      commands: global.RiyadBot.commands,
+      aliases: global.RiyadBot.aliases || new Map()
+    });
+  }
+  return registries;
+}
 
+// Extract JS code from Markdown code block if present
+function extractCode(text) {
+  if (!text) return "";
+  const match = text.match(/```(?:javascript|js)?\s*([\s\S]*?)\s*```/);
+  return match ? match[1].trim() : text.trim();
+}
+
+// Safe check of syntax by writing to temp file and requiring it
+function validateCommandSource(tempName, rawCode) {
+  const tempPath = path.join(__dirname, `_temp_val_${tempName}_${Date.now()}.js`);
   try {
-    try {
-      delete require.cache[require.resolve(checkPath)];
-    } catch (e) {}
-    const mod = require(checkPath);
-    config = mod.config || null;
-  } catch (err) {
-    // If it threw syntax error or something, read via simple regex fallback
-    try {
-      const fileContent = fs.readFileSync(filePath, 'utf8');
-      const nameMatch = fileContent.match(/name\s*:\s*["'`](.*?)["'`]/);
-      const authorMatch = fileContent.match(/author\s*:\s*["'`](.*?)["'`]/);
-      const descMatch = fileContent.match(/(description|shortDescription)\s*:\s*["'`](.*?)["'`]/);
-      
-      if (nameMatch) {
-        config = {
-          name: nameMatch[1],
-          author: authorMatch ? authorMatch[1] : 'Unknown',
-          description: descMatch ? descMatch[2] : 'No description',
-          version: '1.0.0',
-          category: 'Uncategorized'
-        };
-      }
-    } catch (innerErr) {}
-  } finally {
-    if (isTemp) {
-      try {
-        fs.unlinkSync(checkPath);
-        delete require.cache[require.resolve(checkPath)];
-      } catch (e) {}
+    fs.writeFileSync(tempPath, rawCode, "utf8");
+    const testCmd = require(tempPath);
+    
+    if (!testCmd || typeof testCmd !== "object") {
+      throw new Error("File must export an object containing command structure.");
     }
+    if (!testCmd.config || typeof testCmd.config !== "object") {
+      throw new Error("Missing or invalid 'config' object in export.");
+    }
+    if (!testCmd.config.name || typeof testCmd.config.name !== "string") {
+      throw new Error("Missing or invalid 'config.name' string.");
+    }
+    if (!testCmd.onStart || typeof testCmd.onStart !== "function") {
+      throw new Error("Missing or invalid 'onStart' function.");
+    }
+    
+    // Cleanup required module cache and temp file
+    delete require.cache[require.resolve(tempPath)];
+    fs.removeSync(tempPath);
+    return { valid: true, name: testCmd.config.name, config: testCmd.config };
+  } catch (error) {
+    try {
+      if (fs.existsSync(tempPath)) {
+        delete require.cache[require.resolve(tempPath)];
+        fs.removeSync(tempPath);
+      }
+    } catch (_) {}
+    return { valid: false, error: error.error || error.message };
   }
-
-  return config;
 }
 
-// Safe reload helper that works with different frameworks
-function reloadCmd(commandName, dirPath) {
-  const filePath = path.join(dirPath, `${commandName}.js`);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Command file not found: ${commandName}.js`);
+// Unload command from registry
+function unloadCommandFromRegistry(commandName) {
+  const registries = findRegistries();
+  for (const reg of registries) {
+    const cmd = reg.commands.get(commandName);
+    if (cmd && cmd.config && cmd.config.aliases) {
+      const aliases = Array.isArray(cmd.config.aliases) ? cmd.config.aliases : [cmd.config.aliases];
+      for (const alias of aliases) {
+        reg.aliases.delete(alias);
+      }
+    }
+    reg.commands.delete(commandName);
   }
+}
 
+// Load or hot-reload command file
+function loadCommandIntoRegistry(filePath, commandName) {
   try {
     delete require.cache[require.resolve(filePath)];
-  } catch (e) {}
+    const command = require(filePath);
+    if (!command || !command.config || !command.config.name) return false;
 
-  const commandModule = require(filePath);
-  if (!commandModule || !commandModule.config) {
-    throw new Error(`Command ${commandName}.js has invalid structure or missing config.`);
-  }
-
-  let success = false;
-
-  const registries = [
-    global.client?.commands,
-    global.commands,
-    global.GoatBot?.commands,
-    global.api?.commands
-  ];
-
-  for (const reg of registries) {
-    if (reg) {
-      if (typeof reg.set === 'function') {
-        reg.set(commandModule.config.name || commandName, commandModule);
-        success = true;
-      } else if (typeof reg === 'object') {
-        reg[commandModule.config.name || commandName] = commandModule;
-        success = true;
-      }
-    }
-  }
-
-  // Reload aliases
-  const aliasesRegistries = [
-    global.client?.aliases,
-    global.aliases,
-    global.GoatBot?.aliases
-  ];
-
-  if (commandModule.config.aliases && Array.isArray(commandModule.config.aliases)) {
-    for (const reg of aliasesRegistries) {
-      if (reg) {
-        // Clear previous aliases pointing to this command name
-        if (typeof reg.delete === 'function') {
-          for (const [k, v] of reg.entries()) {
-            if (v === commandName || (v && v.config && v.config.name === commandName)) {
-              reg.delete(k);
-            }
-          }
-          for (const alias of commandModule.config.aliases) {
-            reg.set(alias, commandModule);
-          }
-        } else if (typeof reg === 'object') {
-          for (const k in reg) {
-            if (reg[k] === commandName || (reg[k] && reg[k].config && reg[k].config.name === commandName)) {
-              delete reg[k];
-            }
-          }
-          for (const alias of commandModule.config.aliases) {
-            reg[alias] = commandModule;
-          }
+    const registries = findRegistries();
+    for (const reg of registries) {
+      // Remove old instances first
+      unloadCommandFromRegistry(command.config.name);
+      
+      // Load new instance
+      reg.commands.set(command.config.name, command);
+      if (command.config.aliases) {
+        const aliases = Array.isArray(command.config.aliases) ? command.config.aliases : [command.config.aliases];
+        for (const alias of aliases) {
+          reg.aliases.set(alias, command.config.name);
         }
       }
     }
+    return true;
+  } catch (error) {
+    console.error(`[cmd.js] Hot reload error for ${commandName}:`, error);
+    return false;
   }
-
-  return { success, config: commandModule.config };
 }
 
 module.exports = {
   config: {
     name: "cmd",
-    aliases: ["command", "commands", "cmds"],
-    version: "1.2.0",
+    aliases: ["cmdman", "command"],
+    version: "2.0.0",
     author: "Riyad",
-    credits: "Riyad Bot",
-    cooldowns: 5,
-    cooldown: 5,
     role: 2,
-    permission: 2,
     category: "system",
-    description: "Premium Command Manager to install, delete, enable, disable, reload, check info, list, search, count, backup, restore, rename, check and troubleshoot commands.",
-    guide: {
-      en: "/cmd [list|info|install|delete|enable|disable|reload|search|count|backup|restore|rename|check|doctor]"
-    }
+    description: "Manage, reload, install, backup, and diagnose bot commands",
+    guide: "/cmd\n/cmd list [page]\n/cmd info [command]\n/cmd search [query]\n/cmd reload [all/command]\n/cmd install\n/cmd enable/disable [command]\n/cmd backup/restore\n/cmd check/doctor"
   },
 
-  onStart: async function ({ api, event, args, usersData, threadsData }) {
+  onStart: async function({ api, event, args }) {
     const threadID = event.threadID;
     const messageID = event.messageID;
-    const dirPath = __dirname; // Points to scripts/cmds/
+    const senderID = event.senderID;
 
-    if (!args || args.length === 0) {
-      const helpMsg = `${HEADER}
-🤖 𝗔𝘃𝗮𝗶𝗹𝗮𝗯𝗹𝗲 𝗔𝗰𝘁𝗶𝗼𝗻𝘀:
+    const sub = (args[0] || "").toLowerCase();
 
-• ${bold("cmd list")} [page]
-  👉 List all files with pagination
-
-• ${bold("cmd info")} [command]
-  👉 View detailed specs of a command
-
-• ${bold("cmd install")} [file.js] [code]
-  👉 Install command file directly
-
-• ${bold("cmd delete")} [command]
-  👉 Delete a command safely
-
-• ${bold("cmd enable")} [command]
-  👉 Enable a disabled command
-
-• ${bold("cmd disable")} [command]
-  👉 Disable a command (offline toggle)
-
-• ${bold("cmd reload")} [command/all]
-  👉 Hot reload active files
-
-• ${bold("cmd search")} [keyword]
-  👉 Find commands by name or metadata
-
-• ${bold("cmd count")}
-  👉 Show dynamic totals
-
-• ${bold("cmd backup")}
-  👉 Bundle and export commands
-
-• ${bold("cmd restore")}
-  👉 Import from text or local file
-
-• ${bold("cmd rename")} [old] [new]
-  👉 Safely rename files on disk
-
-• ${bold("cmd check")}
-  👉 Check naming or alias overlap
-
-• ${bold("cmd doctor")}
-  👉 Full framework troubleshooting
-
-${FOOTER}
-👤 Author: Riyad | Credits: Riyad Bot`;
-      return api.sendMessage(helpMsg, threadID, messageID);
-    }
-
-    const subCommand = args[0].toLowerCase();
-
-    // 1. LIST COMMANDS
-    if (subCommand === 'list') {
+    // -------------------------------------------------------------
+    // DEFAULT & LIST COMMAND
+    // -------------------------------------------------------------
+    if (!sub || sub === "list") {
       try {
-        const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.js') || f.endsWith('.disabled'));
-        if (files.length === 0) {
-          return api.sendMessage(`${HEADER}\nNo command files found in scripts/cmds/! 📭\n${FOOTER}`, threadID, messageID);
-        }
+        const files = fs.readdirSync(__dirname);
+        const jsFiles = files.filter(f => f.endsWith(".js") && !f.startsWith("_temp_"));
+        const disabledFiles = files.filter(f => f.endsWith(".disabled"));
 
-        files.sort();
+        jsFiles.sort();
+        disabledFiles.sort();
 
-        const page = args[1] ? parseInt(args[1]) : 1;
-        if (isNaN(page) || page < 1) {
-          return api.sendMessage(`${HEADER}\nInvalid page number! ❌\n${FOOTER}`, threadID, messageID);
-        }
+        const totalActive = jsFiles.length;
+        const totalDisabled = disabledFiles.length;
 
-        const itemsPerPage = 10;
-        const totalPages = Math.ceil(files.length / itemsPerPage);
-
-        if (page > totalPages) {
-          return api.sendMessage(`${HEADER}\nPage ${page} does not exist. Total pages: ${totalPages} 📁\n${FOOTER}`, threadID, messageID);
-        }
-
-        const startIndex = (page - 1) * itemsPerPage;
-        const pageItems = files.slice(startIndex, startIndex + itemsPerPage);
-
-        let listMsg = `${HEADER}\n📁 𝗖𝗼𝗺𝗺𝗮𝗻𝗱 𝗟𝗶𝘀𝘁 (Page ${page}/${totalPages}):\n\n`;
-        for (let i = 0; i < pageItems.length; i++) {
-          const file = pageItems[i];
-          const isEnabled = file.endsWith('.js');
-          const statusIcon = isEnabled ? '🟢' : '🔴';
-          const cleanName = file.replace(/\.js$/, '').replace(/\.disabled$/, '');
-          
-          // Get config for better presentation if available
-          const config = extractConfig(file, dirPath);
-          const categoryText = config && config.category ? ` [${config.category}]` : '';
-          
-          listMsg += `${startIndex + i + 1}. ${statusIcon} ${bold(cleanName)}${categoryText}\n`;
-        }
-
-        listMsg += `\nTotal: ${files.length} commands.\nUse: /cmd list [page]\n${FOOTER}`;
-        return api.sendMessage(listMsg, threadID, messageID);
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nFailed to list directory: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-      }
-    }
-
-    // 2. COMMAND INFORMATION
-    if (subCommand === 'info') {
-      if (!args[1]) {
-        return api.sendMessage(`${HEADER}\nPlease provide a command name!\nExample: /cmd info note\n${FOOTER}`, threadID, messageID);
-      }
-
-      const cleanName = args[1].toLowerCase().replace(/\.js$/, '').replace(/\.disabled$/, '');
-      const files = fs.readdirSync(dirPath);
-      const targetFile = files.find(f => {
-        const checkName = f.replace(/\.js$/, '').replace(/\.disabled$/, '').toLowerCase();
-        return checkName === cleanName;
-      });
-
-      if (!targetFile) {
-        return api.sendMessage(`${HEADER}\nCommand "${cleanName}" not found! 🔎\n${FOOTER}`, threadID, messageID);
-      }
-
-      const filePath = path.join(dirPath, targetFile);
-      const isEnabled = targetFile.endsWith('.js');
-      const stats = fs.statSync(filePath);
-      const sizeKB = (stats.size / 1024).toFixed(2);
-
-      const config = extractConfig(targetFile, dirPath);
-
-      if (!config) {
-        return api.sendMessage(`${HEADER}\nCommand found but failed to read its configuration. File might have syntax errors! ⚠️\n\n• Name: ${targetFile}\n• Size: ${sizeKB} KB\n• Status: ${isEnabled ? 'Enabled 🟢' : 'Disabled 🔴'}\n${FOOTER}`, threadID, messageID);
-      }
-
-      const infoMsg = `${HEADER}
-📝 𝗖𝗼𝗺𝗺𝗮𝗻𝗱 𝗦𝗽𝗲𝗰𝗶𝗳𝗶𝗰𝗮𝘁𝗶𝗼𝗻𝘀:
-
-• ${bold("Command Name:")} ${config.name || cleanName}
-• ${bold("Version:")} ${config.version || '1.0.0'}
-• ${bold("Author:")} ${config.author || 'Unknown'}
-• ${bold("Credits:")} ${config.credits || 'Riyad Bot'}
-• ${bold("Description:")} ${config.description || config.shortDescription || 'No description provided'}
-• ${bold("Aliases:")} ${config.aliases && config.aliases.length > 0 ? config.aliases.join(', ') : 'None'}
-• ${bold("Category:")} ${config.category || 'Default'}
-• ${bold("Cooldown:")} ${config.cooldown || config.cooldowns || 0}s
-• ${bold("Permission:")} ${config.permission !== undefined ? config.permission : (config.role !== undefined ? config.role : 'Everyone')}
-• ${bold("File Size:")} ${sizeKB} KB
-• ${bold("File Path:")} scripts/cmds/${targetFile}
-• ${bold("Status:")} ${isEnabled ? 'Enabled 🟢' : 'Disabled 🔴'}
-
-${FOOTER}`;
-      return api.sendMessage(infoMsg, threadID, messageID);
-    }
-
-    // 3. INSTALL COMMAND
-    if (subCommand === 'install') {
-      if (!args[1]) {
-        return api.sendMessage(`${HEADER}\nPlease specify a command filename to install!\nExample: /cmd install note.js\n${FOOTER}`, threadID, messageID);
-      }
-
-      let filename = args[1];
-      if (!filename.endsWith('.js')) {
-        filename += '.js';
-      }
-
-      const targetPath = path.join(dirPath, filename);
-
-      // Check if file already exists
-      if (fs.existsSync(targetPath) || fs.existsSync(targetPath + '.disabled')) {
-        return api.sendMessage(`${HEADER}\nAlready Installed ✅\n${FOOTER}`, threadID, messageID);
-      }
-
-      // Check for code input
-      let codeToInstall = "";
-
-      // Case A: Reply to a message with code
-      if (event.messageReply && event.messageReply.body) {
-        codeToInstall = event.messageReply.body;
-      } 
-      // Case B: Provided code directly in args
-      else if (args.length > 2) {
-        codeToInstall = args.slice(2).join(" ");
-      }
-
-      if (!codeToInstall) {
-        // Create an elegant boilerplate instead of failing completely!
-        const cleanName = filename.replace(/\.js$/, '');
-        codeToInstall = `/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-module.exports = {
-  config: {
-    name: "${cleanName}",
-    version: "1.0.0",
-    author: "Riyad",
-    credits: "Riyad Bot",
-    cooldown: 5,
-    permission: 0,
-    category: "general",
-    description: "Template command created automatically"
-  },
-
-  onStart: async function ({ api, event, args }) {
-    return api.sendMessage("Hello! This is your newly installed ${cleanName} command! 🚀", event.threadID, event.messageID);
-  },
-
-  onChat: async function ({ api, event }) {
-    // Optional chat listener
-  }
-};`;
-      }
-
-      try {
-        fs.writeFileSync(targetPath, codeToInstall, 'utf8');
-        
-        // Attempt hot-loading the new command
-        let reloadStatus = "";
-        try {
-          reloadCmd(filename.replace(/\.js$/, ''), dirPath);
-          reloadStatus = " (Loaded & active ⚡)";
-        } catch (reloadErr) {
-          reloadStatus = " (Installed but has load warnings: " + reloadErr.message + ")";
-        }
-
-        return api.sendMessage(`${HEADER}\nCommand ${bold(filename)} installed successfully! 🎉${reloadStatus}\n${FOOTER}`, threadID, messageID);
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nFailed to install command: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-      }
-    }
-
-    // 4. DELETE COMMAND
-    if (subCommand === 'delete') {
-      if (!args[1]) {
-        return api.sendMessage(`${HEADER}\nPlease specify a command to delete!\nExample: /cmd delete note\n${FOOTER}`, threadID, messageID);
-      }
-
-      const cmdToDelete = args[1].toLowerCase().replace(/\.js$/, '').replace(/\.disabled$/, '');
-
-      if (cmdToDelete === 'cmd') {
-        return api.sendMessage(`${HEADER}\nDeletion Refused! 🚫\nCannot delete the command manager itself ("cmd.js") for safety reasons!\n${FOOTER}`, threadID, messageID);
-      }
-
-      const files = fs.readdirSync(dirPath);
-      const fileTarget = files.find(f => {
-        const check = f.replace(/\.js$/, '').replace(/\.disabled$/, '').toLowerCase();
-        return check === cmdToDelete;
-      });
-
-      if (!fileTarget) {
-        return api.sendMessage(`${HEADER}\nCommand file "${cmdToDelete}" not found! 🔎\n${FOOTER}`, threadID, messageID);
-      }
-
-      const targetPath = path.join(dirPath, fileTarget);
-
-      // Register confirmation
-      global.riyadCmdPendingConfirmations[threadID] = {
-        action: 'delete',
-        target: fileTarget,
-        targetPath: targetPath,
-        timestamp: Date.now()
-      };
-
-      const confirmMsg = `${HEADER}
-⚠️  𝗖𝗼𝗻𝗳𝗶𝗿𝗺 𝗗𝗲𝗹𝗲𝘁𝗶𝗼𝗻:
-
-Are you sure you want to delete "${fileTarget}"?
-This action is permanent and cannot be undone!
-
-Reply "${bold("yes")}" to confirm, or "${bold("no")}" to cancel.
-(Expires in 60 seconds)
-${FOOTER}`;
-      return api.sendMessage(confirmMsg, threadID, messageID);
-    }
-
-    // 5. ENABLE COMMAND
-    if (subCommand === 'enable') {
-      if (!args[1]) {
-        return api.sendMessage(`${HEADER}\nPlease specify a command to enable!\nExample: /cmd enable note\n${FOOTER}`, threadID, messageID);
-      }
-
-      const cleanName = args[1].toLowerCase().replace(/\.js$/, '').replace(/\.disabled$/, '');
-      const files = fs.readdirSync(dirPath);
-      const disabledFile = files.find(f => f.toLowerCase() === `${cleanName}.js.disabled` || f.toLowerCase() === `${cleanName}.disabled`);
-
-      if (!disabledFile) {
-        if (files.find(f => f.toLowerCase() === `${cleanName}.js`)) {
-          return api.sendMessage(`${HEADER}\nCommand "${cleanName}" is already enabled! 🟢\n${FOOTER}`, threadID, messageID);
-        }
-        return api.sendMessage(`${HEADER}\nCommand file for "${cleanName}" was not found! 🔎\n${FOOTER}`, threadID, messageID);
-      }
-
-      const oldPath = path.join(dirPath, disabledFile);
-      const newPath = path.join(dirPath, `${cleanName}.js`);
-
-      try {
-        fs.renameSync(oldPath, newPath);
-        
-        let loadMsg = "";
-        try {
-          reloadCmd(cleanName, dirPath);
-          loadMsg = "\nCommand has been successfully loaded into memory! ⚡";
-        } catch (loadErr) {
-          loadMsg = `\n⚠️ Loaded with warnings: ${loadErr.message}`;
-        }
-
-        return api.sendMessage(`${HEADER}\nCommand "${cleanName}" has been enabled! 🟢${loadMsg}\n${FOOTER}`, threadID, messageID);
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nFailed to enable command: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-      }
-    }
-
-    // 6. DISABLE COMMAND
-    if (subCommand === 'disable') {
-      if (!args[1]) {
-        return api.sendMessage(`${HEADER}\nPlease specify a command to disable!\nExample: /cmd disable note\n${FOOTER}`, threadID, messageID);
-      }
-
-      const cleanName = args[1].toLowerCase().replace(/\.js$/, '').replace(/\.disabled$/, '');
-
-      if (cleanName === 'cmd') {
-        return api.sendMessage(`${HEADER}\nSafety Block! 🚫\nYou cannot disable the Command Manager ("cmd.js")!\n${FOOTER}`, threadID, messageID);
-      }
-
-      const files = fs.readdirSync(dirPath);
-      const enabledFile = files.find(f => f.toLowerCase() === `${cleanName}.js`);
-
-      if (!enabledFile) {
-        if (files.find(f => f.toLowerCase() === `${cleanName}.js.disabled` || f.toLowerCase() === `${cleanName}.disabled`)) {
-          return api.sendMessage(`${HEADER}\nCommand "${cleanName}" is already disabled! 🔴\n${FOOTER}`, threadID, messageID);
-        }
-        return api.sendMessage(`${HEADER}\nCommand "${cleanName}" not found! 🔎\n${FOOTER}`, threadID, messageID);
-      }
-
-      const oldPath = path.join(dirPath, enabledFile);
-      const newPath = path.join(dirPath, `${cleanName}.js.disabled`);
-
-      try {
-        // Remove from registries in global memory
-        const registries = [
-          global.client?.commands,
-          global.commands,
-          global.GoatBot?.commands,
-          global.api?.commands
-        ];
-        for (const reg of registries) {
-          if (reg) {
-            if (typeof reg.delete === 'function') reg.delete(cleanName);
-            else if (typeof reg === 'object') delete reg[cleanName];
-          }
-        }
-
-        fs.renameSync(oldPath, newPath);
-        return api.sendMessage(`${HEADER}\nCommand "${cleanName}" has been disabled! 🔴\nIt will not load or run until enabled again.\n${FOOTER}`, threadID, messageID);
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nFailed to disable command: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-      }
-    }
-
-    // 7. RELOAD COMMAND
-    if (subCommand === 'reload') {
-      if (!args[1]) {
-        return api.sendMessage(`${HEADER}\nPlease specify a command to reload, or "all"!\nExample: /cmd reload note\n${FOOTER}`, threadID, messageID);
-      }
-
-      const target = args[1].toLowerCase();
-
-      if (target === 'all') {
-        const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.js'));
-        let successCount = 0;
-        let failCount = 0;
-        const failures = [];
-
-        for (const file of files) {
-          const cmdName = file.replace(/\.js$/, '');
+        // Collect all items to show
+        const allItems = [];
+        for (const file of jsFiles) {
           try {
-            reloadCmd(cmdName, dirPath);
-            successCount++;
-          } catch (e) {
-            failCount++;
-            failures.push(`${file}: ${e.message}`);
-          }
-        }
-
-        let report = `${HEADER}\n⚡ 𝗥𝗲𝗹𝗼𝗮𝗱 𝗔𝗹𝗹 𝗖𝗼𝗺𝗺𝗲𝗻𝘁𝘀:\n\n• Successfully reloaded: ${successCount} commands\n• Failed: ${failCount}`;
-        if (failures.length > 0) {
-          report += `\n\n⚠️ Failures:\n` + failures.slice(0, 5).map(f => ` - ${f}`).join('\n');
-          if (failures.length > 5) report += `\n - and ${failures.length - 5} more...`;
-        }
-        report += `\n${FOOTER}`;
-        return api.sendMessage(report, threadID, messageID);
-      } else {
-        const cleanName = target.replace(/\.js$/, '').replace(/\.disabled$/, '');
-        try {
-          const res = reloadCmd(cleanName, dirPath);
-          return api.sendMessage(`${HEADER}\nCommand "${cleanName}" reloaded successfully! ⚡\nName: ${res.config.name || cleanName}\nVersion: ${res.config.version || '1.0.0'}\n${FOOTER}`, threadID, messageID);
-        } catch (err) {
-          return api.sendMessage(`${HEADER}\nFailed to reload command "${cleanName}":\n⚠️ ${err.message}\n${FOOTER}`, threadID, messageID);
-        }
-      }
-    }
-
-    // 8. SEARCH COMMANDS
-    if (subCommand === 'search') {
-      if (!args[1]) {
-        return api.sendMessage(`${HEADER}\nPlease provide a search keyword!\nExample: /cmd search note\n${FOOTER}`, threadID, messageID);
-      }
-
-      const keyword = args.slice(1).join(" ").toLowerCase();
-      try {
-        const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.js') || f.endsWith('.disabled'));
-        const matches = [];
-
-        for (const file of files) {
-          const cleanName = file.replace(/\.js$/, '').replace(/\.disabled$/, '');
-          const config = extractConfig(file, dirPath);
-          
-          let score = 0;
-          if (cleanName.toLowerCase().includes(keyword)) score += 5;
-          
-          if (config) {
-            if (config.name && config.name.toLowerCase().includes(keyword)) score += 5;
-            if (config.description && config.description.toLowerCase().includes(keyword)) score += 3;
-            if (config.shortDescription && config.shortDescription.toLowerCase().includes(keyword)) score += 3;
-            if (config.aliases && Array.isArray(config.aliases)) {
-              if (config.aliases.some(a => a.toLowerCase().includes(keyword))) score += 4;
-            }
-          }
-
-          if (score > 0) {
-            matches.push({ file, cleanName, score, config, isEnabled: file.endsWith('.js') });
-          }
-        }
-
-        if (matches.length === 0) {
-          return api.sendMessage(`${HEADER}\nNo commands found matching: "${keyword}" 🔍\n${FOOTER}`, threadID, messageID);
-        }
-
-        matches.sort((a, b) => b.score - a.score);
-
-        let searchMsg = `${HEADER}\n🔍 𝗦𝗲𝗮𝗿𝗰𝗵 𝗥𝗲𝘀𝘂𝗹𝘁𝘀:\n\n`;
-        for (let i = 0; i < Math.min(matches.length, 8); i++) {
-          const item = matches[i];
-          const status = item.isEnabled ? '🟢' : '🔴';
-          const desc = item.config?.description || item.config?.shortDescription || 'No description';
-          searchMsg += `• ${status} ${bold(item.cleanName)}\n  📝 ${desc.substring(0, 50)}${desc.length > 50 ? '...' : ''}\n\n`;
-        }
-
-        if (matches.length > 8) {
-          searchMsg += `And ${matches.length - 8} more matches.\n`;
-        }
-        searchMsg += `${FOOTER}`;
-        return api.sendMessage(searchMsg, threadID, messageID);
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nSearch failed: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-      }
-    }
-
-    // 9. COUNT COMMANDS
-    if (subCommand === 'count') {
-      try {
-        const files = fs.readdirSync(dirPath);
-        const total = files.filter(f => f.endsWith('.js') || f.endsWith('.disabled')).length;
-        const enabled = files.filter(f => f.endsWith('.js')).length;
-        const disabled = files.filter(f => f.endsWith('.disabled')).length;
-
-        const countMsg = `${HEADER}
-📊 𝗦𝘆𝘀𝘁𝗲𝗺 𝗖𝗼𝘂𝗻𝘁𝘀:
-
-• ${bold("Total Commands:")} ${total}
-• ${bold("Enabled Commands:")} ${enabled} 🟢
-• ${bold("Disabled Commands:")} ${disabled} 🔴
-
-━━━━━━━━━━━━━━━━━━━━━━
-Framework Registry Active: Yes
-Memory Footprint: Stable 📈
-${FOOTER}`;
-        return api.sendMessage(countMsg, threadID, messageID);
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nFailed to get counts: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-      }
-    }
-
-    // 10. BACKUP COMMANDS
-    if (subCommand === 'backup') {
-      try {
-        const backupFileName = 'cmds_backup.json';
-        const backupPath = path.join(dirPath, backupFileName);
-        const backupData = {
-          type: "RiyadBot_Backup",
-          timestamp: Date.now(),
-          files: {}
-        };
-
-        const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.js') || f.endsWith('.disabled'));
-        for (const file of files) {
-          const fPath = path.join(dirPath, file);
-          backupData.files[file] = fs.readFileSync(fPath, 'utf8');
-        }
-
-        fs.writeFileSync(backupPath, JSON.stringify(backupData, null, 2), 'utf8');
-
-        // Create secondary local folder backup for safety as requested
-        const localBackupDir = path.join(dirPath, '../../cmds_backup_folder');
-        if (!fs.existsSync(localBackupDir)) {
-          fs.mkdirSync(localBackupDir, { recursive: true });
-        }
-        for (const file of files) {
-          fs.copyFileSync(path.join(dirPath, file), path.join(localBackupDir, file));
-        }
-
-        // Send via Messenger
-        api.sendMessage({
-          body: `${HEADER}\n📦 𝗕𝗮𝗰𝗸𝘂𝗽 𝗖𝗼𝗺𝗽𝗹𝗲𝘁𝗲𝗱!\n\n• Portable JSON Backup: created successfully ✅\n• Local Folder Backup: "cmds_backup_folder" on disk ✅\n• Total Files Packed: ${files.length}\n\n👉 Reply to this backup file with "/cmd restore" at any time to re-import these scripts!\n${FOOTER}`,
-          attachment: fs.createReadStream(backupPath)
-        }, threadID, (err) => {
-          // Clean up the backup file from our immediate scripts/cmds directory so it doesn't pollute the active list
-          try {
-            fs.unlinkSync(backupPath);
-          } catch (e) {}
-        }, messageID);
-
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nBackup failed: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-      }
-    }
-
-    // 11. RESTORE COMMANDS
-    if (subCommand === 'restore') {
-      // Checked if they are replying to an attachment
-      if (event.messageReply && event.messageReply.attachments && event.messageReply.attachments.length > 0) {
-        const attach = event.messageReply.attachments[0];
-        if (attach.url) {
-          api.sendMessage(`${HEADER}\nDownloading backup attachment... 📥\n${FOOTER}`, threadID, messageID);
-          
-          const tempBackupPath = path.join(dirPath, `temp_restore_${Date.now()}.json`);
-          const fileStream = fs.createWriteStream(tempBackupPath);
-          const httpLib = attach.url.startsWith('https') ? require('https') : require('http');
-
-          httpLib.get(attach.url, function(response) {
-            response.pipe(fileStream);
-            fileStream.on('finish', function() {
-              fileStream.close(async () => {
-                try {
-                  const content = fs.readFileSync(tempBackupPath, 'utf8');
-                  const data = JSON.parse(content);
-                  
-                  if (data.type !== "RiyadBot_Backup" || !data.files) {
-                    api.sendMessage(`${HEADER}\nInvalid backup format! File must be a premium Riyad Command Manager backup. ❌\n${FOOTER}`, threadID, messageID);
-                    fs.unlinkSync(tempBackupPath);
-                    return;
-                  }
-
-                  let count = 0;
-                  for (const [fname, fcontent] of Object.entries(data.files)) {
-                    const safeName = path.basename(fname);
-                    fs.writeFileSync(path.join(dirPath, safeName), fcontent, 'utf8');
-                    // Attempt to load if it's active JS
-                    if (safeName.endsWith('.js')) {
-                      try { reloadCmd(safeName.replace(/\.js$/, ''), dirPath); } catch(e) {}
-                    }
-                    count++;
-                  }
-
-                  api.sendMessage(`${HEADER}\nRestore Successful! 🎉\nSuccessfully imported ${count} commands into scripts/cmds/.\n${FOOTER}`, threadID, messageID);
-                  fs.unlinkSync(tempBackupPath);
-                } catch (err) {
-                  api.sendMessage(`${HEADER}\nFailed to restore JSON content: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-                  try { fs.unlinkSync(tempBackupPath); } catch(e) {}
-                }
-              });
+            const commandName = file.replace(".js", "");
+            const filePath = path.join(__dirname, file);
+            const cmd = require(filePath);
+            allItems.push({
+              name: commandName,
+              version: cmd.config?.version || "1.0.0",
+              category: cmd.config?.category || "general",
+              active: true
             });
-          }).on('error', function(err) {
-            fs.unlinkSync(tempBackupPath);
-            api.sendMessage(`${HEADER}\nFailed to download attachment: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
+          } catch (_) {
+            allItems.push({
+              name: file.replace(".js", ""),
+              version: "ERROR",
+              category: "unknown",
+              active: true,
+              corrupt: true
+            });
+          }
+        }
+
+        for (const file of disabledFiles) {
+          const commandName = file.replace(".js.disabled", "").replace(".disabled", "");
+          allItems.push({
+            name: commandName,
+            version: "N/A",
+            category: "disabled",
+            active: false
           });
-          return;
         }
-      }
 
-      // Local disk restore fallbacks
-      const localBackupDir = path.join(dirPath, '../../cmds_backup_folder');
-      if (fs.existsSync(localBackupDir)) {
-        try {
-          const files = fs.readdirSync(localBackupDir);
-          let count = 0;
-          for (const file of files) {
-            if (file.endsWith('.js') || file.endsWith('.disabled')) {
-              fs.copyFileSync(path.join(localBackupDir, file), path.join(dirPath, file));
-              if (file.endsWith('.js')) {
-                try { reloadCmd(file.replace(/\.js$/, ''), dirPath); } catch(e) {}
-              }
-              count++;
-            }
-          }
-          return api.sendMessage(`${HEADER}\nLocal Restore Successful! 📁\nSuccessfully imported ${count} commands from disk backup directory.\n${FOOTER}`, threadID, messageID);
-        } catch (err) {
-          return api.sendMessage(`${HEADER}\nFailed to restore from local directory: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-        }
-      }
+        const itemsPerPage = 8;
+        const pageArg = parseInt(args[1]) || 1;
+        const totalPages = Math.ceil(allItems.length / itemsPerPage) || 1;
+        const page = Math.max(1, Math.min(pageArg, totalPages));
+        const startIndex = (page - 1) * itemsPerPage;
+        const pageItems = allItems.slice(startIndex, startIndex + itemsPerPage);
 
-      return api.sendMessage(`${HEADER}\nNo restore source detected! ❌\n\n👉 Reply to a command backup file with "/cmd restore" or verify "cmds_backup_folder" exists in your project workspace.\n${FOOTER}`, threadID, messageID);
+        let msg = "╭────────────────────────╮\n";
+        msg += "  ✪ 𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 - 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒 ✪\n";
+        msg += "╰────────────────────────╯\n\n";
+        msg += ` ➜ 𝐀𝐜𝐭𝐢𝐯𝐞: ${totalActive} | 𝐃𝐢𝐬𝐚𝐛𝐥𝐞𝐝: ${totalDisabled}\n`;
+        msg += ` ➜ 𝐏𝐚𝐠𝐞: ${page}/${totalPages}\n\n`;
+
+        pageItems.forEach((item, idx) => {
+          const num = startIndex + idx + 1;
+          const statusIcon = item.corrupt ? "⚠️" : (item.active ? "🟢" : "🔴");
+          msg += `  ${num}. ${statusIcon} ╭─ [ ${item.name} ]\n`;
+          msg += `     ├─ 𝐕𝐞𝐫𝐬𝐢𝐨𝐧: ${item.version}\n`;
+          msg += `     ╰─ 𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲: ${item.category}\n\n`;
+        });
+
+        msg += "──────────────────────────\n";
+        msg += "💡 𝐔𝐬𝐞 \"/cmd list [page]\" to paginate\n";
+        msg += "💡 𝐔𝐬𝐞 \"/cmd info [name]\" for details";
+
+        return await sendMessage(api, threadID, msg, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to fetch command list: ${error.message}`, messageID);
+      }
     }
 
-    // 12. RENAME COMMAND
-    if (subCommand === 'rename') {
-      if (!args[1] || !args[2]) {
-        return api.sendMessage(`${HEADER}\nIncorrect arguments!\nExample: /cmd rename oldname newname\n${FOOTER}`, threadID, messageID);
+    // -------------------------------------------------------------
+    // INFO COMMAND
+    // -------------------------------------------------------------
+    if (sub === "info") {
+      const targetName = args[1];
+      if (!targetName) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Please supply a command name.\nExample: /cmd info help", messageID);
       }
 
-      const oldName = args[1].toLowerCase().replace(/\.js$/, '').replace(/\.disabled$/, '');
-      const newName = args[2].toLowerCase().replace(/\.js$/, '').replace(/\.disabled$/, '');
-
-      if (oldName === 'cmd') {
-        return api.sendMessage(`${HEADER}\nSafety Block! 🚫\nCannot rename the Command Manager itself.\n${FOOTER}`, threadID, messageID);
-      }
-
-      const files = fs.readdirSync(dirPath);
-      const targetFile = files.find(f => f.replace(/\.js$/, '').replace(/\.disabled$/, '').toLowerCase() === oldName);
-
-      if (!targetFile) {
-        return api.sendMessage(`${HEADER}\nSource file "${oldName}" not found! 🔍\n${FOOTER}`, threadID, messageID);
-      }
-
-      const isEnabled = targetFile.endsWith('.js');
-      const suffix = isEnabled ? '.js' : '.js.disabled';
-      const oldPath = path.join(dirPath, targetFile);
-      const newPath = path.join(dirPath, newName + suffix);
-
-      if (fs.existsSync(newPath)) {
-        return api.sendMessage(`${HEADER}\nDestination filename "${newName}${suffix}" already exists! ⚠️\n${FOOTER}`, threadID, messageID);
+      const filePath = path.join(__dirname, `${targetName}.js`);
+      if (!fs.existsSync(filePath)) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Command file "${targetName}.js" not found.`, messageID);
       }
 
       try {
-        // Remove old name from registries
-        const registries = [
-          global.client?.commands,
-          global.commands,
-          global.GoatBot?.commands,
-          global.api?.commands
-        ];
-        for (const reg of registries) {
-          if (reg) {
-            if (typeof reg.delete === 'function') reg.delete(oldName);
-            else if (typeof reg === 'object') delete reg[oldName];
-          }
+        delete require.cache[require.resolve(filePath)];
+        const cmd = require(filePath);
+        if (!cmd || !cmd.config) {
+          return await sendMessage(api, threadID, `⚠️ [𝐈𝐍𝐅𝐎] ➜ Command file exists but lacks exports or config.`, messageID);
         }
 
-        fs.renameSync(oldPath, newPath);
+        const config = cmd.config;
+        let msg = "╭────────────────────────╮\n";
+        msg += `   ℹ️ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐈𝐍𝐅𝐎𝐑𝐌𝐀𝐓𝐈𝐎𝐍\n`;
+        msg += "╰────────────────────────╯\n\n";
+        msg += `  • 𝐍𝐚𝐦𝐞: ${config.name}\n`;
+        msg += `  • 𝐀𝐥𝐢𝐚𝐬𝐞𝐬: ${Array.isArray(config.aliases) ? config.aliases.join(", ") : (config.aliases || "None")}\n`;
+        msg += `  • 𝐕𝐞𝐫𝐬𝐢𝐨𝐧: ${config.version || "1.0.0"}\n`;
+        msg += `  • 𝐀𝐮𝐭𝐡𝐨𝐫: ${config.author || "Riyad"}\n`;
+        msg += `  • 𝐑𝐨𝐥𝐞: ${config.role !== undefined ? config.role : 2}\n`;
+        msg += `  • 𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲: ${config.category || "system"}\n`;
+        msg += `  • 𝐃𝐞𝐬𝐜𝐫𝐢𝐩𝐭𝐢𝐨𝐧: ${config.description || "No description provided"}\n\n`;
+        msg += `  ─── [ 𝐔𝐬𝐚𝐠𝐞 𝐆𝐮𝐢𝐝𝐞 ] ───\n`;
+        msg += `${config.guide || "No usage guide provided."}`;
 
-        let hotLoadMsg = "";
-        if (isEnabled) {
+        return await sendMessage(api, threadID, msg, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Could not parse command info: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // SEARCH COMMAND
+    // -------------------------------------------------------------
+    if (sub === "search") {
+      const query = (args.slice(1).join(" ") || "").toLowerCase();
+      if (!query) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Please enter a keyword to search.", messageID);
+      }
+
+      try {
+        const files = fs.readdirSync(__dirname).filter(f => f.endsWith(".js") && !f.startsWith("_temp_"));
+        const results = [];
+
+        for (const file of files) {
           try {
-            reloadCmd(newName, dirPath);
-            hotLoadMsg = "\nSuccessfully loaded re-named command! ⚡";
-          } catch (err) {
-            hotLoadMsg = `\n⚠️ Rename successful but failed to load: ${err.message}`;
-          }
-        }
+            const filePath = path.join(__dirname, file);
+            delete require.cache[require.resolve(filePath)];
+            const cmd = require(filePath);
+            if (cmd && cmd.config) {
+              const name = cmd.config.name || "";
+              const desc = cmd.config.description || "";
+              const cat = cmd.config.category || "";
+              const aliases = Array.isArray(cmd.config.aliases) ? cmd.config.aliases.join(" ") : (cmd.config.aliases || "");
 
-        return api.sendMessage(`${HEADER}\nSuccessfully renamed command:\n• ${oldName} ➔ ${bold(newName)}${hotLoadMsg}\n${FOOTER}`, threadID, messageID);
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nFailed to rename command: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
-      }
-    }
-
-    // 13. DUPLICATE CHECK
-    if (subCommand === 'check') {
-      try {
-        const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.js') || f.endsWith('.disabled'));
-        const nameMap = {};
-        const aliasMap = {};
-        const conflicts = [];
-
-        for (const file of files) {
-          const cleanName = file.replace(/\.js$/, '').replace(/\.disabled$/, '');
-          const config = extractConfig(file, dirPath);
-
-          if (config && config.name) {
-            const name = config.name.toLowerCase();
-            if (!nameMap[name]) nameMap[name] = [];
-            nameMap[name].push(file);
-
-            if (config.aliases && Array.isArray(config.aliases)) {
-              for (const alias of config.aliases) {
-                const al = alias.toLowerCase();
-                if (!aliasMap[al]) aliasMap[al] = [];
-                aliasMap[al].push(file);
+              if (
+                name.toLowerCase().includes(query) ||
+                desc.toLowerCase().includes(query) ||
+                cat.toLowerCase().includes(query) ||
+                aliases.toLowerCase().includes(query)
+              ) {
+                results.push(cmd.config);
               }
             }
-          }
+          } catch (_) {}
         }
 
-        for (const [name, filesWithThisName] of Object.entries(nameMap)) {
-          if (filesWithThisName.length > 1) {
-            conflicts.push(`• ${bold("Duplicate Name:")} "${name}" used in: ${filesWithThisName.join(', ')}`);
-          }
-          if (aliasMap[name]) {
-            conflicts.push(`• ${bold("Name & Alias Clashing:")} Name "${name}" in ${filesWithThisName.join(', ')} is also registered as an alias in ${aliasMap[name].join(', ')}`);
-          }
+        if (results.length === 0) {
+          return await sendMessage(api, threadID, `🔍 [𝐒𝐄𝐀𝐑𝐂𝐇] ➜ No commands found matching "${query}".`, messageID);
         }
 
-        for (const [alias, filesWithThisAlias] of Object.entries(aliasMap)) {
-          if (filesWithThisAlias.length > 1) {
-            conflicts.push(`• ${bold("Duplicate Alias:")} "${alias}" registered in: ${filesWithThisAlias.join(', ')}`);
-          }
-        }
+        let msg = `🔍 [𝐒𝐄𝐀𝐑𝐂𝐇] ➜ Found ${results.length} results:\n──────────────────────────\n\n`;
+        results.forEach((cmd, idx) => {
+          msg += `  ${idx + 1}. 🟢 ${cmd.name} (v${cmd.version || "1.0.0"})\n`;
+          msg += `     └─ ${cmd.description || "No description"}\n\n`;
+        });
 
-        if (conflicts.length === 0) {
-          return api.sendMessage(`${HEADER}\nNo command conflicts or naming collisions detected! All healthy! 🟢\n${FOOTER}`, threadID, messageID);
-        }
-
-        let report = `${HEADER}\n⚠️ 𝗖𝗼𝗻𝗳𝗹𝗶𝗰𝘁 𝗔𝗻𝗮𝗹𝘆𝘀𝗶𝘀:\n\n` + conflicts.join('\n\n') + `\n\n👉 Resolve these collisions to prevent execution bugs!\n${FOOTER}`;
-        return api.sendMessage(report, threadID, messageID);
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nConflict check failed: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
+        return await sendMessage(api, threadID, msg, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Search failed: ${error.message}`, messageID);
       }
     }
 
-    // 14. HEALTH CHECK / DOCTOR
-    if (subCommand === 'doctor') {
+    // -------------------------------------------------------------
+    // COUNT COMMAND
+    // -------------------------------------------------------------
+    if (sub === "count") {
       try {
-        const files = fs.readdirSync(dirPath).filter(f => f.endsWith('.js') || f.endsWith('.disabled'));
-        let syntaxErrors = 0;
-        let configErrors = 0;
-        let handlerErrors = 0;
-        let warningsCount = 0;
-        const reports = [];
+        const files = fs.readdirSync(__dirname);
+        const activeFiles = files.filter(f => f.endsWith(".js") && !f.startsWith("_temp_"));
+        const disabledFiles = files.filter(f => f.endsWith(".disabled"));
 
-        for (const file of files) {
-          const filePath = path.join(dirPath, file);
-          let loaded = null;
-          let syntaxErr = null;
-          let isTemp = false;
-          let checkPath = filePath;
+        const categoryCounts = {};
+        let activeCount = 0;
+        let corruptCount = 0;
 
-          if (file.endsWith('.disabled')) {
-            const tempName = `temp_doctor_load_${Date.now()}_${Math.floor(Math.random() * 1000)}.js`;
-            checkPath = path.join(dirPath, tempName);
-            try {
-              fs.copyFileSync(filePath, checkPath);
-              isTemp = true;
-            } catch (e) {
-              syntaxErr = "Temporary copy creation failed";
-            }
+        for (const file of activeFiles) {
+          try {
+            const cmd = require(path.join(__dirname, file));
+            const cat = cmd?.config?.category || "general";
+            categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+            activeCount++;
+          } catch (_) {
+            corruptCount++;
           }
+        }
 
-          if (!syntaxErr) {
+        let msg = "📊 [𝐂𝐎𝐔𝐍𝐓] ➜ Command Diagnostics Count:\n──────────────────────────\n\n";
+        msg += `  • 𝐓𝐨𝐭𝐚𝐥 𝐀𝐜𝐭𝐢𝐯𝐞: ${activeCount}\n`;
+        msg += `  • 𝐓𝐨𝐭𝐚𝐥 𝐃𝐢𝐬𝐚𝐛𝐥𝐞𝐝: ${disabledFiles.length}\n`;
+        msg += `  • 𝐂𝐨𝐫𝐫𝐮𝐩𝐭/𝐁𝐫𝐨𝐤𝐞𝐧: ${corruptCount}\n\n`;
+        msg += "─── [ Categories Breakdown ] ───\n";
+        
+        Object.entries(categoryCounts).forEach(([cat, count]) => {
+          msg += `  • ${cat.toUpperCase()}: ${count} command(s)\n`;
+        });
+
+        return await sendMessage(api, threadID, msg, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Count calculation failed: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // INSTALL COMMAND
+    // -------------------------------------------------------------
+    if (sub === "install") {
+      let rawCode = "";
+      let fileName = "";
+      
+      const reply = event.messageReply || event.message_reply;
+
+      // Case A: Reply to an attachment or body
+      if (reply) {
+        // A.1 JS Attachment
+        if (reply.attachments && reply.attachments.length > 0) {
+          const jsAttachment = reply.attachments.find(att => 
+            att.type === "file" && att.filename && att.filename.endsWith(".js")
+          );
+          if (jsAttachment) {
             try {
-              try { delete require.cache[require.resolve(checkPath)]; } catch (e) {}
-              loaded = require(checkPath);
+              const res = await axios.get(jsAttachment.url, { responseType: "text" });
+              rawCode = res.data;
+              fileName = args[1] || jsAttachment.filename;
             } catch (err) {
-              syntaxErr = err.message;
-            } finally {
-              if (isTemp) {
-                try {
-                  fs.unlinkSync(checkPath);
-                  delete require.cache[require.resolve(checkPath)];
-                } catch (e) {}
-              }
+              return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to download attached file: ${err.message}`, messageID);
             }
-          }
-
-          const rep = {
-            file,
-            status: 'Healthy ✅',
-            messages: []
-          };
-
-          if (syntaxErr) {
-            syntaxErrors++;
-            rep.status = 'Syntax Error ❌';
-            rep.messages.push(`Syntax Fail: ${syntaxErr}`);
-          } else if (!loaded || typeof loaded !== 'object') {
-            configErrors++;
-            rep.status = 'Invalid Exports ❌';
-            rep.messages.push('Does not export a valid module object');
-          } else {
-            const config = loaded.config;
-            if (!config) {
-              configErrors++;
-              rep.status = 'Config Error ❌';
-              rep.messages.push('Missing "config" export object');
-            } else {
-              if (!config.name) {
-                configErrors++;
-                rep.status = 'Config Error ❌';
-                rep.messages.push('Missing "config.name" property');
-              }
-            }
-
-            if (!loaded.onStart) {
-              handlerErrors++;
-              rep.status = 'Missing Handlers ❌';
-              rep.messages.push('Missing "onStart" hook function');
-            } else if (typeof loaded.onStart !== 'function') {
-              handlerErrors++;
-              rep.status = 'Invalid Handlers ❌';
-              rep.messages.push('"onStart" hook is not a valid function');
-            }
-
-            if (!loaded.onChat) {
-              warningsCount++;
-              rep.messages.push('(Optional) No "onChat" hook defined');
-            }
-          }
-
-          reports.push(rep);
-        }
-
-        let reportMsg = `${HEADER}\n🩺 𝗗𝗼𝗰𝘁𝗼𝗿 𝗗𝗶𝗮𝗴𝗻𝗼𝘀𝘁𝗶𝗰 𝗥𝗲𝗽𝗼𝗿𝘁:\n\n`;
-        reportMsg += `• Total Files: ${files.length}\n`;
-        reportMsg += `• Syntax Faults: ${syntaxErrors} ❌\n`;
-        reportMsg += `• Schema Faults: ${configErrors} ⚠️\n`;
-        reportMsg += `• Missing Handlers: ${handlerErrors} 🚫\n`;
-        reportMsg += `• Optional Warnings: ${warningsCount} 💡\n\n`;
-
-        // Highlight problematic ones
-        const issues = reports.filter(r => r.status !== 'Healthy ✅');
-        if (issues.length === 0) {
-          reportMsg += `🎉 All commands are extremely healthy, valid, and production-ready!\n`;
-        } else {
-          reportMsg += `⚠️ 𝗙𝗶𝗹𝗲𝘀 𝗥𝗲𝗾𝘂𝗶𝗿𝗶𝗻𝗴 𝗔𝘁𝘁𝗲𝗻𝘁𝗶𝗼𝗻:\n`;
-          for (const iss of issues.slice(0, 5)) {
-            reportMsg += ` - ${bold(iss.file)} (${iss.status})\n   ↳ ${iss.messages[0]}\n`;
-          }
-          if (issues.length > 5) {
-            reportMsg += ` - and ${issues.length - 5} more issues.`;
           }
         }
-
-        reportMsg += `\n${FOOTER}`;
-        return api.sendMessage(reportMsg, threadID, messageID);
-      } catch (err) {
-        return api.sendMessage(`${HEADER}\nDoctor inspection failed: ${err.message} ❌\n${FOOTER}`, threadID, messageID);
+        
+        // A.2 If no code fetched yet, check replied body
+        if (!rawCode && reply.body) {
+          rawCode = extractCode(reply.body);
+          fileName = args[1] || "";
+        }
       }
-    }
 
-    // Default Fallback
-    return api.sendMessage(`${HEADER}\nUnknown manager sub-command! Type "/cmd" to view help menu. ⚠️\n${FOOTER}`, threadID, messageID);
-  },
+      // Case B: Install from URL
+      if (!rawCode && args[1] && args[1].match(/^https?:\/\//)) {
+        let url = args[1];
+        fileName = args[2] || "";
 
-  onChat: async function ({ api, event, usersData, threadsData }) {
-    if (!event || !event.body || !event.threadID) return;
-    const threadID = event.threadID;
-    const pending = global.riyadCmdPendingConfirmations[threadID];
+        // Normalize Pastebin
+        if (url.includes("pastebin.com") && !url.includes("/raw/")) {
+          url = url.replace("pastebin.com/", "pastebin.com/raw/");
+        }
+        // Normalize GitHub
+        if (url.includes("github.com") && url.includes("/blob/")) {
+          url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/");
+        }
 
-    if (pending) {
-      // Check for timeout
-      if (Date.now() - pending.timestamp > 60000) {
-        delete global.riyadCmdPendingConfirmations[threadID];
+        try {
+          const res = await axios.get(url, { responseType: "text" });
+          rawCode = res.data;
+        } catch (err) {
+          return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to download from URL: ${err.message}`, messageID);
+        }
+      }
+
+      // Case C: Install via Inline Code /cmd install filename.js <code>
+      if (!rawCode && args[1] && args[1].endsWith(".js") && args.length > 2) {
+        fileName = args[1];
+        rawCode = extractCode(args.slice(2).join(" "));
+      }
+
+      if (!rawCode) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Could not retrieve command code. Use a valid raw URL, reply to JS code, or supply inline source code.", messageID);
+      }
+
+      // Safe validate
+      const validation = validateCommandSource(fileName || "new", rawCode);
+      if (!validation.valid) {
+        return await sendMessage(api, threadID, `❌ [𝐒𝐘𝐍𝐓𝐀𝐗 𝐄𝐑𝐑𝐎𝐑] ➜ File is not a valid Riyad Bot command:\n${validation.error}`, messageID);
+      }
+
+      // Determine correct filename
+      if (!fileName) {
+        fileName = `${validation.name}.js`;
+      }
+      if (!fileName.endsWith(".js")) {
+        fileName += ".js";
+      }
+
+      const destPath = path.join(__dirname, fileName);
+
+      // Overwrite Check
+      if (fs.existsSync(destPath)) {
+        const isForce = args.includes("force") || args.includes("-f") || args.includes("overwrite");
+        if (isForce) {
+          try {
+            fs.writeFileSync(destPath, rawCode, "utf8");
+            const hotReloaded = loadCommandIntoRegistry(destPath, fileName.replace(".js", ""));
+            let successMsg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Forced overwrite completed. Installed as "${fileName}".`;
+            if (hotReloaded) {
+              successMsg += "\n🟢 Hot-reload completed successfully.";
+            } else {
+              successMsg += "\n⚠️ Hot-reload could not be verified in this environment.";
+            }
+            return await sendMessage(api, threadID, successMsg, messageID);
+          } catch (err) {
+            return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Forced overwrite failed: ${err.message}`, messageID);
+          }
+        }
+
+        const msgText = `⚠️ [𝐂𝐎𝐍𝐅𝐈𝐑𝐌𝐀𝐓𝐈𝐎𝐍] ➜ The command "${fileName}" already exists.\nReply to this message with "yes" or "no" to overwrite and hot-reload.`;
+        const sentMsg = await sendMessage(api, threadID, msgText, messageID);
+        if (sentMsg) {
+          pendingConfirmations.set(sentMsg.messageID, {
+            commandName: "cmd",
+            messageID: sentMsg.messageID,
+            type: "install_overwrite",
+            author: senderID,
+            data: { fileName, rawCode }
+          });
+        }
         return;
       }
 
-      const replyText = event.body.trim().toLowerCase();
-      if (replyText === 'yes' || replyText === 'y') {
-        if (pending.action === 'delete') {
+      // Save and Hot reload
+      try {
+        fs.writeFileSync(destPath, rawCode, "utf8");
+        const hotReloaded = loadCommandIntoRegistry(destPath, fileName.replace(".js", ""));
+        let successMsg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Command installed as "${fileName}".`;
+        if (hotReloaded) {
+          successMsg += "\n🟢 Hot-reload completed successfully.";
+        } else {
+          successMsg += "\n⚠️ Hot-reload could not be verified in this environment.";
+        }
+        return await sendMessage(api, threadID, successMsg, messageID);
+      } catch (err) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to write command file: ${err.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // DELETE COMMAND
+    // -------------------------------------------------------------
+    if (sub === "delete") {
+      const targetName = args[1];
+      if (!targetName) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Please enter the name of the command to delete.", messageID);
+      }
+
+      if (targetName === "cmd") {
+        return await sendMessage(api, threadID, "❌ [𝐄𝐑𝐑𝐎𝐑] ➜ For security reasons, you cannot delete the command manager itself.", messageID);
+      }
+
+      const filePath = path.join(__dirname, `${targetName}.js`);
+      const disabledPath = path.join(__dirname, `${targetName}.js.disabled`);
+
+      let targetPath = "";
+      if (fs.existsSync(filePath)) {
+        targetPath = filePath;
+      } else if (fs.existsSync(disabledPath)) {
+        targetPath = disabledPath;
+      }
+
+      if (!targetPath) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Command "${targetName}" does not exist.`, messageID);
+      }
+
+      try {
+        unloadCommandFromRegistry(targetName);
+        fs.removeSync(targetPath);
+        return await sendMessage(api, threadID, `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Successfully deleted command "${targetName}".`, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to delete command: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // ENABLE COMMAND
+    // -------------------------------------------------------------
+    if (sub === "enable") {
+      const targetName = args[1];
+      if (!targetName) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Please enter the name of the command to enable.", messageID);
+      }
+
+      const disabledPath = path.join(__dirname, `${targetName}.js.disabled`);
+      const standardDisabledPath = path.join(__dirname, `${targetName}.disabled`);
+      const destPath = path.join(__dirname, `${targetName}.js`);
+
+      let foundSource = "";
+      if (fs.existsSync(disabledPath)) {
+        foundSource = disabledPath;
+      } else if (fs.existsSync(standardDisabledPath)) {
+        foundSource = standardDisabledPath;
+      }
+
+      if (!foundSource) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Disabled command "${targetName}" not found.`, messageID);
+      }
+
+      try {
+        fs.renameSync(foundSource, destPath);
+        const loaded = loadCommandIntoRegistry(destPath, targetName);
+        let successMsg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Command "${targetName}" has been enabled.`;
+        if (loaded) {
+          successMsg += "\n🟢 Hot-loaded into bot registry.";
+        }
+        return await sendMessage(api, threadID, successMsg, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to enable command: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // DISABLE COMMAND
+    // -------------------------------------------------------------
+    if (sub === "disable") {
+      const targetName = args[1];
+      if (!targetName) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Please enter the name of the command to disable.", messageID);
+      }
+
+      if (targetName === "cmd") {
+        return await sendMessage(api, threadID, "❌ [𝐄𝐑𝐑𝐎𝐑] ➜ For safety reasons, you cannot disable the command manager.", messageID);
+      }
+
+      const filePath = path.join(__dirname, `${targetName}.js`);
+      if (!fs.existsSync(filePath)) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Active command "${targetName}" not found.`, messageID);
+      }
+
+      try {
+        unloadCommandFromRegistry(targetName);
+        const destPath = path.join(__dirname, `${targetName}.js.disabled`);
+        fs.renameSync(filePath, destPath);
+        return await sendMessage(api, threadID, `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Command "${targetName}" has been disabled.`, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to disable command: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // RENAME COMMAND
+    // -------------------------------------------------------------
+    if (sub === "rename") {
+      const oldName = args[1];
+      const newName = args[2];
+
+      if (!oldName || !newName) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Please supply both the old name and new name.\nExample: /cmd rename test tester", messageID);
+      }
+
+      if (oldName === "cmd") {
+        return await sendMessage(api, threadID, "❌ [𝐄𝐑𝐑𝐎𝐑] ➜ You cannot rename the command manager itself.", messageID);
+      }
+
+      const oldPath = path.join(__dirname, `${oldName}.js`);
+      const newPath = path.join(__dirname, `${newName}.js`);
+
+      if (!fs.existsSync(oldPath)) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Command "${oldName}.js" does not exist.`, messageID);
+      }
+
+      if (fs.existsSync(newPath)) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ A file named "${newName}.js" already exists.`, messageID);
+      }
+
+      try {
+        // Attempt to update file contents name
+        let content = fs.readFileSync(oldPath, "utf8");
+        // Regex to replace config name
+        content = content.replace(/(name\s*:\s*['"])([^'"]+)(['"])/, `$1${newName}$3`);
+        
+        unloadCommandFromRegistry(oldName);
+        fs.writeFileSync(newPath, content, "utf8");
+        fs.removeSync(oldPath);
+
+        const loaded = loadCommandIntoRegistry(newPath, newName);
+        let successMsg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Renamed "${oldName}" to "${newName}".`;
+        if (loaded) {
+          successMsg += "\n🟢 Hot-loaded the updated command.";
+        }
+        return await sendMessage(api, threadID, successMsg, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to rename command: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // RELOAD COMMAND
+    // -------------------------------------------------------------
+    if (sub === "reload") {
+      const targetName = args[1];
+      if (!targetName) {
+        return await sendMessage(api, threadID, "⚠️ [𝐈𝐍𝐅𝐎] ➜ Please supply a command to reload or use 'all'.", messageID);
+      }
+
+      if (targetName === "all") {
+        try {
+          const files = fs.readdirSync(__dirname).filter(f => f.endsWith(".js") && !f.startsWith("_temp_"));
+          let reloadedCount = 0;
+          let failedCount = 0;
+          const errors = [];
+
+          for (const file of files) {
+            const filePath = path.join(__dirname, file);
+            const cmdName = file.replace(".js", "");
+            try {
+              const loaded = loadCommandIntoRegistry(filePath, cmdName);
+              if (loaded) reloadedCount++;
+              else failedCount++;
+            } catch (err) {
+              failedCount++;
+              errors.push(`${cmdName}: ${err.message}`);
+            }
+          }
+
+          let msg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Reload Complete:\n──────────────────────────\n`;
+          msg += `  • 𝐒𝐮𝐜𝐜𝐞𝐬𝐬𝐟𝐮𝐥𝐥𝐲 𝐑𝐞𝐥𝐨𝐚𝐝𝐞𝐝: ${reloadedCount}\n`;
+          msg += `  • 𝐅𝐚𝐢𝐥𝐞𝐝: ${failedCount}`;
+          if (errors.length > 0) {
+            msg += `\n\n─── [ Failures ] ───\n` + errors.join("\n");
+          }
+          return await sendMessage(api, threadID, msg, messageID);
+        } catch (error) {
+          return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Reload all failed: ${error.message}`, messageID);
+        }
+      }
+
+      const filePath = path.join(__dirname, `${targetName}.js`);
+      if (!fs.existsSync(filePath)) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Command "${targetName}.js" not found.`, messageID);
+      }
+
+      try {
+        const loaded = loadCommandIntoRegistry(filePath, targetName);
+        if (loaded) {
+          return await sendMessage(api, threadID, `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Command "${targetName}" reloaded and registry updated.`, messageID);
+        } else {
+          return await sendMessage(api, threadID, `⚠️ [𝐈𝐍𝐅𝐎] ➜ Command "${targetName}" parsed successfully, but registry hot-reload was skipped.`, messageID);
+        }
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Reloading "${targetName}" failed: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // BACKUP COMMAND
+    // -------------------------------------------------------------
+    if (sub === "backup") {
+      const backupDir = path.join(__dirname, "..", "cmds_backup");
+      try {
+        fs.ensureDirSync(backupDir);
+        const files = fs.readdirSync(__dirname).filter(f => f.endsWith(".js") || f.endsWith(".disabled"));
+        let count = 0;
+
+        for (const file of files) {
+          fs.copySync(path.join(__dirname, file), path.join(backupDir, file));
+          count++;
+        }
+
+        return await sendMessage(api, threadID, `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Backed up ${count} files to backup directory:\n"${backupDir.replace(process.cwd(), "")}"`, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Backup failed: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // RESTORE COMMAND
+    // -------------------------------------------------------------
+    if (sub === "restore") {
+      const backupDir = path.join(__dirname, "..", "cmds_backup");
+      if (!fs.existsSync(backupDir)) {
+        return await sendMessage(api, threadID, "❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Backup directory not found. Please create a backup first.", messageID);
+      }
+
+      try {
+        const files = fs.readdirSync(backupDir).filter(f => f.endsWith(".js") || f.endsWith(".disabled"));
+        let count = 0;
+
+        for (const file of files) {
+          fs.copySync(path.join(backupDir, file), path.join(__dirname, file));
+          // Load active restored commands
+          if (file.endsWith(".js")) {
+            loadCommandIntoRegistry(path.join(__dirname, file), file.replace(".js", ""));
+          }
+          count++;
+        }
+
+        return await sendMessage(api, threadID, `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Restored and hot-loaded ${count} files from backup.`, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Restore failed: ${error.message}`, messageID);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // CHECK COMMAND
+    // -------------------------------------------------------------
+    if (sub === "check") {
+      try {
+        const files = fs.readdirSync(__dirname).filter(f => f.endsWith(".js") && !f.startsWith("_temp_"));
+        const duplicates = {};
+        const aliases = {};
+        const reports = [];
+
+        for (const file of files) {
+          const filePath = path.join(__dirname, file);
           try {
-            if (fs.existsSync(pending.targetPath)) {
-              fs.unlinkSync(pending.targetPath);
-              
-              // Unregister from registries
-              const cleanName = pending.target.replace(/\.js$/, '').replace(/\.disabled$/, '');
-              const registries = [
-                global.client?.commands,
-                global.commands,
-                global.GoatBot?.commands,
-                global.api?.commands
-              ];
-              for (const reg of registries) {
-                if (reg) {
-                  if (typeof reg.delete === 'function') reg.delete(cleanName);
-                  else if (typeof reg === 'object') delete reg[cleanName];
+            delete require.cache[require.resolve(filePath)];
+            const cmd = require(filePath);
+            const cmdName = cmd?.config?.name;
+
+            if (!cmdName) {
+              reports.push(`⚠️ ${file}: Missing command name inside config.`);
+              continue;
+            }
+
+            if (duplicates[cmdName]) {
+              duplicates[cmdName].push(file);
+            } else {
+              duplicates[cmdName] = [file];
+            }
+
+            if (cmd.config.aliases) {
+              const cmdAliases = Array.isArray(cmd.config.aliases) ? cmd.config.aliases : [cmd.config.aliases];
+              for (const alias of cmdAliases) {
+                if (aliases[alias]) {
+                  aliases[alias].push(cmdName);
+                } else {
+                  aliases[alias] = [cmdName];
                 }
               }
-
-              api.sendMessage(`${HEADER}\nSuccessfully deleted command "${pending.target}" from your system! 🗑️\n${FOOTER}`, threadID, event.messageID);
-            } else {
-              api.sendMessage(`${HEADER}\nFile does not exist: "${pending.target}"! ❌\n${FOOTER}`, threadID, event.messageID);
             }
+
+            if (!cmd.onStart) {
+              reports.push(`⚠️ ${file}: Missing 'onStart' handler.`);
+            }
+
           } catch (err) {
-            api.sendMessage(`${HEADER}\nFailed to delete file: ${err.message} ❌\n${FOOTER}`, threadID, event.messageID);
+            reports.push(`❌ ${file}: Syntax/Load Error - ${err.message}`);
           }
         }
-        delete global.riyadCmdPendingConfirmations[threadID];
-      } else if (replyText === 'no' || replyText === 'n' || replyText === 'cancel') {
-        api.sendMessage(`${HEADER}\nAction cancelled! Deletion aborted. ✅\n${FOOTER}`, threadID, event.messageID);
-        delete global.riyadCmdPendingConfirmations[threadID];
+
+        // Add duplicate reports
+        Object.entries(duplicates).forEach(([name, countFiles]) => {
+          if (countFiles.length > 1) {
+            reports.push(`❌ Duplicate Command Name "${name}" in files: ${countFiles.join(", ")}`);
+          }
+        });
+
+        // Add duplicate alias reports
+        Object.entries(aliases).forEach(([alias, commandsList]) => {
+          if (commandsList.length > 1) {
+            reports.push(`❌ Duplicate Alias "${alias}" registered by: ${commandsList.join(", ")}`);
+          }
+        });
+
+        if (reports.length === 0) {
+          return await sendMessage(api, threadID, "✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Command check completed! All active commands are healthy.", messageID);
+        }
+
+        let msg = `🩺 [𝐂𝐇𝐄𝐂𝐊] ➜ Found ${reports.length} issue(s):\n──────────────────────────\n\n`;
+        msg += reports.join("\n\n");
+        return await sendMessage(api, threadID, msg, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Command check failed: ${error.message}`, messageID);
       }
+    }
+
+    // -------------------------------------------------------------
+    // DOCTOR (SYSTEM DIAGNOSTICS)
+    // -------------------------------------------------------------
+    if (sub === "doctor") {
+      try {
+        let msg = "🩺 [𝐃𝐎𝐂𝐓𝐎𝐑] ➜ System Health Diagnostics:\n──────────────────────────\n\n";
+
+        // Check 1: Directory Permissions
+        try {
+          fs.accessSync(__dirname, fs.constants.R_OK | fs.constants.W_OK);
+          msg += "  • 𝐃𝐢𝐫𝐞𝐜𝐭𝐨𝐫𝐲 𝐀𝐜𝐜𝐞𝐬𝐬: 🟢 Read/Write Healthy\n";
+        } catch (_) {
+          msg += "  • 𝐃𝐢𝐫𝐞𝐜𝐭𝐨𝐫𝐲 𝐀𝐜𝐜𝐞𝐬𝐬: 🔴 Read/Write Restrained\n";
+        }
+
+        // Check 2: Node Environment
+        msg += `  • 𝐍𝐨𝐝𝐞 𝐕𝐞𝐫𝐬𝐢𝐨𝐧: 🟢 ${process.version}\n`;
+        msg += `  • 𝐏𝐥𝐚𝐭𝐟𝐨𝐫𝐦: 🟢 ${process.platform}\n`;
+
+        // Check 3: Memory usage
+        const mem = process.memoryUsage();
+        const rssMB = (mem.rss / 1024 / 1024).toFixed(1);
+        const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
+        msg += `  • 𝐑𝐒𝐒 𝐌𝐞𝐦𝐨𝐫𝐲: 🟢 ${rssMB} MB\n`;
+        msg += `  • 𝐇𝐞𝐚𝐩 𝐌𝐞𝐦𝐨𝐫𝐲: 🟢 ${heapUsedMB} MB\n`;
+
+        // Check 4: Registry Health
+        const registries = findRegistries();
+        if (registries.length > 0) {
+          msg += `  • 𝐑𝐞𝐠𝐢𝐬𝐭𝐫𝐲 𝐒𝐭𝐚𝐭𝐮𝐬: 🟢 Found ${registries.length} active bot registries.\n`;
+        } else {
+          msg += `  • 𝐑e𝐠𝐢𝐬𝐭𝐫𝐲 𝐒𝐭𝐚𝐭𝐮𝐬: ⚠️ Offline / Standalone mode. Run bot to verify hot reload.\n`;
+        }
+
+        // Check 5: Dependencies sanity
+        try {
+          require("axios");
+          msg += "  • 𝐀𝐱𝐢𝐨𝐬: 🟢 Installed\n";
+        } catch (_) {
+          msg += "  • 𝐀𝐱𝐢𝐨𝐬: 🔴 Missing\n";
+        }
+
+        try {
+          require("fs-extra");
+          msg += "  • 𝐅𝐬-𝐄𝐱𝐭𝐫𝐚: 🟢 Installed\n";
+        } catch (_) {
+          msg += "  • 𝐅𝐬-𝐄𝐱𝐭𝐫𝐚: 🔴 Missing\n";
+        }
+
+        return await sendMessage(api, threadID, msg, messageID);
+      } catch (error) {
+        return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Doctor diagnostics failed: ${error.message}`, messageID);
+      }
+    }
+
+    // Default to displaying guide if command unknown
+    return await sendMessage(api, threadID, `⚠️ [𝐈𝐍𝐅𝐎] ➜ Unknown subcommand. Here is the usage guide:\n\n${module.exports.config.guide}`, messageID);
+  },
+
+  onChat: async function({ api, event }) {
+    const threadID = event.threadID;
+    const messageID = event.messageID;
+    const senderID = event.senderID;
+    const body = event.body;
+    
+    const reply = event.messageReply || event.message_reply;
+    if (!reply || !body) return;
+
+    const replyToID = reply.messageID;
+    const pending = pendingConfirmations.get(replyToID);
+    if (!pending) return;
+
+    if (senderID !== pending.author) return;
+
+    const answer = body.trim().toLowerCase();
+    if (answer === "yes" || answer === "y") {
+      pendingConfirmations.delete(replyToID);
+      const { type, data } = pending;
+      if (type === "install_overwrite") {
+        const { fileName, rawCode } = data;
+        const destPath = path.join(__dirname, fileName);
+        try {
+          fs.writeFileSync(destPath, rawCode, "utf8");
+          const hotReloaded = loadCommandIntoRegistry(destPath, fileName.replace(".js", ""));
+          let msg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Overwrite completed. Installed as "${fileName}".`;
+          if (hotReloaded) {
+            msg += "\n🟢 Hot-loaded into bot registry successfully.";
+          }
+          await sendMessage(api, threadID, msg, messageID);
+        } catch (err) {
+          await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Overwrite failed: ${err.message}`, messageID);
+        }
+      }
+    } else if (answer === "no" || answer === "n") {
+      pendingConfirmations.delete(replyToID);
+      await sendMessage(api, threadID, "❌ [𝐂𝐀𝐍𝐂𝐄𝐋𝐋𝐄𝐃] ➜ Overwrite cancelled by user.", messageID);
     }
   }
 };
