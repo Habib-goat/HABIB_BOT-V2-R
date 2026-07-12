@@ -57,36 +57,31 @@ module.exports = {
           userName = info[leftUserID].name;
       } catch {}
 
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      console.log("[ANTILEAVE] About to send security message...");
-      
-api.sendMessage(
+      await api.sendMessage({
+        body:
 `╔═══════════════════╗
 ║🔥𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 𝐒𝐄𝐂𝐔𝐑𝐈𝐓𝐘⚡║
 ╠═══════════════════╣
 ║
 ║ 👋 ${userName}
-║
+║                                   
 ║ ⚠️ আপনি গ্রুপ থেকে বের হওয়ার
-║ চেষ্টা করেছিলেন! 🚫
-║
-║ ⚡ Riyad Bot-এর অনুমতি ব্যতীত
-║ এই গ্রুপ ত্যাগ করা অসম্ভব। 🔒
-║
-║ ✅ আপনাকে পুনরায় গ্রুপে
-║ সংযুক্ত করা হয়েছে। 🔄
-║
-║ ❤️💎 🚀 ⚛️
+║ চেষ্টা করেছিলেন! 🚫                
+║    
+║ ⚡ Riyad Bot-এর অনুমতি ব্যতীত  
+║এই গ্রুপ ত্যাগ করা অসম্ভব। 🔒     
+║                                   
+║ ✅ আপনাকে পুনরায় গ্রুপে             
+║ সংযুক্ত করা হয়েছে। 🔄             
+║        ❤️💎 🚀 ⚛️     
 ╠════════════════════╣
-║⚡ 𝐁𝐎𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐄 ⚡║
+║⚡ 𝐁𝐎𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐄 ⚡   ║
 ╚════════════════════╝`,
-threadID,
-(err) => {
-  if (err) console.error("[SEND MESSAGE ERROR]", err);
-  else console.log("[ANTILEAVE] Security message sent.");
-}
-);
+        mentions: [{
+          tag: userName,
+          id: leftUserID
+        }]
+      }, threadID);
 
     } catch (err) {
       console.error("[ANTILEAVE ERROR]", err);
