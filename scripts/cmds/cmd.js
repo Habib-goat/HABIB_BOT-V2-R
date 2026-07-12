@@ -5,7 +5,7 @@
 
 // Command Manager ("cmd.js") for Riyad Bot
 // Professional, robust, and full-featured command manager.
-
+const replyManager = require("../replies/replyManager");
 const axios = require("axios");
 const { execSync } = require("child_process");
 const fs = require("fs-extra");
@@ -209,9 +209,9 @@ module.exports = {
         const startIndex = (page - 1) * itemsPerPage;
         const pageItems = allItems.slice(startIndex, startIndex + itemsPerPage);
 
-        let msg = "╭────────────────────────╮\n";
-        msg += "  ✪ 𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 - 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒 ✪\n";
-        msg += "╰────────────────────────╯\n\n";
+        let msg = "╭─────────────────────╮\n";
+        msg += "  ✪𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 - 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒✪\n";
+        msg += "╰─────────────────────╯\n\n";
         msg += ` ➜ 𝐀𝐜𝐭𝐢𝐯𝐞: ${totalActive} | 𝐃𝐢𝐬𝐚𝐛𝐥𝐞𝐝: ${totalDisabled}\n`;
         msg += ` ➜ 𝐏𝐚𝐠𝐞: ${page}/${totalPages}\n\n`;
 
@@ -223,7 +223,7 @@ module.exports = {
           msg += `     ╰─ 𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲: ${item.category}\n\n`;
         });
 
-        msg += "──────────────────────────\n";
+        msg += "───────────────────────\n";
         msg += "💡 𝐔𝐬𝐞 \"/cmd list [page]\" to paginate\n";
         msg += "💡 𝐔𝐬𝐞 \"/cmd info [name]\" for details";
 
@@ -478,6 +478,10 @@ module.exports = {
             data: { fileName, rawCode }
           });
         }
+        replyManager.set(sentMsg.messageID, {
+  commandName: "cmd",
+  author: senderID
+});
         return;
       }
 
@@ -988,24 +992,22 @@ module.exports = {
     return await sendMessage(api, threadID, `⚠️ [𝐈𝐍𝐅𝐎] ➜ Unknown subcommand. Here is the usage guide:\n\n${module.exports.config.guide}`, messageID);
   },
 
-  onChat: async function({ api, event }) {
+onReply: async function({ api, event, Reply }) {
     const threadID = event.threadID;
     const messageID = event.messageID;
     const senderID = event.senderID;
     const body = event.body;
     
-    const reply = event.messageReply || event.message_reply;
-    if (!reply || !body) return;
+    if (!Reply || !body) return;
 
-    const replyToID = reply.messageID;
-    const pending = pendingConfirmations.get(replyToID);
+const pending = pendingConfirmations.get(Reply.messageID);
     if (!pending) return;
 
     if (senderID !== pending.author) return;
 
     const answer = body.trim().toLowerCase();
     if (answer === "yes" || answer === "y") {
-      pendingConfirmations.delete(replyToID);
+      pendingConfirmations.delete(Reply.messageID);
       const { type, data } = pending;
       if (type === "install_overwrite") {
         const { fileName, rawCode } = data;
@@ -1023,7 +1025,7 @@ module.exports = {
         }
       }
     } else if (answer === "no" || answer === "n") {
-      pendingConfirmations.delete(replyToID);
+      pendingConfirmations.delete(Reply.messageID);
       await sendMessage(api, threadID, "❌ [𝐂𝐀𝐍𝐂𝐄𝐋𝐋𝐄𝐃] ➜ Overwrite cancelled by user.", messageID);
     }
   }
