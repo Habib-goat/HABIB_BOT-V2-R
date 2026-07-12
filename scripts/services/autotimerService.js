@@ -140,13 +140,21 @@ for (const thread of groups) {
     continue;
 
   try {
-    await api.sendMessage(
-      {
-        body: messageBody,
-        attachment: fs.createReadStream(videoFile)
-      },
-      threadID
-    );
+    const info = await api.sendMessage(
+  {
+    body: messageBody,
+    attachment: fs.createReadStream(videoFile)
+  },
+  threadID
+);
+
+if (info && info.messageID) {
+  const reactionManager = require("../reactions/reactionManager");
+
+  reactionManager.register(info.messageID, {
+    commandName: "__global__"
+  });
+}
   } catch (err) {
     console.error(
       `[AutoTimer] Failed to send message to ${threadID}:`,
