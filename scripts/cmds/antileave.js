@@ -7,14 +7,13 @@
 
 module.exports = {
   config: {
-    name: "antileave",
-    version: "1.0.0",
-eventType: ["log:unsubscribe"],
-version: "1.0.0",
-author: "Riyad Bot",
-role: 1,
-category: "group",
-countDown: 5
+  name: "antileave",
+  version: "1.0.0",
+  eventType: ["log:unsubscribe"],
+  author: "Riyad Bot",
+  role: 1,
+  category: "group",
+  countDown: 5
   },
 
   onStart: async function ({ api, event, args, threadsData, usersData }) {
@@ -173,12 +172,12 @@ countDown: 5
         if (typeof api.sendMessage === "function") {
           api.sendMessage(messageText, threadID);
         }
-      } catch (error) {
+            } catch (error) {
         console.error("Error in anti-leave event handling:", error);
       }
-      return;
-    }
 
+      return;
+  }
     // Otherwise, handle as a toggle command
     try {
       const input = args[0] ? args[0].toLowerCase() : "";
