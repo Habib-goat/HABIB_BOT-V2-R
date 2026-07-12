@@ -59,6 +59,8 @@ module.exports = {
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
+      console.log("[ANTILEAVE] About to send security message...");
+      
 api.sendMessage(
 `╔═══════════════════╗
 ║🔥𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 𝐒𝐄𝐂𝐔𝐑𝐈𝐓𝐘⚡║
