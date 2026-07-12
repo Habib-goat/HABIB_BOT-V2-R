@@ -91,8 +91,12 @@ if ((reaction === "🤬" || reaction === "😡") && reactionData) {
 
     if (!reactionData) return false;
 
-    const cmd = commandLoader.commands.get(reactionData.commandName);
+// Global registered message (only allow unsend)
+if (reactionData.commandName === "__global__") {
+  return false;
+}
 
+const cmd = commandLoader.commands.get(reactionData.commandName);
     if (!cmd || typeof cmd.onReaction !== "function")
       return false;
 
