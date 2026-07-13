@@ -34,7 +34,6 @@ const timerData = {
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
   video: "https://files.catbox.moe/ee9khu.mp4"
 },
-  "05:00 AM": { text: "⌚┆এখন সকাল ৫টা বাজে❥︎নামাজ পড়ছো তো?🌅☀️", video: "https://files.catbox.moe/5v4nxi.mp4" },
   "06:00 AM": { text: "⌚┆এখন সকাল ৬টা বাজে❥︎ঘুম থেকে উঠো সবাই,🌞☕", video: "https://files.catbox.moe/q9rf0f.mp4" },
   "07:00 AM": { text: "⌚┆এখন সকাল ৭টা বাজে❥︎ব্রেকফাস্ট করে নাও,🍞", video: "https://files.catbox.moe/ztnm6a.mp4" },
   "08:00 AM": { text: "⌚┆এখন সকাল ৮টা বাজে❥︎কাজ শুরু করো মন দিয়ে,🌤️✨", video: "https://files.catbox.moe/tb5xef.mp4" },
@@ -74,7 +73,6 @@ const timerData = {
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
   video: "https://files.catbox.moe/vcgbxq.mp4"
 },
-  "05:00 PM": { text: "⌚┆এখন বিকাল ৫টা বাজে❥︎একটু বিশ্রাম নাও,🙂↕️🌆", video: "https://files.catbox.moe/dv3qv4.mp4" },
   "06:30 PM": {
   text: `╭━━━〔 🌇 𝐌𝐀𝐆𝐇𝐑𝐈𝐁 • মাগরিবের সময় 〕━━━╮
 
@@ -90,7 +88,6 @@ const timerData = {
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
   video: "https://files.catbox.moe/y8pnz7.mp4"
 },
-  "07:00 PM": { text: "⌚┆এখন সন্ধ্যা ৭টা বাজে❥︎এশার নামাজ পড়ো,❤️🌃", video: "https://files.catbox.moe/4v4uyv.mp4" },
   "08:00 PM": {
   text: `╭━━━〔 🌙 𝐈𝐒𝐇𝐀 • এশার সময় 〕━━━╮
 
