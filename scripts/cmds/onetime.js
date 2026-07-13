@@ -119,14 +119,9 @@ module.exports = {
  * Downloads and resends media attachments securely using standard HTTPS streams.
  */
 async function handleResendMedia(api, threadID, messageID, attachments) {
-  console.log("Attachments:", JSON.stringify(attachments, null, 2));
-
   const https = require("https");
   const fs = require("fs");
   const path = require("path");
-
-  // ...
-}
 
   // Filter for valid visual and audio attachment types
   const validMedia = attachments.filter(att =>
@@ -195,4 +190,4 @@ async function handleResendMedia(api, threadID, messageID, attachments) {
       try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (e) {}
     }
   }
-            }
+}
