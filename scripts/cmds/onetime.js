@@ -2,16 +2,25 @@
  * @file one_time.js
  * @description Riyad Bot - Universal JavaScript File
  * Allows users to view "view once" or expired photo/video media again in Messenger.
- * Triggers when a user replies to a message containing media and types "one time",
- * or uses the bot's command prefix with "one_time".
+ * Triggered by replying to a view‑once message with "one time" (or a command prefix).
+ *
+ * This implementation:
+ *  • Caches recent media for quick recovery.
+ *  • Detects the trigger word in replies.
+ *  • Downloads the original attachment (view‑once links are temporary) and re‑sends it.
+ *  • Handles errors gracefully and cleans up temporary files.
  */
 
-// In-memory cache to store recent thread media in case they are not fully populated in reply objects
+const https = require("https");
+const fs = require("fs");
+const path = require("path");
+
+// In‑memory cache: threadID → { messageID, attachments, timestamp }
 const mediaCache = new Map();
 
 module.exports = {
   config: {
-    name: "onetime",
+    name: "one_time",
     aliases: ["onetime", "one", "viewonce", "view_once"],
     version: "1.0.0",
     author: "Riyad",
@@ -25,23 +34,29 @@ module.exports = {
   },
 
   /**
-   * onStart - Handled when the user explicitly triggers the command via prefix (e.g., /one_time)
+   * onStart – invoked when the user explicitly triggers the command via prefix (e.g., /one_time)
    */
-  onStart: async function({ api, event, args, usersData, threadsData }) {
+  onStart: async function ({ api, event, args, usersData, threadsData }) {
     const { threadID, messageID, messageReply } = event;
 
     try {
       if (!messageReply) {
         return api.sendMessage(
-          "⚠️ Please reply to the view-once photo or video you want to view again.",
+          "⚠️ Please reply to the view‑once photo or video you want to view again.",
           threadID,
           messageID
         );
       }
 
-      const attachments = messageReply.attachments || [];
+      // Attachments can be an array or a single object
+      const attachments = Array.isArray(messageReply.attachments)
+        ? messageReply.attachments
+        : messageReply.attachments
+          ? [messageReply.attachments]
+          : [];
+
       if (attachments.length === 0) {
-        // Try fallback to cache for this specific replied message
+        // Fallback to cache
         const cached = mediaCache.get(threadID);
         if (cached && cached.messageID === messageReply.messageID) {
           await handleResendMedia(api, threadID, messageID, cached.attachments);
@@ -57,22 +72,27 @@ module.exports = {
       }
     } catch (error) {
       console.error("[one_time] Error in onStart:", error);
-      api.sendMessage("❌ An error occurred while trying to process the media.", threadID, messageID);
+      api.sendMessage(
+        "❌ An error occurred while trying to process the media.",
+        threadID,
+        messageID
+      );
     }
   },
 
   /**
-   * onChat - Handled on every incoming message to capture attachments and monitor trigger words
+   * onChat – invoked on every incoming message to cache media and detect the trigger word
    */
-  onChat: async function({ api, event, usersData, threadsData }) {
+  onChat: async function ({ api, event, usersData, threadsData }) {
     const { threadID, messageID, body, messageReply, attachments } = event;
 
     try {
-      // 1. Cache incoming media in memory so we can retrieve them even if they disappear/expire
+      // 1. Cache any incoming media (photos, videos, etc.)
       if (attachments && attachments.length > 0) {
-        const mediaAttachments = attachments.filter(att =>
+        const mediaAttachments = attachments.filter((att) =>
           ["photo", "video", "animated_image", "audio", "sticker"].includes(att.type)
         );
+
         if (mediaAttachments.length > 0) {
           mediaCache.set(threadID, {
             messageID,
@@ -80,7 +100,7 @@ module.exports = {
             timestamp: Date.now()
           });
 
-          // Limit cache size to prevent memory leaks (keep last 50 entries)
+          // Keep cache small (max 50 entries)
           if (mediaCache.size > 50) {
             const firstKey = mediaCache.keys().next().value;
             mediaCache.delete(firstKey);
@@ -92,21 +112,31 @@ module.exports = {
 
       const cleanBody = body.trim().toLowerCase();
 
-      // Check if user replied and typed "one time" (with or without a leading prefix/character)
-      const isTriggered = cleanBody === "one time" || cleanBody.endsWith("one time");
+      // 2. Detect trigger – "one time" (case‑insensitive, optional prefix)
+      const isTriggered =
+        cleanBody === "one time" || cleanBody.endsWith("one time");
 
-      if (isTriggered && messageReply) {
-        const replyAttachments = messageReply.attachments || [];
-        if (replyAttachments.length > 0) {
-          await handleResendMedia(api, threadID, messageID, replyAttachments);
+      if (!isTriggered || !messageReply) return;
+
+      const replyAttachments = Array.isArray(messageReply.attachments)
+        ? messageReply.attachments
+        : messageReply.attachments
+          ? [messageReply.attachments]
+          : [];
+
+      if (replyAttachments.length > 0) {
+        await handleResendMedia(api, threadID, messageID, replyAttachments);
+      } else {
+        // Fallback to cache
+        const cached = mediaCache.get(threadID);
+        if (cached && cached.messageID === messageReply.messageID) {
+          await handleResendMedia(api, threadID, messageID, cached.attachments);
         } else {
-          // Check if we have the attachments in our thread cache
-          const cached = mediaCache.get(threadID);
-          if (cached && cached.messageID === messageReply.messageID) {
-            await handleResendMedia(api, threadID, messageID, cached.attachments);
-          } else {
-            api.sendMessage("❌ Could not recover the media from that message.", threadID, messageID);
-          }
+          api.sendMessage(
+            "❌ Could not recover the media from that message.",
+            threadID,
+            messageID
+          );
         }
       }
     } catch (error) {
@@ -116,78 +146,145 @@ module.exports = {
 };
 
 /**
- * Downloads and resends media attachments securely using standard HTTPS streams.
+ * Downloads and re‑sends media attachments securely.
+ *
+ * @param {Object} api           Messenger API interface
+ * @param {string} threadID      Thread ID to send the message to
+ * @param {string} messageID     ID of the original message (for reply)
+ * @param {Array}  attachments   Array of attachment objects
  */
 async function handleResendMedia(api, threadID, messageID, attachments) {
-  const https = require("https");
-  const fs = require("fs");
-  const path = require("path");
-
-  // Filter for valid visual and audio attachment types
-  const validMedia = attachments.filter(att =>
+  // Filter for supported media types
+  const validMedia = attachments.filter((att) =>
     ["photo", "video", "animated_image", "audio", "sticker"].includes(att.type)
   );
 
   if (validMedia.length === 0) {
-    return api.sendMessage("❌ No valid photo, video, or audio attachments found.", threadID, messageID);
+    return api.sendMessage(
+      "❌ No valid photo, video, or audio attachments found.",
+      threadID,
+      messageID
+    );
   }
 
-  // Let user know recovery is active
-  let statusMsg = await api.sendMessage("🔄 Recovering view-once media, please wait...", threadID);
+  // Inform the user that recovery is in progress
+  const statusMsg = await api.sendMessage(
+    "🔄 Recovering view‑once media, please wait...",
+    threadID,
+    messageID
+  );
 
-  const streams = [];
   const tempFiles = [];
+  const streams = [];
 
   try {
+    // Download each attachment to a temporary file
     for (let i = 0; i < validMedia.length; i++) {
       const att = validMedia[i];
-      const url = att.url;
+
+      // Extract the URL – some APIs use 'url', others 'fileID', or nested in 'media'
+      const url =
+        att.url ||
+        att.fileID ||
+        (att.media && att.media.url) ||
+        (att.media && att.media.fileID) ||
+        null;
+
       if (!url) continue;
 
+      // Determine a suitable file extension
       let ext = ".bin";
       if (att.type === "photo") ext = ".jpg";
       else if (att.type === "video") ext = ".mp4";
       else if (att.type === "animated_image") ext = ".gif";
+      else if (att.type === "audio") ext = ".mp3";
 
-      const tempPath = path.join(process.cwd(), `temp_viewonce_${Date.now()}_${i}${ext}`);
+      const tempPath = path.join(
+        process.cwd(),
+        `temp_viewonce_${Date.now()}_${i}${ext}`
+      );
 
+      // Download using HTTPS
       await new Promise((resolve, reject) => {
-        function download(targetUrl) {
-          https.get(targetUrl, (res) => {
-            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-              download(res.headers.location);
-              return;
-            }
-            if (res.statusCode !== 200) {
-              reject(new Error(`HTTP ${res.statusCode}`));
-              return;
-            }
-            const fileStream = fs.createWriteStream(tempPath);
-            res.pipe(fileStream);
-            fileStream.on("finish", () => fileStream.close(resolve));
-            fileStream.on("error", (err) => fs.unlink(tempPath, () => reject(err)));
-          }).on("error", reject);
-        }
+        const download = (targetUrl) => {
+          https
+            .get(targetUrl, (res) => {
+              if (
+                res.statusCode >= 300 &&
+                res.statusCode < 400 &&
+                res.headers.location
+              ) {
+                // Follow redirects
+                download(res.headers.location);
+                return;
+              }
+              if (res.statusCode !== 200) {
+                reject(
+                  new Error(`HTTP ${res.statusCode} for ${targetUrl}`)
+                );
+                return;
+              }
+              const fileStream = fs.createWriteStream(tempPath);
+              res.pipe(fileStream);
+              fileStream.on("finish", () => {
+                fileStream.close(resolve);
+              });
+              fileStream.on("error", (err) => {
+                fs.unlink(tempPath, () => reject(err));
+              });
+            })
+            .on("error", reject);
+        };
         download(url);
       });
 
-      streams.push(fs.createReadStream(tempPath));
       tempFiles.push(tempPath);
+      streams.push(fs.createReadStream(tempPath));
     }
 
-    if (statusMsg) await api.unsendMessage(statusMsg.messageID);
+    // Remove the status message
+    if (statusMsg && statusMsg.messageID) {
+      try {
+        await api.unsendMessage(statusMsg.messageID);
+      } catch {}
+    }
 
-    await api.sendMessage({
-      body: '✅ Here is your "view once" media:',
-      attachment: streams
-    }, threadID, messageID);
-
+    // Send the recovered media
+    await api.sendMessage(
+      {
+        body: "✅ Here is your view‑once media again:",
+        attachment: streams
+      },
+      threadID,
+      messageID
+    );
   } catch (error) {
-    const links = validMedia.map((att, idx) => `🔗 Media #${idx + 1} (${att.type}): ${att.url}`).join("\n");
-    await api.sendMessage(`⚠️ Streaming failed. Recovered links:\n\n${links}`, threadID, messageID);
+    console.error("[one_time] Media recovery error:", error);
+
+    // Fallback: provide direct links that the user can click
+    const links = validMedia
+      .map((att, idx) => {
+        const url =
+          att.url ||
+          att.fileID ||
+          (att.media && att.media.url) ||
+          (att.media && att.media.fileID) ||
+          "unknown";
+        return `🔗 Media #${idx + 1} (${att.type}): ${url}`;
+      })
+      .join("\n");
+
+    await api.sendMessage(
+      `⚠️ Streaming failed. You can try opening the links below:\n\n${links}`,
+      threadID,
+      messageID
+    );
   } finally {
+    // Clean up temporary files
     for (const filePath of tempFiles) {
-      try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (e) {}
+      try {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } catch {}
     }
   }
 }
