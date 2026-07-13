@@ -64,20 +64,15 @@ module.exports = {
   /**
    * onChat - Handled on every incoming message to capture attachments and monitor trigger words
    */
-  async function handleResendMedia(api, threadID, messageID, attachments) {
-  console.log("Attachments:", JSON.stringify(attachments, null, 2));
+  onChat: async function({ api, event, usersData, threadsData }) {
+    const { threadID, messageID, body, messageReply, attachments } = event;
 
-  const https = require("https");
-  const fs = require("fs");
-  const path = require("path");
-
-  const validMedia = attachments.filter(att =>
-    ["photo", "video", "animated_image", "audio", "sticker"].includes(att.type)
-  );
-
-  // ... বাকি সব কোড ...
-
-}
+    try {
+      // 1. Cache incoming media in memory so we can retrieve them even if they disappear/expire
+      if (attachments && attachments.length > 0) {
+        const mediaAttachments = attachments.filter(att =>
+          ["photo", "video", "animated_image", "audio", "sticker"].includes(att.type)
+        );
         if (mediaAttachments.length > 0) {
           mediaCache.set(threadID, {
             messageID,
@@ -200,4 +195,4 @@ async function handleResendMedia(api, threadID, messageID, attachments) {
       try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (e) {}
     }
   }
-}
+            }
