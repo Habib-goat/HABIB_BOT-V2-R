@@ -64,15 +64,20 @@ module.exports = {
   /**
    * onChat - Handled on every incoming message to capture attachments and monitor trigger words
    */
-  onChat: async function({ api, event, usersData, threadsData }) {
-    const { threadID, messageID, body, messageReply, attachments } = event;
+  async function handleResendMedia(api, threadID, messageID, attachments) {
+  console.log("Attachments:", JSON.stringify(attachments, null, 2));
 
-    try {
-      // 1. Cache incoming media in memory so we can retrieve them even if they disappear/expire
-      if (attachments && attachments.length > 0) {
-        const mediaAttachments = attachments.filter(att =>
-          ["photo", "video", "animated_image", "audio", "sticker"].includes(att.type)
-        );
+  const https = require("https");
+  const fs = require("fs");
+  const path = require("path");
+
+  const validMedia = attachments.filter(att =>
+    ["photo", "video", "animated_image", "audio", "sticker"].includes(att.type)
+  );
+
+  // ... বাকি সব কোড ...
+
+}
         if (mediaAttachments.length > 0) {
           mediaCache.set(threadID, {
             messageID,
@@ -119,9 +124,14 @@ module.exports = {
  * Downloads and resends media attachments securely using standard HTTPS streams.
  */
 async function handleResendMedia(api, threadID, messageID, attachments) {
+  console.log("Attachments:", JSON.stringify(attachments, null, 2));
+
   const https = require("https");
   const fs = require("fs");
   const path = require("path");
+
+  // ...
+}
 
   // Filter for valid visual and audio attachment types
   const validMedia = attachments.filter(att =>
