@@ -32,7 +32,7 @@ const timerData = {
 اللَّهُمَّ اجْعَلْنَا مِنَ الْمُقِيمِينَ لِلصَّلَاةِ
 
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
-  video: "https://files.catbox.moe/siojtf.mp4"
+  video: "https://files.catbox.moe/ee9khu.mp4"
 },
   "05:00 AM": { text: "⌚┆এখন সকাল ৫টা বাজে❥︎নামাজ পড়ছো তো?🌅☀️", video: "https://files.catbox.moe/5v4nxi.mp4" },
   "06:00 AM": { text: "⌚┆এখন সকাল ৬টা বাজে❥︎ঘুম থেকে উঠো সবাই,🌞☕", video: "https://files.catbox.moe/q9rf0f.mp4" },
@@ -55,7 +55,7 @@ const timerData = {
 رَبِّ اجْعَلْنِي مُقِيمَ الصَّلَاةِ
 
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
-  video: "https://files.catbox.moe/ypt7au.mp4"
+  video: "https://files.catbox.moe/c5qbek.mp4"
 },
   "02:00 PM": { text: "⌚┆এখন দুপুর ২টা বাজে❥︎দুপুরের খাবার খেয়েছো তো?🍛🌤️", video: "https://files.catbox.moe/nstu8b.mp4" },
   "03:00 PM": { text: "⌚┆এখন বিকাল ৩টা বাজে❥︎কাজে ফোকাস করো,🧑‍🔧☀️", video: "https://files.catbox.moe/xmrujv.mp4" },
@@ -72,7 +72,7 @@ const timerData = {
 اللَّهُمَّ تَقَبَّلْ مِنَّا
 
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
-  video: "https://files.catbox.moe/jndni6.mp4"
+  video: "https://files.catbox.moe/vcgbxq.mp4"
 },
   "05:00 PM": { text: "⌚┆এখন বিকাল ৫টা বাজে❥︎একটু বিশ্রাম নাও,🙂↕️🌆", video: "https://files.catbox.moe/dv3qv4.mp4" },
   "06:30 PM": {
@@ -88,7 +88,7 @@ const timerData = {
 اللَّهُمَّ تَقَبَّلْ مِنَّا
 
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
-  video: "https://files.catbox.moe/au2yk5.mp4"
+  video: "https://files.catbox.moe/y8pnz7.mp4"
 },
   "07:00 PM": { text: "⌚┆এখন সন্ধ্যা ৭টা বাজে❥︎এশার নামাজ পড়ো,❤️🌃", video: "https://files.catbox.moe/4v4uyv.mp4" },
   "08:00 PM": {
@@ -104,7 +104,7 @@ const timerData = {
 آمِين يَا رَبَّ الْعَالَمِينَ
 
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
-  video: "https://files.catbox.moe/ltspa4.mp4"
+  video: "https://files.catbox.moe/y8pnz7.mp4"
 },
   "09:00 PM": { text: "⌚┆এখন রাত ৯টা বাজে❥︎ঘুমের প্রস্তুতি নাও,😴🌙", video: "https://files.catbox.moe/sxs5io.mp4" },
   "10:00 PM": { text: "⌚┆এখন রাত ১০টা বাজে❥︎ঘুমাতে যাও, স্বপ্নে দেখা হবে,😴🙂↕️", video: "https://files.catbox.moe/0e4s7h.mp4" },
