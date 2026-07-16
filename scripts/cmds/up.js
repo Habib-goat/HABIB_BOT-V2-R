@@ -1169,18 +1169,24 @@ module.exports = {
     category: "system"
   },
 
-  onStart: async function ({ api, event, message }) {
-    try {
-      if (!canvasModule) {
-        // Fallback to text if canvas fails to compile
-        return sendTextFallback(message, event);
-      }
-      await sendPage("overview", message, api, event);
-    } catch (error) {
-      console.error("[Uptime Module] onStart failure:", error);
-      message.reply("❌ System monitor failed to generate dashboard graphical output.");
+  onStart: async function ({ api, event }) {
+  try {
+    if (!canvasModule) {
+      return sendTextFallback(api, event);
     }
-  },
+
+    await sendPage("overview", api, event);
+
+  } catch (err) {
+    console.error(err);
+
+    api.sendMessage(
+      "❌ System monitor failed to generate dashboard.",
+      event.threadID,
+      event.messageID
+    );
+  }
+},
 
   onChat: async function ({ api, event, message }) {
     if (!event.body) return;
@@ -1273,9 +1279,11 @@ function sendTextFallback(message, event, section = "overview") {
   report += `💡 Reply with: "performance", "network", "storage", "settings" to switch views.\n`;
   report += `🎨 Reply with: "dark" or "light" to toggle themes.`;
 
-  return message.reply(report);
-}
-
+  return message.reply
+  ? message.reply(report)
+  : message.sendMessage
+    ? message.sendMessage(report, event.threadID, event.messageID)
+    : message.sendMessage(report, event.threadID);
 // Generate, cache, save, attach and safely clean up the graphics card dashboard
 async function sendPage(page, message, api, event) {
   const start = Date.now();
@@ -1338,7 +1346,13 @@ async function sendPage(page, message, api, event) {
   fs.writeFileSync(file, canvasImg.toBuffer("image/png"));
 
   // Reply as Messenger attachment stream
-  await message.reply({ attachment: fs.createReadStream(file) });
+  await api.sendMessage(
+  {
+    attachment: fs.createReadStream(file)
+  },
+  event.threadID,
+  event.messageID
+);
 
   // Clean cache file async with fallback handling
   setTimeout(() => {
