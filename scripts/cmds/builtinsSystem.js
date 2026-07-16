@@ -172,14 +172,23 @@ await api.sendMessage(info, event.threadID);
     },
     onStart: async ({ api, event, args }) => {
       if (args.length === 0) {
-        const display = `⚙️ **RIYAD BOT CONFIGURATION**:\n` +
-          `• prefix: \`${config.prefix}\`\n` +
-          `• botName: \`${config.botName}\`\n` +
-          `• language: \`${config.language}\`\n` +
-          `• theme: \`${config.theme}\`\n` +
-          `• antiSpam: \`${config.antiSpam.enabled ? "Enabled" : "Disabled"}\`\n\n` +
-          `💡 Use \`/config prefix ?\` or \`/config language vi\` to update settings.`;
-        await api.sendMessage(display, event.threadID);
+        const display =
+`╔══════════════════╗
+║       ⚙️ 𝗥𝗜𝗬𝗔𝗗•°•𝗕𝗢𝗧 ⚙️
+║    ⚠️𝗖𝗢𝗡𝗙𝗜𝗚𝗨𝗥𝗔𝗧𝗜𝗢𝗡⚠️
+╠══════════════════╣
+║ 🔹 Prefix      : ${config.prefix}
+║ 🤖 Bot Name    : ${config.botName}
+║ 🌐 Language    : ${config.language === "en" ? "English" : config.language}
+║ 🌙 Theme       : ${config.theme.charAt(0).toUpperCase() + config.theme.slice(1)}
+║ 🛡️ Anti-Spam   : ${config.antiSpam.enabled ? "✅ Enabled" : "❌ Disabled"}
+╠══════════════════╣
+║ 💡 Quick Commands
+║ • /config prefix ?
+║ • /config language vi
+╚══════════════════╝`;
+
+await api.sendMessage(display, event.threadID);
       } else {
         const key = args[0];
         const val = args.slice(1).join(" ");
