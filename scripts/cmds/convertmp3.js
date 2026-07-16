@@ -21,6 +21,22 @@ module.exports = {
 
     // Define files cleanups tracker
     const tempFiles = [];
+let progressMsgID = null;
+
+async function updateProgress(percent) {
+  if (!progressMsgID || !api.editMessage) return;
+
+  const bar =
+    "▰".repeat(Math.floor(percent / 10)) +
+    "▱".repeat(10 - Math.floor(percent / 10));
+
+  try {
+    await api.editMessage(
+      `🎧 MP3 Processing...\n\n${bar} ${percent}%`,
+      progressMsgID
+    );
+  } catch {}
+}
 
     try {
       // 🔗 Get video URL from args or replied message
@@ -35,8 +51,18 @@ module.exports = {
         return api.sendMessage("⚠️ ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴠɪᴅᴇᴏ ᴜʀʟ ᴏʀ ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴠɪᴅᴇᴏ!", threadID, messageID);
       }
 
-      // ⏳ Font ABC style message / progress notice
-      api.sendMessage("Mᴘ3 ᴘʀᴏᴄᴇssɪɴɢ ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ ⏳", threadID, messageID);
+      // ⏳ Progress message
+api.sendMessage(
+  "🎧 MP3 Processing...\n\n▰▱▱▱▱▱▱▱▱▱ 0%",
+  threadID,
+  async (err, info) => {
+    if (!err) {
+      progressMsgID = info.messageID;
+      await updateProgress(10);
+    }
+  },
+  messageID
+);
 
       // Ensure cache directory exists
       const cacheDir = path.join(__dirname, "cache");
@@ -49,7 +75,7 @@ module.exports = {
 
       // Track files for eventual cleanup
       tempFiles.push(tempVideoPath, outputMp3Path);
-
+      
       // 📥 Download the video with stream response to handle large files efficiently
       const response = await axios({
         method: "get",
@@ -70,7 +96,10 @@ module.exports = {
         response.data.on("error", reject);
       });
 
+      await updateProgress(40);
+      
       // 🔊 Convert the downloaded video file to a real MP3 using fluent-ffmpeg
+      await updateProgress(60);
       await new Promise((resolve, reject) => {
         ffmpeg(tempVideoPath)
           .toFormat("mp3")
@@ -85,11 +114,17 @@ module.exports = {
       });
 
       // Check if file was successfully generated
+      await updateProgress(100);
       if (!(await fs.pathExists(outputMp3Path))) {
         throw new Error("FFmpeg output file was not generated.");
       }
 
       // 🔊 Send back the MP3 file as an attachment
+      if (progressMsgID && api.unsendMessage) {
+  try {
+    await api.unsendMessage(progressMsgID);
+  } catch {}
+}
       api.sendMessage({
         body: "Mᴘ3 ʀᴇᴀᴅʏ ✅",
         attachment: fs.createReadStream(outputMp3Path)
