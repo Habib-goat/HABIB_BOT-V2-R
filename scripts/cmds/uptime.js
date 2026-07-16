@@ -46,24 +46,24 @@ module.exports = {
     const cpuModel = cpus.length > 0 ? cpus[0].model : 'N/A';
     const cpuCores = cpus.length;
 
-    let response = `╔════════════════════════════╗
+    let response = `╔══════════════════╗
 ║ ⚡ ${config.botName.toUpperCase()} 𝐒𝐘𝐒𝐓𝐄𝐌 ⚡
 ║     『 𝐔𝐏𝐓𝐈𝐌𝐄 ⚜️ 𝐋𝐈𝐕𝐄 』
-╠════════════════════════════╣
+╠══════════════════╣
 ║ ⏱️ 𝐔𝐏𝐓𝐈𝐌𝐄   : ${uptimeStr}
 ║ 📁 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒 : ${commandLoader.commands.size} Active
 ║ 🔀 𝐀𝐋𝐈𝐀𝐒𝐄𝐒  : ${commandLoader.aliases.size}
 ║ 👥 𝐔𝐒𝐄𝐑𝐒    : ${totalUsers}
 ║ 👨‍👩‍👧‍👦 𝐆𝐑𝐎𝐔𝐏𝐒   : ${totalThreads}
-╠════════════════════════════╣
+╠══════════════════╣
 ║ 💾 𝐌𝐄𝐌𝐎𝐑𝐘   : ${(usedMemory / 1024 / 1024).toFixed(1)} MB
 ║ 📦 𝐓𝐎𝐓𝐀𝐋    : ${(totalMemory / 1024 / 1024).toFixed(0)} MB
 ║ ⚡ 𝐍𝐎𝐃𝐄.𝐉𝐒  : ${process.version}
 ║ 🖥️ 𝐂𝐏𝐔      : ${cpuCores}x ${cpuModel}
 ║ 🛡️ 𝐏𝐋𝐀𝐓𝐅𝐎𝐑𝐌 : ${os.platform()} (${os.arch()})
-╠════════════════════════════╣
-║      🟢 𝐒𝐘𝐒𝐓𝐄𝐌 • 𝐎𝐍𝐋𝐈𝐍𝐄 🟢
-╚════════════════════════════╝`;
+╠══════════════════╣
+║ 🟢𝐒𝐘𝐒𝐓𝐄𝐌 • 𝐎𝐍𝐋𝐈𝐍𝐄🟢
+╚══════════════════╝`;
     await api.sendMessage(response, event.threadID);
   }
 };
