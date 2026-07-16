@@ -1188,10 +1188,9 @@ module.exports = {
   }
 },
 
-  onChat: async function ({ api, event, message }) {
+  onChat: async function ({ api, event }) {
     if (!event.body) return;
     const body = event.body.toLowerCase().trim();
-
     // Block hacking simulation command
     if (body === "hack") {
       api.sendMessage("🔐 Access Denied — Administrative Privileges Required.", event.threadID);
@@ -1199,45 +1198,59 @@ module.exports = {
     }
 
     // Toggle themes on command
-    if (body === "dark" || body === "light") {
-      themeMap[event.threadID] = body;
-      const fakeMsg = {
-        reply: (data) => api.sendMessage(data, event.threadID, null, event.messageID)
-      };
-      try {
+if (body === "dark" || body === "light") {
+    themeMap[event.threadID] = body;
+
+    try {
         if (!canvasModule) {
-          api.sendMessage(`✅ Theme switched to ${body}.`, event.threadID);
-          return;
+            return api.sendMessage(
+                `✅ Theme switched to ${body}.`,
+                event.threadID,
+                event.messageID
+            );
         }
-        await sendPage("settings", fakeMsg, api, event);
-      } catch (err) {
+
+        await sendPage("settings", api, event);
+
+    } catch (err) {
         console.error("[Uptime Module] Theme toggling failure:", err);
-        api.sendMessage(`✅ Theme set to ${body} (Failed to re-render settings).`, event.threadID);
-      }
-      return;
+
+        api.sendMessage(
+            `✅ Theme set to ${body} (Failed to re-render settings).`,
+            event.threadID,
+            event.messageID
+        );
     }
+
+    return;
+}
 
     // Toggle pages on command reply
-    const pages = ["performance", "network", "storage", "settings", "overview"];
-    if (pages.includes(body) && event.messageReply) {
-      try {
-        const fakeMsg = {
-          reply: (data) => api.sendMessage(data, event.threadID, null, event.messageID)
-        };
-        if (!canvasModule) {
-          return sendTextFallback(fakeMsg, event, body);
-        }
-        await sendPage(body, fakeMsg, api, event);
-      } catch (err) {
-        console.error(`[Uptime Module] Page switching to "${body}" failure:`, err);
-        api.sendMessage("❌ Failed to render requested sub-panel.", event.threadID);
-      }
+const pages = ["performance", "network", "storage", "settings", "overview"];
+
+if (pages.includes(body) && event.messageReply) {
+  try {
+    if (!canvasModule) {
+      return sendTextFallback(api, event, body);
     }
+
+    await sendPage(body, api, event);
+
+  } catch (err) {
+    console.error(`[Uptime Module] Page switching to "${body}" failure:`, err);
+
+    api.sendMessage(
+      "❌ Failed to render requested sub-panel.",
+      event.threadID,
+      event.messageID
+    );
   }
-};
+
+  return;
+}
 
 // Generates and sends a highly polished text fallback report if Canvas fails to load in the Node environment
-function sendTextFallback(message, event, section = "overview") {
+function sendTextFallback(api, event, section = "overview") {
   const { timeStr, dateStr } = getDhakaTime();
   const up = process.uptime();
   const d = Math.floor(up / 86400);
@@ -1279,11 +1292,11 @@ function sendTextFallback(message, event, section = "overview") {
   report += `💡 Reply with: "performance", "network", "storage", "settings" to switch views.\n`;
   report += `🎨 Reply with: "dark" or "light" to toggle themes.`;
 
-  return message.reply
-  ? message.reply(report)
-  : message.sendMessage
-    ? message.sendMessage(report, event.threadID, event.messageID)
-    : message.sendMessage(report, event.threadID);
+return api.sendMessage(
+  report,
+  event.threadID,
+  event.messageID
+);
 // Generate, cache, save, attach and safely clean up the graphics card dashboard
 async function sendPage(page, message, api, event) {
   const start = Date.now();
