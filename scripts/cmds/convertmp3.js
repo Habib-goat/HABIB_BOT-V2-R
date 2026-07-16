@@ -120,15 +120,25 @@ api.sendMessage(
       }
 
       // 🔊 Send back the MP3 file as an attachment
-      if (progressMsgID && api.unsendMessage) {
-  try {
-    await api.unsendMessage(progressMsgID);
-  } catch {}
-}
-      api.sendMessage({
-        body: "Mᴘ3 ʀᴇᴀᴅʏ ✅",
-        attachment: fs.createReadStream(outputMp3Path)
-      }, threadID, async () => {
+      api.sendMessage(
+  {
+    body: "Mᴘ3 ʀᴇᴀᴅʏ ✅",
+    attachment: fs.createReadStream(outputMp3Path)
+  },
+  threadID,
+  async () => {
+    for (const file of tempFiles) {
+      try {
+        if (await fs.pathExists(file)) {
+          await fs.unlink(file);
+        }
+      } catch (cleanupErr) {
+        console.error(`[Cleanup Error] Failed to delete: ${file}`, cleanupErr);
+      }
+    }
+  },
+  messageID
+);
         // Cleanup files after sending
         for (const file of tempFiles) {
           try {
