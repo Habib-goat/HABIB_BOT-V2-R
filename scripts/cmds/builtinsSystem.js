@@ -506,11 +506,19 @@ role: 2, // Bot Admin + Owner
     onStart: async ({ api, event }) => {
       const cpus = os.cpus();
       const first = cpus[0] || { model: "N/A", speed: 0 };
-      await api.sendMessage(`💻 **CPU CORE DESIGN**:\n` +
-        `• Processor Model: ${first.model}\n` +
-        `• Speed: ${first.speed} MHz\n` +
-        `• Cores: ${cpus.length} physical threads\n` +
-        `• Architecture: ${os.arch()}`, event.threadID);
+      const msg = `╔══════════════════╗
+║ 💻 𝐂𝐏𝐔 𝐂𝐎𝐑𝐄 𝐈𝐍𝐅𝐎 💻
+║ 『 𝐇𝐀𝐑𝐃𝐖𝐀𝐑𝐄 ⚠️ 𝐋𝐈𝐕𝐄 』
+╠══════════════════╣
+║ 🧠 𝐌𝐎𝐃𝐄𝐋 : ${first.model}
+║ ⚡ 𝐒𝐏𝐄𝐄𝐃 : ${first.speed} MHz
+║ 🔥 𝐂𝐎𝐑𝐄𝐒 : ${cpus.length} Physical Threads
+║ 🛡️ 𝐀𝐑𝐂𝐇 : ${os.arch()}
+╠══════════════════╣
+║      🟢 𝐂𝐏𝐔 • 𝐎𝐍𝐋𝐈𝐍𝐄 🟢
+╚══════════════════╝`;
+
+await api.sendMessage(msg, event.threadID);
     }
   },
   {
