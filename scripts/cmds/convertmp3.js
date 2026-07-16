@@ -139,18 +139,6 @@ api.sendMessage(
   },
   messageID
 );
-        // Cleanup files after sending
-        for (const file of tempFiles) {
-          try {
-            if (await fs.pathExists(file)) {
-              await fs.unlink(file);
-            }
-          } catch (cleanupErr) {
-            console.error(`[Cleanup Error] Failed to delete: ${file}`, cleanupErr);
-          }
-        }
-      }, messageID);
-
     } catch (err) {
       console.error(err);
       api.sendMessage(`⚠️ Fᴀɪʟᴇᴅ ᴛᴏ ᴄᴏɴᴠᴇʀᴛ ᴠɪᴅᴇᴏ! Error: ${err.message || err}`, threadID, messageID);
