@@ -69,7 +69,7 @@ try {
       surahs.forEach((surah) => {
         // Pad the number for nice alignment (e.g., 01, 02... 114)
         const paddedNum = String(surah.id).padStart(2, '0');
-        menuMessage += `${paddedNum}. ${surah.name}\n`;
+        menuMessage += `${paddedNum}. ${surah.transliteration}\n`;
       });
 
       menuMessage += "\nExample usage:\n";
