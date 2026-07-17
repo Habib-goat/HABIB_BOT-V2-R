@@ -99,7 +99,7 @@ const timerData = {
 💚 হাসিমুখে দিন শুরু করুন।
 
 ╰━━━━━━━━━━━━━━━━━━━━╯`,
-  video: "https://files.catbox.moe/q6b7fo.mp4"
+  video: "https://files.catbox.moe/y0ewip.mp4"
 },
 
 "08:00 AM": {
