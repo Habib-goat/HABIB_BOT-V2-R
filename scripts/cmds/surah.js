@@ -18,7 +18,7 @@ module.exports = {
     cooldowns: 5
   },
 
-  onStart: async function({ api, event, args }) {
+  onStart: async function({ api, event, args, replyManager }) {
     const { threadID, messageID } = event;
 
     // Resolve surah.json path: check current folder first, then parent folder
@@ -77,9 +77,15 @@ try {
       menuMessage += "• /surah 36 (Ya-Sin)\n";
       menuMessage += "• /surah 112 (Al-Ikhlas)";
 
-      return sendLongMessage(api, menuMessage, threadID, messageID);
-    }
+      const info = await api.sendMessage(menuMessage, threadID, messageID);
 
+replyManager.set(info.messageID, {
+  commandName: "surah",
+  authorID: event.senderID
+});
+
+return;
+    }
     // Feature 2: Display specific Surah when number is provided (e.g. /surah 1)
     const surahInput = parseInt(args[0], 10);
 
@@ -118,6 +124,11 @@ surah.verses.forEach(v => {
 
 return sendLongMessage(api, responseMessage, threadID, messageID);
     }
+},
+onReply: async function({ api, event, Reply, replyManager }) {
+    // এখানে পরে রিপ্লাইয়ের কোড থাকবে
+  }
+
 };
 /**
  * Splits and sends a long message to avoid hitting the Facebook Messenger 2000-character limit.
