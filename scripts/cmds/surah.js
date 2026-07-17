@@ -22,35 +22,45 @@ module.exports = {
     const { threadID, messageID } = event;
 
     // Resolve surah.json path: check current folder first, then parent folder
-    let surahPath = path.join(__dirname, 'surah.json');
-    if (!fs.existsSync(surahPath)) {
-      surahPath = path.join(__dirname, '..', 'surah.json');
+    // Load all 6 JSON files
+let surahs = [];
+
+try {
+  const files = [
+    "surah_001_020.json",
+    "surah_021_040.json",
+    "surah_041_060.json",
+    "surah_061_080.json",
+    "surah_081_100.json",
+    "surah_101_114.json"
+  ];
+
+  for (const file of files) {
+    let filePath = path.join(__dirname, file);
+
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(__dirname, "..", file);
     }
 
-    // Verify database existence
-    if (!fs.existsSync(surahPath)) {
+    if (!fs.existsSync(filePath)) {
       return api.sendMessage(
-        "❌ Surah database (surah.json) was not found.\n" +
-        "Please ensure 'surah.json' is placed in the same folder as 'surah.js' or in the parent folder.",
+        `❌ Database file not found:\n${file}`,
         threadID,
         messageID
       );
     }
 
-    let surahs;
-    try {
-      const fileData = fs.readFileSync(surahPath, 'utf8');
-      surahs = JSON.parse(fileData);
-    } catch (error) {
-      return api.sendMessage(
-        "❌ Error reading the Surah database.\n" +
-        "Please verify that 'surah.json' contains valid JSON data.",
-        threadID,
-        messageID
-      );
-    }
-
-    // Feature 1: Menu list when no arguments are provided (e.g. /surah)
+    const json = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    surahs.push(...json);
+  }
+} catch (err) {
+  return api.sendMessage(
+    "❌ Failed to load Quran database.\n" + err.message,
+    threadID,
+    messageID
+  );
+}
+      // Feature 1: Menu list when no arguments are provided (e.g. /surah)
     if (args.length === 0) {
       let menuMessage = "📖 RIYAD BOT - HOLY QURAN\n\n";
       menuMessage += `Total Surahs: ${surahs.length}\n\n`;
