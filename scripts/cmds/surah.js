@@ -68,7 +68,7 @@ try {
       // Build the list of all Surahs
       surahs.forEach((surah) => {
         // Pad the number for nice alignment (e.g., 01, 02... 114)
-        const paddedNum = String(surah.number).padStart(2, '0');
+        const paddedNum = String(surah.id).padStart(2, '0');
         menuMessage += `${paddedNum}. ${surah.name}\n`;
       });
 
@@ -93,7 +93,7 @@ try {
     }
 
     // Fetch the surah by number
-    const surah = surahs.find(s => s.number === surahInput);
+    const surah = surahs.find(s => s.id === surahInput);
 
     if (!surah) {
       return api.sendMessage(
@@ -104,18 +104,22 @@ try {
     }
 
     // Format the Surah message details
-    let responseMessage = `📖 Surah ${surah.name}\n\n`;
-    responseMessage += "🕌 Arabic\n";
-    responseMessage += `${surah.arabic}\n\n`;
-    responseMessage += "🔤 বাংলা উচ্চারণ\n";
-    responseMessage += `${surah.bengali}\n\n`;
-    responseMessage += `📌 Total Ayah: ${surah.total_ayah}\n`;
-    responseMessage += `📍 Revealed: ${surah.revelation}`;
+    let responseMessage = `📖 ${surah.name}\n`;
+responseMessage += `🔤 ${surah.transliteration}\n`;
+responseMessage += `📚 ${surah.translation}\n`;
+responseMessage += `📌 Total Ayah: ${surah.total_verses}\n`;
+responseMessage += `📍 Revealed: ${surah.type}\n\n`;
 
-    return sendLongMessage(api, responseMessage, threadID, messageID);
+surah.verses.forEach(v => {
+  responseMessage += `(${v.id}) ${v.text}\n`;
+  responseMessage += `${v.pronunciation}\n`;
+  responseMessage += `${v.translation}\n\n`;
+});
+
+return sendLongMessage(api, responseMessage, threadID, messageID);
+    }
   }
 };
-
 /**
  * Splits and sends a long message to avoid hitting the Facebook Messenger 2000-character limit.
  * Sends chunks sequentially to maintain correct ordering.
