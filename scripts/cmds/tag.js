@@ -3,7 +3,7 @@ module.exports = {
     name: "tag",
     version: "1.0.0",
     author: "Nayan (Fixed)",
-    role: 1,
+    role: 0,
     description: "Mention members of the group chat with a custom message.",
     category: "box chat",
     guide: "{pn} [all | message | reply]",
