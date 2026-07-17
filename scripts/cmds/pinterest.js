@@ -26,7 +26,7 @@ module.exports = {
     await fs.ensureDir(cacheDir);
 
     const statusMsg = await new Promise((resolve) => {
-      api.sendMessage(`🔍 Searching Pinterest for "\${query}"... Downloading top images... `, threadID, (err, info) => resolve(info), messageID);
+      api.sendMessage(`🔍 Searching Pinterest for "${query}"... Downloading top images... `, threadID, (err, info) => resolve(info), messageID);
     });
 
     const tempFiles = [];
@@ -55,7 +55,7 @@ module.exports = {
           attachments.push(fs.createReadStream(imagePath));
           tempFiles.push(imagePath);
         } catch (err) {
-          console.warn(`Failed to download Pinterest image \${idx + 1}:`, err.message);
+          console.warn(`Failed to download Pinterest image ${idx + 1}:`, err.message);
         }
       });
 
@@ -70,7 +70,7 @@ module.exports = {
       }
 
       return api.sendMessage({
-        body: `📌 Pinterest search results for: "\${query}"`,
+        body: `📌 Pinterest search results for: "${query}"`,
         attachment: attachments
       }, threadID, async () => {
         for (const filePath of tempFiles) {
