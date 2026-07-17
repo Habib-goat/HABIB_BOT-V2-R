@@ -75,8 +75,10 @@ async removeUserFromGroup(userID, threadID) {
   async getThreadList(limit = 100, timestamp = null, tags = ["INBOX"]) {
     throw new Error("Method 'getThreadList' must be implemented by the adapter subclass.");
   }
+getCurrentUserID() {
+  throw new Error("Method 'getCurrentUserID' must be implemented by the adapter subclass.");
 }
-
+}
 /**
  * Adapter implementation for Facebook Chat API (FCA) compatible libraries
  * (e.g., fca-unofficial, facebook-chat-api)
@@ -308,19 +310,28 @@ async editMessage(messageID, text) {
     });
   });
 }
+
   async getThreadList(limit = 100, timestamp = null, tags = ["INBOX"]) {
-    return new Promise((resolve, reject) => {
-      if (typeof this.api.getThreadList !== "function") {
-        return reject(new Error("Underlying FCA getThreadList function is not available."));
-      }
-      this.api.getThreadList(limit, timestamp, tags, (err, list) => {
-        if (err) return reject(err);
-        resolve(list || []);
-      });
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.getThreadList !== "function") {
+      return reject(new Error("Underlying FCA getThreadList function is not available."));
+    }
+
+    this.api.getThreadList(limit, timestamp, tags, (err, list) => {
+      if (err) return reject(err);
+      resolve(list || []);
     });
-  }
+  });
 }
 
+getCurrentUserID() {
+  if (typeof this.api.getCurrentUserID === "function") {
+    return this.api.getCurrentUserID();
+  }
+
+  return this.api.currentUserID || this.api.userID || null;
+}
+}
 /**
  * Adapter implementation for Simulated Environment (Local / Dashboard testing)
  */
