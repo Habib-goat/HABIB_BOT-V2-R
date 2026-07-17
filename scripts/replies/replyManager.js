@@ -56,8 +56,7 @@ await cmd.onReply({
 
   replyData,
 
-  args: event.body ? event.body.trim().split(/\s+/).slice(1) : [],
-
+  args: event.body ? event.body.trim().split(/\s+/) : [],
   message: api,
 
   usersData: database,
