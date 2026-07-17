@@ -118,7 +118,6 @@ surah.verses.forEach(v => {
 
 return sendLongMessage(api, responseMessage, threadID, messageID);
     }
-  }
 };
 /**
  * Splits and sends a long message to avoid hitting the Facebook Messenger 2000-character limit.
