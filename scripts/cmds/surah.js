@@ -123,9 +123,9 @@ surah.verses.forEach(v => {
 });
 
 return sendLongMessage(api, responseMessage, threadID, messageID);
-    }
-},
-onReply: async function({ api, event, Reply, replyManager }) {
+  },
+
+  onReply: async function({ api, event, Reply, replyManager }) {
     // এখানে পরে রিপ্লাইয়ের কোড থাকবে
   }
 
