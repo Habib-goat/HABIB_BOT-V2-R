@@ -1,7 +1,7 @@
 module.exports = {
   config: {
     name: "out",
-    aliases: ["leave", "bye", "exit"],
+    aliases: ["leave", "bye", "out"],
     version: "1.0.0",
     author: "Riyad",
     role: 2,
