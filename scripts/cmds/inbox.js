@@ -85,7 +85,7 @@ module.exports = {
               tempFiles.push(tempPath);
               
               // Forward the attachment to the user's private inbox
-              await api.sendMessage({
+              await api.sendMessageDM({
                 body: `📬 *Forwarded ${capitalize(type)}:*`,
                 attachment: fs.createReadStream(tempPath)
               }, senderID);
@@ -113,7 +113,7 @@ module.exports = {
                   tempFiles.push(tempVideoPath);
                   
                   // Send downloaded video as attachment
-                  await api.sendMessage({
+                  await api.sendMessageDM({
                     body: `📬 *Forwarded Video from URL:*`,
                     attachment: fs.createReadStream(tempVideoPath)
                   }, senderID);
@@ -128,7 +128,7 @@ module.exports = {
           // If no video was successfully downloaded, or if there are no URLs, forward the text body
           if (!videoDownloaded) {
             const formattedText = `📬 *Forwarded Message:*\n━━━━━━━━━━━━━━━\n${bodyText}`;
-            await api.sendMessage({ body: formattedText }, senderID);
+            await api.sendMessageDM({ body: formattedText }, senderID);
             sentAny = true;
           }
         }
@@ -138,7 +138,7 @@ module.exports = {
 
         // If nothing was forwarded (empty message/unsupported format)
         if (!sentAny) {
-          await api.sendMessage({ body: "⚠️ The replied message does not contain any forwardable content." }, senderID);
+          await api.sendMessageDM({ body: "⚠️ The replied message does not contain any forwardable content." }, senderID);
         }
 
       } catch (err) {
