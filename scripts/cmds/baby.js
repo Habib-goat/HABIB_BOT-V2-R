@@ -19,7 +19,7 @@ module.exports.config = {
 module.exports.onStart = async function ({ api, event, args, usersData, threadsData, replyManager }) {
  try {
  const uid = event.senderID;
- const senderName = await usersData.getNameUser(uid);
+ const senderName = event.senderName || "User";
  const rawQuery = args.join(" ");
  const query = rawQuery.toLowerCase();
  const simsim = await getMainAPI();
@@ -117,7 +117,7 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
 
 module.exports.onReply = async function ({ api, event, handleReply, usersData, threadsData, replyManager }) {
  try {
- const senderName = await usersData.getNameUser(event.senderID);
+ const senderName = event.senderName || "User";
  const replyText = event.body ? event.body.toLowerCase() : "";
  if (!replyText) return;
  const simsim = await getMainAPI();
@@ -150,7 +150,7 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  const raw = event.body ? event.body.toLowerCase().trim() : "";
  if (!raw) return;
 
- const senderName = await usersData.getNameUser(event.senderID);
+ const senderName = event.senderName || "User";
  const senderID = event.senderID;
 
  const simsim = await getMainAPI();
