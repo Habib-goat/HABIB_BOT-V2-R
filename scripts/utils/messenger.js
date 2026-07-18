@@ -215,6 +215,10 @@ function startMessenger(app, wsServer) {
 console.log("=== ADAPTER DEBUG ===");
 console.log("RAW sendMessage =", typeof api.sendMessage);
 console.log("RAW sendMessageDM =", typeof api.sendMessageDM);
+
+console.log("sendMessageDM source:");
+console.log(api.sendMessageDM.toString());
+
 console.log("ADAPTER sendMessage =", typeof adaptedApi.sendMessage);
 console.log("ADAPTER sendMessageDM =", typeof adaptedApi.sendMessageDM);
 console.log("=====================");
