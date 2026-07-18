@@ -18,15 +18,15 @@ const os = require('os');
 
 module.exports = {
   config: {
-    name: "inbox",
-    version: "1.1.0",
-    hasPermission: 0,
-    credits: "AI Coding Assistant",
-    description: "Receive a friendly greeting or forward replied media/text to your private inbox.",
-    commandCategory: "utility",
-    usages: "inbox [reply to a message to forward it]",
-    cooldowns: 5
-  },
+  name: "inbox",
+  version: "1.1.0",
+  role: 0,
+  countDown: 5,
+  credits: "AI Coding Assistant",
+  description: "Receive a friendly greeting or forward replied media/text to your private inbox.",
+  commandCategory: "utility",
+  guide: "inbox"
+},
 
   /**
    * Main command execution entry point
@@ -271,4 +271,4 @@ function cleanupTempFiles(files) {
       console.error(`Failed to delete temp file ${file}:`, err);
     }
   }
-                    }
+}
