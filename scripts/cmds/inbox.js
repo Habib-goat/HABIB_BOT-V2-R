@@ -142,14 +142,18 @@ module.exports = {
         }
 
       } catch (err) {
-        // Safe cleanup in case of exceptions
-        cleanupTempFiles(tempFiles);
-        console.error("Inbox Command Error:", err);
-        
-        // Notify user about inbox restriction or other failures
-        await api.sendMessage("❌ Please message me first in inbox.", threadID, messageID);
-      }
+  console.error("========== DM ERROR ==========");
+  console.error(err);
+  console.error("Message:", err?.message);
+  console.error("Stack:", err?.stack);
+  console.error("==============================");
 
+  await api.sendMessage(
+    "❌ Please message me first in inbox.",
+    threadID,
+    messageID
+  );
+}
     } else {
       // --- Normal Inbox Mode ---
       try {
