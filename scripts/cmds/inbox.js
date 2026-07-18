@@ -159,7 +159,7 @@ module.exports = {
 console.log("Trying to send inbox...");
         
         // Send to user's private Messenger thread
-        await api.sendMessage({ body: messageContent }, senderID);
+        await api.sendMessageDM({ body: messageContent }, senderID);
         console.log("Inbox sent successfully");
 
       } catch (err) {
