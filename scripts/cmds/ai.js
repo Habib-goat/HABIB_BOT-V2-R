@@ -9,7 +9,7 @@ const FormData = require('form-data'); // For handling downloads
 module.exports = {
     config: {
         name: "ai",
-        aliases: [],
+        aliases: ["grok", "edit", "imageai"],
         version: "1.0.0",
         author: "Grok",
         countDown: 10,
