@@ -29,12 +29,12 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  const r = ran[Math.floor(Math.random() * ran.length)];
  return api.sendMessage(r, event.threadID, (err, info) => {
  if (!err) {
- replyManager.push({
- name: module.exports.config.name,
- messageID: info.messageID,
- author: event.senderID,
- type: "simsimi"
- });
+ replyManager.register(info.messageID, {
+  name: module.exports.config.name,
+  commandName: "baby",
+  authorID: event.senderID,
+  type: "simsimi"
+});
  }
  });
  }
@@ -75,12 +75,13 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  let groupName = event.threadName ? event.threadName : "";
  try {
  if (!groupName && groupID != uid) {
- if (threadsData && typeof threadsData.getName === "function") {
- groupName = await threadsData.getName(groupID);
- } else {
- const threadInfo = await api.getThreadInfo(groupID);
- if (threadInfo?.threadName) groupName = threadInfo.threadName;
- }
+ if (threadsData && typeof threadsData.getThread === "function") {
+  const thread = await threadsData.getThread(groupID);
+  groupName = thread?.threadName || "";
+} else {
+  const threadInfo = await api.getThreadInfo(groupID);
+  if (threadInfo?.threadName) groupName = threadInfo.threadName;
+}
  }
  } catch {}
 
@@ -97,12 +98,12 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  await new Promise(resolve => {
  api.sendMessage(rep, event.threadID, (err, info) => {
  if (!err) {
- replyManager.push({
- name: module.exports.config.name,
- messageID: info.messageID,
- author: event.senderID,
- type: "simsimi"
- });
+ replyManager.register(info.messageID, {
+  name: module.exports.config.name,
+  commandName: "baby",
+  authorID: event.senderID,
+  type: "simsimi"
+});
  }
  resolve();
  }, event.messageID);
@@ -127,12 +128,12 @@ module.exports.onReply = async function ({ api, event, handleReply, usersData, t
  await new Promise(resolve => {
  api.sendMessage(rep, event.threadID, (err, info) => {
  if (!err) {
- replyManager.push({
- name: module.exports.config.name,
- messageID: info.messageID,
- author: event.senderID,
- type: "simsimi"
- });
+ replyManager.register(info.messageID, {
+  name: module.exports.config.name,
+  commandName: "baby",
+  authorID: event.senderID,
+  type: "simsimi"
+});
  }
  resolve();
  }, event.messageID);
@@ -265,12 +266,12 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  const randomReply = greetings[Math.floor(Math.random() * greetings.length)];
  return api.sendMessage(randomReply, event.threadID, (err, info) => {
  if (!err) {
- replyManager.push({
- name: module.exports.config.name,
- messageID: info.messageID,
- author: senderID,
- type: "simsimi"
- });
+ replyManager.register(info.messageID, {
+  name: module.exports.config.name,
+  commandName: "baby",
+  authorID: event.senderID,
+  type: "simsimi"
+});
  }
  }, event.messageID);
  }
@@ -290,12 +291,12 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  await new Promise(resolve => {
  api.sendMessage(rep, event.threadID, (err, info) => {
  if (!err) {
- replyManager.push({
- name: module.exports.config.name,
- messageID: info.messageID,
- author: senderID,
- type: "simsimi"
- });
+ replyManager.register(info.messageID, {
+  name: module.exports.config.name,
+  commandName: "baby",
+  authorID: event.senderID,
+  type: "simsimi"
+});
  }
  resolve();
  }, event.messageID);
@@ -303,5 +304,7 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  }
  }
 
- } catch {}
+ } catch (err) {
+  console.error(err);
+}
 };
