@@ -95,7 +95,18 @@ async reply(message, event) {
     event.messageID
   );
 }
+async sendMessageDM(message, userID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.sendMessageDM !== "function") {
+      return reject(new Error("Underlying FCA sendMessageDM function is not available."));
+    }
 
+    this.api.sendMessageDM(message, userID, (err, info) => {
+      if (err) return reject(err);
+      resolve(info || {});
+    });
+  });
+}
 async react(emoji, messageID) {
   return this.setReaction(emoji, messageID);
 }
