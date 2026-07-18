@@ -32,6 +32,13 @@ module.exports = {
    * Main command execution entry point
    */
   onStart: async function ({ api, event, args, usersData, threadsData, message }) {
+
+    console.log("Inbox command executed!");
+
+await api.sendMessage("✅ Inbox command is working!", event.threadID);
+
+return;
+    
     const senderID = event.senderID;
     const threadID = event.threadID;
     const messageID = event.messageID;
