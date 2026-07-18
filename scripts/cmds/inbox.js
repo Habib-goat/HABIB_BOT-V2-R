@@ -34,10 +34,6 @@ module.exports = {
   onStart: async function ({ api, event, args, usersData, threadsData, message }) {
 
     console.log("Inbox command executed!");
-
-await api.sendMessage("✅ Inbox command is working!", event.threadID);
-
-return;
     
     const senderID = event.senderID;
     const threadID = event.threadID;
@@ -159,11 +155,15 @@ return;
       try {
         const greeting = getRandomGreeting();
         const messageContent = `${greeting}\n\nHow can I help you?`;
-
+        
+console.log("Trying to send inbox...");
+        
         // Send to user's private Messenger thread
         await api.sendMessage({ body: messageContent }, senderID);
+        console.log("Inbox sent successfully");
 
       } catch (err) {
+        console.error(err);
         console.error("Inbox Direct Message Error:", err);
         // Reply in the group thread to prompt user to message the bot first
         await api.sendMessage("❌ Please message me first in inbox.", threadID, messageID);
