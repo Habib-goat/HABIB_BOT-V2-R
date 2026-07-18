@@ -1,124 +1,135 @@
-const { GoogleGenAI } = require("@google/genai");
-const logger = require('../utils/logger');
+// AI.js
+// Image Editing Command using official xAI Grok Imagine API for Riyad Bot
 
-let aiClient = null;
-
-// Lazy initialization function
-function getAiClient() {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
-      throw new Error("GEMINI_API_KEY is not configured in the Secrets panel / env variables.");
-    }
-    aiClient = new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build'
-        }
-      }
-    });
-  }
-  return aiClient;
-}
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+const FormData = require('form-data'); // For handling downloads
 
 module.exports = {
-  config: {
-    name: "ai",
-    aliases: ["gemini", "ask", "chat", "imagine", "draw"],
-    version: "1.0.0",
-    author: "Riyad Bot",
-    countDown: 5,
-    role: 0,
-    category: "ai",
-    guide: {
-      en: "{pn} [your question] OR {pn} imagine [detailed image description]"
+    config: {
+        name: "ai",
+        aliases: [],
+        version: "1.0.0",
+        author: "Grok",
+        countDown: 10,
+        role: 0,
+        description: "Edit images using official xAI Grok Imagine API",
+        category: "ai",
+        guide: {
+            en: "Reply to an image and use: /ai <instruction>\nExample: /ai hd\n/ai make it cinematic"
+        }
     },
-    description: {
-      en: "Interact with Google Gemini 3.5 AI for text, summaries, translation, and image generation."
-    }
-  },
 
-  onStart: async function({ api, event, args, message }) {
-    const threadID = event.threadID;
-    const messageID = event.messageID;
-    const prompt = args.join(" ");
+    onStart: async function ({ api, event, args }) {
+        const prompt = args.join(" ").trim();
 
-    if (!prompt) {
-      await api.sendMessage(`🤖 Please provide a question or instruction.\nExample:\n» /ai what is a lightyear?\n» /ai imagine a cute little kitten sleeping on a glowing cloud`, threadID, messageID);
-      return;
-    }
-
-    // Check if the user is asking to generate/draw an image
-    const isImageGeneration = args[0].toLowerCase() === "imagine" || args[0].toLowerCase() === "draw" || prompt.startsWith("generate image");
-    
-    try {
-      const ai = getAiClient();
-      
-      if (isImageGeneration) {
-        // Handle Image Generation
-        const imagePrompt = args[0].toLowerCase() === "imagine" || args[0].toLowerCase() === "draw" ? args.slice(1).join(" ") : prompt;
-        if (!imagePrompt) {
-          await api.sendMessage("⚠️ Please describe the image you want to generate.", threadID, messageID);
-          return;
+        // Check if message is a reply to an image
+        if (!event.messageReply || !event.messageReply.attachments || event.messageReply.attachments.length === 0) {
+            return api.sendMessage("❌ Please reply to an image to use this command.\n\nExample:\nReply to photo → /ai hd", event.threadID, event.messageID);
         }
 
-        await api.sendMessage("🎨 Generating your image with Gemini Nano Banana... please wait.", threadID, messageID);
+        const attachment = event.messageReply.attachments[0];
+        if (attachment.type !== "photo") {
+            return api.sendMessage("❌ Please reply to a photo/image only.", event.threadID, event.messageID);
+        }
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.1-flash-lite-image',
-          contents: {
-            parts: [
-              { text: imagePrompt }
-            ]
-          }
-        });
+        if (!prompt) {
+            return api.sendMessage("❌ Please provide an editing instruction.\n\nExample: /ai hd\n/ai remove background\n/ai anime style", event.threadID, event.messageID);
+        }
 
-        let foundImage = false;
-        if (response.candidates && response.candidates[0] && response.candidates[0].content) {
-          for (const part of response.candidates[0].content.parts) {
-            if (part.inlineData) {
-              foundImage = true;
-              const base64Data = part.inlineData.data;
-              const imageUrl = `data:image/png;base64,${base64Data}`;
-              
-              // Send image URL/base64 to chat stream
-              await api.sendMessage(`✨ Image Generated Successfully!\nPrompt: "${imagePrompt}"\n\n[Base64 Image Attached - Open dashboard console or attachment to view fully]`, threadID, messageID);
-              
-              // Broadcast full image data over Websockets to active dashboard users
-              return;
+        const tempDir = path.join(__dirname, 'temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const inputPath = path.join(tempDir, `input_${Date.now()}.jpg`);
+        const outputPath = path.join(tempDir, `output_${Date.now()}.jpg`);
+
+        try {
+            api.sendMessage("⏳ Downloading image and processing with Grok Imagine...", event.threadID, event.messageID);
+
+            // Download the image
+            await downloadImage(attachment.url, inputPath);
+
+            // Convert to base64 for xAI API
+            const imageBase64 = fs.readFileSync(inputPath, { encoding: 'base64' });
+            const dataUri = `data:image/jpeg;base64,${imageBase64}`;
+
+            // Call xAI API
+            const apiKey = process.env.XAI_API_KEY;
+            if (!apiKey) {
+                throw new Error("XAI_API_KEY environment variable is not set.");
             }
-          }
+
+            const response = await axios.post('https://api.x.ai/v1/images/edits', {
+                model: "grok-imagine-image-quality",
+                prompt: prompt,
+                image: {
+                    url: dataUri,
+                    type: "image_url"
+                },
+                response_format: "url"
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.data || !response.data.data || !response.data.data[0] || !response.data.data[0].url) {
+                throw new Error("No image URL returned from API");
+            }
+
+            const editedUrl = response.data.data[0].url;
+
+            // Download the edited image
+            await downloadImage(editedUrl, outputPath);
+
+            // Send the result
+            await api.sendMessage({
+                body: `✅ Edited with Grok Imagine\n\nPrompt: ${prompt}`,
+                attachment: fs.createReadStream(outputPath)
+            }, event.threadID, event.messageID);
+
+        } catch (error) {
+            console.error("AI Command Error:", error.response?.data || error.message);
+            
+            let errorMsg = "❌ Failed to edit image.\n\n";
+            
+            if (error.response?.status === 401) {
+                errorMsg += "API key error. Check XAI_API_KEY.";
+            } else if (error.response?.status === 429) {
+                errorMsg += "Rate limit reached. Try again later.";
+            } else {
+                errorMsg += "Please try again or check your prompt.";
+            }
+            
+            api.sendMessage(errorMsg, event.threadID, event.messageID);
+        } finally {
+            // Cleanup temporary files
+            try {
+                if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+                if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+            } catch (cleanupError) {
+                console.error("Cleanup error:", cleanupError);
+            }
         }
-        
-        if (!foundImage) {
-          // Fallback message if model returned descriptions instead of inline image data
-          await api.sendMessage(`✨ Gemini Concept Outline:\n${response.text || 'Could not render direct pixel stream.'}`, threadID, messageID);
-        }
-
-      } else {
-        // Handle Standard Text/Chat/Summaries
-        const temp = await api.sendMessage("🤖 Gemini is thinking...", threadID, messageID);
-
-        const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: prompt,
-          config: {
-            systemInstruction: "You are Riyad Bot, a highly capable AI assistant built on the server. Answer concisely and use friendly formatting."
-          }
-        });
-
-        const replyText = response.text || "Sorry, I couldn't generate a response.";
-        await api.sendMessage(`🤖 [GEMINI AI]\n━━━━━━━━━━━━━━━━━━━━━\n${replyText}\n━━━━━━━━━━━━━━━━━━━━━`, threadID, messageID);
-      }
-
-    } catch (err) {
-      logger.error("Gemini API Error:", err);
-      let errMsg = err.message;
-      if (errMsg.includes("Secrets") || errMsg.includes("GEMINI_API_KEY")) {
-        errMsg = "GEMINI_API_KEY is missing. Please navigate to Settings > Secrets in Google AI Studio to configure your key.";
-      }
-      await api.sendMessage(`❌ [AI ERROR]: ${errMsg}`, threadID, messageID);
     }
-  }
 };
+
+// Helper: Download image from URL
+async function downloadImage(url, filepath) {
+    const response = await axios({
+        method: 'get',
+        url: url,
+        responseType: 'stream'
+    });
+
+    return new Promise((resolve, reject) => {
+        const writer = fs.createWriteStream(filepath);
+        response.data.pipe(writer);
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+    });
+}
