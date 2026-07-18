@@ -211,6 +211,14 @@ function startMessenger(app, wsServer) {
   api,
   wsServer
 );
+
+console.log("=== ADAPTER DEBUG ===");
+console.log("RAW sendMessage =", typeof api.sendMessage);
+console.log("RAW sendMessageDM =", typeof api.sendMessageDM);
+console.log("ADAPTER sendMessage =", typeof adaptedApi.sendMessage);
+console.log("ADAPTER sendMessageDM =", typeof adaptedApi.sendMessageDM);
+console.log("=====================");
+
 const autoTimerService = require("../services/autotimerService");
 autoTimerService.setApi(adaptedApi);
       // Make API accessible globally or in express app
