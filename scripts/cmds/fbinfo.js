@@ -302,23 +302,15 @@ if (event.messageReply && event.messageReply.senderID) {
 
       // Fetch official details using FCA's API helper
       const apiResult = await getUserInfo(uid);
+      console.log("UID:", uid);
+console.log("API RESULT:", apiResult);
       if (apiResult) {
         name = apiResult.name || name;
         username = apiResult.vanity || apiResult.username || username;
         if (apiResult.profileUrl && apiResult.profileUrl.startsWith("http")) {
   profileLink = apiResult.profileUrl;
 }
-      }
-      // Scrape extra metrics using bot cookies
-      const sessionCookies = getCookieString();
-      const scrapedData = await getExtraFBInfo(uid, sessionCookies);
-
-      const followers = scrapedData.followers;
-      const following = scrapedData.following;
-      const posts = scrapedData.posts;
-      const created = scrapedData.created;
-      const profileType = scrapedData.profileType;
-      const verified = scrapedData.verified;
+      }  
 
       // Download profile image avatar
       const tempPath = path.join(__dirname, `avatar_${uid}_${Date.now()}.jpg`);
@@ -340,12 +332,6 @@ if (event.messageReply && event.messageReply.senderID) {
 🆔 𝗨𝗜𝗗            ➜ ${uid}
 🌐 𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲       ➜ ${username}
 🔗 𝗣𝗿𝗼𝗳𝗶𝗹𝗲        ➜ ${profileLink}
-👥 𝗙𝗼𝗹𝗹𝗼𝘄𝗲𝗿𝘀      ➜ ${followers}
-➕ 𝗙𝗼𝗹𝗹𝗼𝘄𝗶𝗻𝗴      ➜ ${following}
-📝 𝗣𝘂𝗯𝗹𝗶𝗰 𝗣𝗼𝘀𝘁𝘀   ➜ ${posts}
-📅 𝗖𝗿𝗲𝗮𝘁𝗲𝗱        ➜ ${created}
-🌍 𝗣𝗿𝗼𝗳𝗶𝗹𝗲 𝗧𝘆𝗽𝗲   ➜ ${profileType}
-✔️ 𝗩𝗲𝗿𝗶𝗳𝗶𝗲𝗱       ➜ ${verified}
 
        🖼️𝗔𝘃𝗮𝘁𝗮𝗿🖼️
 ${hasAvatar ? "(Profile Picture attached below)" : "(Unable to download Avatar)"}`;
