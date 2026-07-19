@@ -161,7 +161,15 @@ if (!replyText) {
       }
 
       return api.sendMessage(
-        `🤖 𝐆𝐞𝐦𝐢𝐧𝐢 𝐀𝐈\n\n${replyText}`,
+        `┏━━━━━━━━━━━━━━┓
+┃ 🔥𝐀𝐈 𝐀𝐒𝐒𝐈𝐒𝐓𝐀𝐍𝐓🔥
+┗━━━━━━━━━━━━━━┛
+
+💬 ${replyText}
+
+──────────────────
+👑 Owner: 𝐑𝐈𝐘𝐀𝐃
+⚡ Powered by Gemini`,
         threadID,
         messageID
       );
