@@ -8,6 +8,9 @@
 
 // ১. গুগল-এর সর্বশেষ অফিসিয়াল GenAI SDK ইমপোর্ট করুন
 const { GoogleGenAI } = require("@google/genai");
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
 
 module.exports = {
   config: {
@@ -34,6 +37,32 @@ module.exports = {
     }
 
     const prompt = args.join(" ");
+    const replied = event.messageReply;
+
+if (!replied || !replied.attachments || !replied.attachments.length) {
+  return api.sendMessage(
+    "❌ অনুগ্রহ করে একটি ছবিতে Reply করে কমান্ড দিন।",
+    threadID,
+    messageID
+  );
+}
+
+const attachment = replied.attachments[0];
+
+if (attachment.type !== "photo") {
+  return api.sendMessage(
+    "❌ শুধুমাত্র ছবিতে Reply করুন।",
+    threadID,
+    messageID
+  );
+}
+
+const imageUrl = attachment.url;
+    const imageResponse = await axios.get(imageUrl, {
+  responseType: "arraybuffer"
+});
+
+const imageBase64 = Buffer.from(imageResponse.data).toString("base64");
 
     // ৩. বট চিন্তা করছে - এটি ইউজারকে জানানো
     const processingMessageID = await new Promise((resolve) => {
@@ -67,7 +96,7 @@ for (const apiKey of apiKeys) {
     const ai = new GoogleGenAI({ apiKey });
 
     response = await ai.models.generateContent({
-      model: "models/gemini-3.1-flash-image"
+      model: "models/gemini-3.1-flash-image",
       contents: prompt,
     });
 
