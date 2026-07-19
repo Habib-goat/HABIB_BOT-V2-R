@@ -285,7 +285,7 @@ if (event.messageReply && event.messageReply.senderID) {
       let name = "N/A";
       let username = "N/A";
       let profileLink = `https://www.facebook.com/profile.php?id=${uid}`;
-      let avatarUrl = `https://graph.facebook.com/${uid}/picture?type=large`;
+      let avatarUrl = `https://graph.facebook.com/${uid}/picture?height=1500&width=1500&access_token=6628568379%7Cc1e620fa708a1d5696fb991c1bde5662`;
 
       // Pull from framework-supplied usersData if available
       if (typeof usersData !== "undefined" && usersData && typeof usersData.get === "function") {
@@ -316,9 +316,9 @@ if (event.messageReply && event.messageReply.senderID) {
     profileLink = apiResult.profileUrl;
   }
 
-  if (apiResult.thumbSrc && apiResult.thumbSrc.startsWith("http")) {
-    avatarUrl = apiResult.thumbSrc;
-  }
+  //if (apiResult.thumbSrc && apiResult.thumbSrc.startsWith("http")) {
+    //avatarUrl = apiResult.thumbSrc;
+  //}
 }
       console.log(apiResult);
 console.log("thumbSrc:", apiResult?.thumbSrc);
@@ -331,7 +331,9 @@ console.log("API RESULT:", apiResult);
       const tempPath = path.join(__dirname, `avatar_${uid}_${Date.now()}.jpg`);
       let hasAvatar = false;
       try {
-        await downloadFile(avatarUrl, tempPath);
+        console.log("Avatar URL:", avatarUrl);
+
+await downloadFile(avatarUrl, tempPath);
         hasAvatar = fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0;
       } catch (err) {
         hasAvatar = false;
