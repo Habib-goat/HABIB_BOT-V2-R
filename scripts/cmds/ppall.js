@@ -103,12 +103,15 @@ module.exports = {
       for (let i = 0; i < attachments.length; i += chunkSize) {
         const chunk = attachments.slice(i, i + chunkSize);
         await api.sendMessage(
-          {
-            body: `📸 [ppall] Avatar Gallery (Part \${Math.floor(i / chunkSize) + 1} of \${Math.ceil(attachments.length / chunkSize)}):`,
-            attachment: chunk
-          },
-          threadID
-        );
+  {
+    body: `🌟 𝗚𝗿𝗼𝘂𝗽 𝗣𝗿𝗼𝗳𝗶𝗹𝗲 𝗚𝗮𝗹𝗹𝗲𝗿𝘆 🌟
+
+📸 Part ${Math.floor(i / chunkSize) + 1} of ${Math.ceil(attachments.length / chunkSize)}
+👥 Enjoy the profile pictures!`,
+    attachment: chunk
+  },
+  threadID
+);
       }
 
       setTimeout(async () => {
