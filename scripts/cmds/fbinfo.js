@@ -285,7 +285,7 @@ if (event.messageReply && event.messageReply.senderID) {
       let name = "N/A";
       let username = "N/A";
       let profileLink = `https://www.facebook.com/profile.php?id=${uid}`;
-      let avatarUrl = `https://graph.facebook.com/${uid}/picture?width=1024&height=1024`;
+      let avatarUrl = `https://graph.facebook.com/${uid}/picture?type=large`;
 
       // Pull from framework-supplied usersData if available
       if (typeof usersData !== "undefined" && usersData && typeof usersData.get === "function") {
@@ -347,9 +347,8 @@ if (event.messageReply && event.messageReply.senderID) {
 🌍 𝗣𝗿𝗼𝗳𝗶𝗹𝗲 𝗧𝘆𝗽𝗲   ➜ ${profileType}
 ✔️ 𝗩𝗲𝗿𝗶𝗳𝗶𝗲𝗱       ➜ ${verified}
 
-╭──────🖼️𝗔𝘃𝗮𝘁𝗮𝗿🖼️──────╮
-${hasAvatar ? "(Profile Picture attached below)" : "(Unable to download Avatar)"}
-╰────────────────────╯`;
+       🖼️𝗔𝘃𝗮𝘁𝗮𝗿🖼️
+${hasAvatar ? "(Profile Picture attached below)" : "(Unable to download Avatar)"}`;
 
       // Clean up the initial loading message
       if (initialMsg && initialMsg.messageID && api && typeof api.unsendMessage === "function") {
