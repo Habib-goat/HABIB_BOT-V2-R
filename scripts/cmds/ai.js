@@ -1,135 +1,96 @@
-// AI.js
-// Image Editing Command using official xAI Grok Imagine API for Riyad Bot
+/**
+ * @file ai.js
+ * @description Gemini AI Assistant Command for Facebook Messenger Bot
+ * @credits Riyad
+ * @dependencies @google/genai
+ * @license MIT
+ */
 
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
-const FormData = require('form-data'); // For handling downloads
+// ১. গুগল-এর সর্বশেষ অফিসিয়াল GenAI SDK ইমপোর্ট করুন
+const { GoogleGenAI } = require("@google/genai");
 
 module.exports = {
-    config: {
-        name: "ai",
-        aliases: ["grok", "edit", "imageai"],
-        version: "1.0.0",
-        author: "Grok",
-        countDown: 10,
-        role: 0,
-        description: "Edit images using official xAI Grok Imagine API",
-        category: "ai",
-        guide: {
-            en: "Reply to an image and use: /ai <instruction>\nExample: /ai hd\n/ai make it cinematic"
-        }
-    },
+  config: {
+    name: "ai",
+    version: "1.0.0",
+    hasPermission: 0,
+    credits: "Riyad",
+    description: "গুগল-এর শক্তিশালী Gemini AI কে যেকোনো প্রশ্ন জিজ্ঞাসা করুন।",
+    commandCategory: "AI Chat",
+    usages: "[আপনার প্রশ্নটি লিখুন]",
+    cooldowns: 5
+  },
 
-    onStart: async function ({ api, event, args }) {
-        const prompt = args.join(" ").trim();
+  onStart: async function ({ api, event, args }) {
+    const { threadID, messageID } = event;
 
-        // Check if message is a reply to an image
-        if (!event.messageReply || !event.messageReply.attachments || event.messageReply.attachments.length === 0) {
-            return api.sendMessage("❌ Please reply to an image to use this command.\n\nExample:\nReply to photo → /ai hd", event.threadID, event.messageID);
-        }
-
-        const attachment = event.messageReply.attachments[0];
-        if (attachment.type !== "photo") {
-            return api.sendMessage("❌ Please reply to a photo/image only.", event.threadID, event.messageID);
-        }
-
-        if (!prompt) {
-            return api.sendMessage("❌ Please provide an editing instruction.\n\nExample: /ai hd\n/ai remove background\n/ai anime style", event.threadID, event.messageID);
-        }
-
-        const tempDir = path.join(__dirname, 'temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        const inputPath = path.join(tempDir, `input_${Date.now()}.jpg`);
-        const outputPath = path.join(tempDir, `output_${Date.now()}.jpg`);
-
-        try {
-            api.sendMessage("⏳ Downloading image and processing with Grok Imagine...", event.threadID, event.messageID);
-
-            // Download the image
-            await downloadImage(attachment.url, inputPath);
-
-            // Convert to base64 for xAI API
-            const imageBase64 = fs.readFileSync(inputPath, { encoding: 'base64' });
-            const dataUri = `data:image/jpeg;base64,${imageBase64}`;
-
-            // Call xAI API
-            const apiKey = process.env.XAI_API_KEY;
-            if (!apiKey) {
-                throw new Error("XAI_API_KEY environment variable is not set.");
-            }
-
-            const response = await axios.post('https://api.x.ai/v1/images/edits', {
-                model: "grok-imagine-image-quality",
-                prompt: prompt,
-                image: {
-                    url: dataUri,
-                    type: "image_url"
-                },
-                response_format: "url"
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.data || !response.data.data || !response.data.data[0] || !response.data.data[0].url) {
-                throw new Error("No image URL returned from API");
-            }
-
-            const editedUrl = response.data.data[0].url;
-
-            // Download the edited image
-            await downloadImage(editedUrl, outputPath);
-
-            // Send the result
-            await api.sendMessage({
-                body: `✅ Edited with Grok Imagine\n\nPrompt: ${prompt}`,
-                attachment: fs.createReadStream(outputPath)
-            }, event.threadID, event.messageID);
-
-        } catch (error) {
-            console.error("AI Command Error:", error.response?.data || error.message);
-            
-            let errorMsg = "❌ Failed to edit image.\n\n";
-            
-            if (error.response?.status === 401) {
-                errorMsg += "API key error. Check XAI_API_KEY.";
-            } else if (error.response?.status === 429) {
-                errorMsg += "Rate limit reached. Try again later.";
-            } else {
-                errorMsg += "Please try again or check your prompt.";
-            }
-            
-            api.sendMessage(errorMsg, event.threadID, event.messageID);
-        } finally {
-            // Cleanup temporary files
-            try {
-                if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-                if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-            } catch (cleanupError) {
-                console.error("Cleanup error:", cleanupError);
-            }
-        }
+    // ২. কোনো প্রশ্ন না দিলে সঠিক ব্যবহারের নিয়ম জানিয়ে দেওয়া
+    if (args.length === 0) {
+      return api.sendMessage(
+        "❌ অনুগ্রহ করে আপনার প্রশ্নটি লিখুন।\n\nব্যবহারের নিয়ম: /ai [আপনার প্রশ্ন]\nউদাহরণ: /ai সালোকসংশ্লেষ কি?",
+        threadID,
+        messageID
+      );
     }
+
+    const prompt = args.join(" ");
+
+    // ৩. বট চিন্তা করছে - এটি ইউজারকে জানানো
+    const processingMessageID = await new Promise((resolve) => {
+      api.sendMessage("🔍 একটু অপেক্ষা করুন, আমি ভাবছি...", threadID, (err, info) => {
+        if (!err && info && info.messageID) {
+          resolve(info.messageID);
+        } else {
+          resolve(null);
+        }
+      }, messageID);
+    });
+
+    try {
+      // ৪. এনভায়রনমেন্ট ভ্যারিয়েবল থেকে API কী নেওয়া
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("GEMINI_API_KEY environment variable was not found. Please add it in Railway Variables.");
+      }
+      // ৫. নতুন ক্লায়েন্ট ইনিশিয়ালাইজেশন
+      const ai = new GoogleGenAI({ apiKey: apiKey });
+
+      // ৬. সর্বশেষ এবং দ্রুততম 'gemini-2.5-flash' মডেল দিয়ে কনটেন্ট জেনারেট করা
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+      });
+
+      const replyText = response.text;
+
+      if (!replyText) {
+        throw new Error("Gemini AI থেকে কোনো তথ্য পাওয়া যায়নি।");
+      }
+
+      // ৭. 'ভাবছি...' মেসেজটি সরিয়ে উত্তর পাঠিয়ে দেওয়া
+      if (processingMessageID) {
+        api.unsendMessage(processingMessageID);
+      }
+
+      return api.sendMessage(
+        `🤖 𝐆𝐞𝐦𝐢𝐧𝐢 𝐀𝐈\n\n${replyText}`,
+        threadID,
+        messageID
+      );
+
+    } catch (error) {
+      console.error("Gemini AI Command Error:", error);
+
+      // কোনো ত্রুটি হলে লোডিং মেসেজ ডিলিট করে ইউজারকে ত্রুটির বিবরণ দেওয়া
+      if (processingMessageID) {
+        api.unsendMessage(processingMessageID);
+      }
+
+      return api.sendMessage(
+        `❌ দুঃখিত, একটি সমস্যা হয়েছে!\nত্রুটি: ${error.message || "Gemini AI এর সাথে যোগাযোগ করা যায়নি।"}`,
+        threadID,
+        messageID
+      );
+    }
+  }
 };
-
-// Helper: Download image from URL
-async function downloadImage(url, filepath) {
-    const response = await axios({
-        method: 'get',
-        url: url,
-        responseType: 'stream'
-    });
-
-    return new Promise((resolve, reject) => {
-        const writer = fs.createWriteStream(filepath);
-        response.data.pipe(writer);
-        writer.on('finish', resolve);
-        writer.on('error', reject);
-    });
-}
