@@ -9,8 +9,6 @@
 // ১. গুগল-এর সর্বশেষ অফিসিয়াল GenAI SDK ইমপোর্ট করুন
 const { GoogleGenAI } = require("@google/genai");
 const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
 
 module.exports = {
   config: {
@@ -39,30 +37,22 @@ module.exports = {
     const prompt = args.join(" ");
     const replied = event.messageReply;
 
-if (!replied || !replied.attachments || !replied.attachments.length) {
-  return api.sendMessage(
-    "❌ অনুগ্রহ করে একটি ছবিতে Reply করে কমান্ড দিন।",
-    threadID,
-    messageID
-  );
+let imageBase64 = null;
+
+if (
+  replied &&
+  replied.attachments &&
+  replied.attachments.length &&
+  replied.attachments[0].type === "photo"
+) {
+  const imageUrl = replied.attachments[0].url;
+
+  const imageResponse = await axios.get(imageUrl, {
+    responseType: "arraybuffer"
+  });
+
+  imageBase64 = Buffer.from(imageResponse.data).toString("base64");
 }
-
-const attachment = replied.attachments[0];
-
-if (attachment.type !== "photo") {
-  return api.sendMessage(
-    "❌ শুধুমাত্র ছবিতে Reply করুন।",
-    threadID,
-    messageID
-  );
-}
-
-const imageUrl = attachment.url;
-    const imageResponse = await axios.get(imageUrl, {
-  responseType: "arraybuffer"
-});
-
-const imageBase64 = Buffer.from(imageResponse.data).toString("base64");
 
     // ৩. বট চিন্তা করছে - এটি ইউজারকে জানানো
     const processingMessageID = await new Promise((resolve) => {
@@ -95,10 +85,39 @@ for (const apiKey of apiKeys) {
   try {
     const ai = new GoogleGenAI({ apiKey });
 
-    response = await ai.models.generateContent({
-      model: "models/gemini-flash-latest",
-      contents: prompt,
-    });
+    if (imageBase64) {
+  response = await ai.models.generateContent({
+    model: "gemini-flash-latest",
+    contents: [
+  {
+    parts: [
+      {
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: imageBase64
+        }
+      },
+      {
+        text: prompt
+      }
+    ]
+  }
+]
+  });
+} else {
+  response = await ai.models.generateContent({
+  model: "gemini-flash-latest",
+  contents: [
+    {
+      parts: [
+        {
+          text: prompt
+        }
+      ]
+    }
+  ]
+});
+}
 
     break;
 
@@ -125,11 +144,16 @@ if (!response) {
   throw lastError;
 }
 
-      const replyText = response.text;
+      const replyText =
+  response.text ||
+  response.candidates?.[0]?.content?.parts
+    ?.map(part => part.text)
+    .filter(Boolean)
+    .join("\n");
 
-      if (!replyText) {
-        throw new Error("Gemini AI থেকে কোনো তথ্য পাওয়া যায়নি।");
-      }
+if (!replyText) {
+  throw new Error("Gemini AI থেকে কোনো উত্তর পাওয়া যায়নি।");
+}
 
       // ৭. 'ভাবছি...' মেসেজটি সরিয়ে উত্তর পাঠিয়ে দেওয়া
       if (processingMessageID) {
