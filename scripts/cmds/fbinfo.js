@@ -301,16 +301,31 @@ if (event.messageReply && event.messageReply.senderID) {
       }
 
       // Fetch official details using FCA's API helper
+    
       const apiResult = await getUserInfo(uid);
+      if (apiResult) {
+  name = apiResult.name || name;
+
+  username =
+    apiResult.username ||
+    apiResult.vanity ||
+    apiResult.vanityName ||
+    username;
+
+  if (apiResult.profileUrl) {
+    profileLink = apiResult.profileUrl;
+  }
+
+  if (apiResult.thumbSrc && apiResult.thumbSrc.startsWith("http")) {
+    avatarUrl = apiResult.thumbSrc;
+  }
+}
+      console.log(apiResult);
+console.log("thumbSrc:", apiResult?.thumbSrc);
+console.log("username:", apiResult?.username);
+console.log("vanity:", apiResult?.vanity);
       console.log("UID:", uid);
 console.log("API RESULT:", apiResult);
-      if (apiResult) {
-        name = apiResult.name || name;
-        username = apiResult.vanity || apiResult.username || username;
-        if (apiResult.profileUrl && apiResult.profileUrl.startsWith("http")) {
-  profileLink = apiResult.profileUrl;
-}
-      }  
 
       // Download profile image avatar
       const tempPath = path.join(__dirname, `avatar_${uid}_${Date.now()}.jpg`);
