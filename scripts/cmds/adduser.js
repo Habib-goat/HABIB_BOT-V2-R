@@ -38,7 +38,6 @@ module.exports = {
 
     const adminIDs = threadInfo.adminIDs || [];
     const approvalMode = threadInfo.approvalMode || false;
-    const members = threadInfo.members || [];
 
     const success = [];
     const waitApproval = [];
@@ -64,26 +63,38 @@ module.exports = {
         continue;
       }
 
-      const isAlreadyMember = members.some(m => m.userID == uid && m.inGroup);
-      if (isAlreadyMember) {
-        failed.push({ item: item, reason: "This user is already in this group." });
-        continue;
-      }
 
       try {
-        await api.addUserToGroup(uid, threadID);
-        if (approvalMode === true && !adminIDs.includes(botID)) {
+    if (typeof api.getThreadInfo === "function") {
+        const liveInfo = await api.getThreadInfo(threadID);
+        const participantIDs = liveInfo.participantIDs || [];
+
+        if (
+            participantIDs.includes(String(uid)) ||
+            participantIDs.includes(Number(uid))
+        ) {
+            failed.push({
+                item,
+                reason: "This user is already in this group."
+            });
+            continue;
+        }
+    }
+
+    await api.addUserToGroup(uid, threadID);
+
+    if (approvalMode === true && !adminIDs.includes(botID)) {
           waitApproval.push(uid);
         } else {
           success.push(uid);
         }
 } catch (err) {
   console.log("===== ADD USER ERROR =====");
-  console.log(err);
+  console.dir(err, { depth: null });
   console.log("==========================");
 
   failed.push({
-    item: item,
+    item,
     reason: err?.errorDescription ||
             err?.error ||
             err?.message ||
