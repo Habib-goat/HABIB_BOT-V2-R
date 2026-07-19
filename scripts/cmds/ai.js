@@ -48,18 +48,53 @@ module.exports = {
 
     try {
       // ৪. এনভায়রনমেন্ট ভ্যারিয়েবল থেকে API কী নেওয়া
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("GEMINI_API_KEY environment variable was not found. Please add it in Railway Variables.");
-      }
-      // ৫. নতুন ক্লায়েন্ট ইনিশিয়ালাইজেশন
-      const ai = new GoogleGenAI({ apiKey: apiKey });
+      const apiKeys = [
+  process.env.GEMINI_API_KEY,
+  process.env.GEMINI_API_KEY_2,
+  process.env.GEMINI_API_KEY_3
+].filter(Boolean);
+
+if (!apiKeys.length) {
+  throw new Error("No Gemini API Key found.");
+}
 
       // ৬. সর্বশেষ এবং দ্রুততম 'gemini-2.5-flash' মডেল দিয়ে কনটেন্ট জেনারেট করা
-      const response = await ai.models.generateContent({
-        model: "models/gemini-2.5-flash",
-        contents: prompt,
-      });
+      let response;
+let lastError;
+
+for (const apiKey of apiKeys) {
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+
+    response = await ai.models.generateContent({
+      model: "models/gemini-flash-latest",
+      contents: prompt,
+    });
+
+    break;
+
+  } catch (err) {
+    lastError = err;
+
+    const msg = String(err.message || "");
+
+    if (
+      err.status === 429 ||
+      msg.includes("RESOURCE_EXHAUSTED") ||
+      msg.includes("Quota exceeded") ||
+      err.status === 404 ||
+      msg.includes("NOT_FOUND")
+    ) {
+      continue;
+    }
+
+    throw err;
+  }
+}
+
+if (!response) {
+  throw lastError;
+}
 
       const replyText = response.text;
 
