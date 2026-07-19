@@ -343,12 +343,12 @@ console.log("API RESULT:", apiResult);
 ║     ✨ 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗕𝘆 𝗥𝗶𝘆𝗮𝗱 ✨
 ╚═══════════════════╝
 
-👤 𝗡𝗮𝗺𝗲           ➜ ${name}
-🆔 𝗨𝗜𝗗            ➜ ${uid}
-🌐 𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲       ➜ ${username}
-🔗 𝗣𝗿𝗼𝗳𝗶𝗹𝗲        ➜ ${profileLink}
+👤 𝗡𝗮𝗺𝗲          ➜ ${name}
+🆔 𝗨𝗜𝗗              ➜ ${uid}
+🌐 𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲  ➜ ${username}
+🔗 𝗣𝗿𝗼𝗳𝗶𝗹𝗲         ➜ ${profileLink}
 
-       🖼️𝗔𝘃𝗮𝘁𝗮𝗿🖼️
+               🖼️𝗔𝘃𝗮𝘁𝗮𝗿🖼️
 ${hasAvatar ? "(Profile Picture attached below)" : "(Unable to download Avatar)"}`;
 
       // Clean up the initial loading message
