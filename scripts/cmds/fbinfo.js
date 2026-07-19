@@ -19,13 +19,13 @@ module.exports = {
     credits: "Riyad",
     cooldown: 5,
     countDown: 5,
-    role: 0,
-    permission: "0",
+    role: 2,
+    permission: "2",
     description: "Show Facebook profile information.",
     category: "Utility",
     guide: {
-      en: "{pn} [reply/mention/none]"
-    }
+  en: "{pn} [reply/@mention/uid]"
+}
   },
 
   onStart: async function ({ api, event, args, usersData, threadsData }) {
@@ -252,13 +252,23 @@ module.exports = {
     try {
       // Step 1: Extract target UID based on selection rules (Priority: Reply > Mention > Sender)
       let uid;
-      if (event.messageReply && event.messageReply.senderID) {
-        uid = event.messageReply.senderID;
-      } else if (event.mentions && Object.keys(event.mentions).length > 0) {
-        uid = Object.keys(event.mentions)[0];
-      } else {
-        uid = event.senderID;
-      }
+
+if (event.messageReply && event.messageReply.senderID) {
+  // Reply
+  uid = event.messageReply.senderID;
+
+} else if (event.mentions && Object.keys(event.mentions).length > 0) {
+  // Mention
+  uid = Object.keys(event.mentions)[0];
+
+} else if (args.length > 0 && /^\d+$/.test(args[0])) {
+  // UID
+  uid = args[0];
+
+} else {
+  // Sender
+  uid = event.senderID;
+}
 
       if (!uid) {
         return api.sendMessage("❌ Could not determine Facebook UID.", event.threadID, event.messageID);
@@ -274,8 +284,8 @@ module.exports = {
       // Default profile details
       let name = "N/A";
       let username = "N/A";
-      let profileLink = `https://www.facebook.com/${uid}`;
-      let avatarUrl = `https://graph.facebook.com/${uid}/picture?width=512&height=512`;
+      let profileLink = `https://www.facebook.com/profile.php?id=${uid}`;
+      let avatarUrl = `https://graph.facebook.com/${uid}/picture?width=1024&height=1024`;
 
       // Pull from framework-supplied usersData if available
       if (typeof usersData !== "undefined" && usersData && typeof usersData.get === "function") {
@@ -295,12 +305,10 @@ module.exports = {
       if (apiResult) {
         name = apiResult.name || name;
         username = apiResult.vanity || apiResult.username || username;
-        profileLink = apiResult.profileUrl || profileLink;
-        if (apiResult.thumbSrc) {
-          avatarUrl = apiResult.thumbSrc;
-        }
+        if (apiResult.profileUrl && apiResult.profileUrl.startsWith("http")) {
+  profileLink = apiResult.profileUrl;
+}
       }
-
       // Scrape extra metrics using bot cookies
       const sessionCookies = getCookieString();
       const scrapedData = await getExtraFBInfo(uid, sessionCookies);
@@ -328,20 +336,20 @@ module.exports = {
 ║     ✨ 𝗣𝗼𝘄𝗲𝗿𝗲𝗱 𝗕𝘆 𝗥𝗶𝘆𝗮𝗱 ✨
 ╚═══════════════════╝
 
-👤 <b>𝗡𝗮𝗺𝗲</b>           ➜ ${name}
-🆔 <b>𝗨𝗜𝗗</b>            ➜ ${uid}
-🌐 <b>𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲</b>       ➜ ${username}
-🔗 <b>𝗣𝗿𝗼𝗳𝗶𝗹𝗲</b>        ➜ ${profileLink}
-👥 <b>𝗙𝗼𝗹𝗹𝗼𝘄𝗲𝗿𝘀</b>      ➜ ${followers}
-➕ <b>𝗙𝗼𝗹𝗹𝗼𝘄𝗶𝗻𝗴</b>      ➜ ${following}
-📝 <b>𝗣𝘂𝗯𝗹𝗶𝗰 𝗣𝗼𝘀𝘁𝘀</b>   ➜ ${posts}
-📅 <b>𝗖𝗿𝗲𝗮𝘁𝗲𝗱</b>        ➜ ${created}
-🌍 <b>𝗣𝗿𝗼𝗳𝗶𝗹𝗲 𝗧𝘆𝗽𝗲</b>   ➜ ${profileType}
-✔️ <b>𝗩𝗲𝗿𝗶𝗳𝗶𝗲𝗱</b>       ➜ ${verified}
+👤 𝗡𝗮𝗺𝗲           ➜ ${name}
+🆔 𝗨𝗜𝗗            ➜ ${uid}
+🌐 𝗨𝘀𝗲𝗿𝗻𝗮𝗺𝗲       ➜ ${username}
+🔗 𝗣𝗿𝗼𝗳𝗶𝗹𝗲        ➜ ${profileLink}
+👥 𝗙𝗼𝗹𝗹𝗼𝘄𝗲𝗿𝘀      ➜ ${followers}
+➕ 𝗙𝗼𝗹𝗹𝗼𝘄𝗶𝗻𝗴      ➜ ${following}
+📝 𝗣𝘂𝗯𝗹𝗶𝗰 𝗣𝗼𝘀𝘁𝘀   ➜ ${posts}
+📅 𝗖𝗿𝗲𝗮𝘁𝗲𝗱        ➜ ${created}
+🌍 𝗣𝗿𝗼𝗳𝗶𝗹𝗲 𝗧𝘆𝗽𝗲   ➜ ${profileType}
+✔️ 𝗩𝗲𝗿𝗶𝗳𝗶𝗲𝗱       ➜ ${verified}
 
-╭────── 🖼️ <b>𝗔𝘃𝗮𝘁𝗮𝗿</b> ──────╮
+╭──────🖼️𝗔𝘃𝗮𝘁𝗮𝗿🖼️──────╮
 ${hasAvatar ? "(Profile Picture attached below)" : "(Unable to download Avatar)"}
-╰───────────────────╯`;
+╰────────────────────╯`;
 
       // Clean up the initial loading message
       if (initialMsg && initialMsg.messageID && api && typeof api.unsendMessage === "function") {
