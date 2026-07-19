@@ -67,7 +67,7 @@ for (const apiKey of apiKeys) {
     const ai = new GoogleGenAI({ apiKey });
 
     response = await ai.models.generateContent({
-      model: "models/gemini-flash-latest",
+      model: "models/gemini-3.1-flash-image"
       contents: prompt,
     });
 
