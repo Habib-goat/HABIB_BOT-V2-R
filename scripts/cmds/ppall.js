@@ -70,12 +70,11 @@ module.exports = {
         return api.sendMessage("⚠️ No valid member Facebook IDs were resolved.", threadID, messageID);
       }
 
-      if (uids.length > 30) {
-        api.sendMessage(`⚠️ Group is too large (\${uids.length} members). Limiting output to the first 30 members to prevent Messenger API bans.`, threadID, messageID);
-        uids = uids.slice(0, 30);
-      } else {
-        api.sendMessage(`📸 [ppall] Downloading \${uids.length} profile pictures in high-res. Please wait...`, threadID, messageID);
-      }
+      api.sendMessage(
+  `📸 [ppall] Downloading ${uids.length} profile pictures in high-res. Please wait...`,
+  threadID,
+  messageID
+);
 
       const tempFiles = [];
       const attachments = [];
