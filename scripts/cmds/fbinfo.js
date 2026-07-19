@@ -19,8 +19,8 @@ module.exports = {
     credits: "Riyad",
     cooldown: 5,
     countDown: 5,
-    role: 2,
-    permission: "2",
+    role: 0,
+    permission: "0",
     description: "Show Facebook profile information.",
     category: "Utility",
     guide: {
