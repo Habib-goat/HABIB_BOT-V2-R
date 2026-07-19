@@ -57,7 +57,7 @@ module.exports = {
 
       // ৬. সর্বশেষ এবং দ্রুততম 'gemini-2.5-flash' মডেল দিয়ে কনটেন্ট জেনারেট করা
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "models/gemini-2.5-flash",
         contents: prompt,
       });
 
