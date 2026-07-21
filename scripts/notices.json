@@ -1,0 +1,42 @@
+{
+  "gan": {
+    "text": "Welcome to our group @mention! We are excited to have you here. Please introduce yourself and check out the pinned rules before posting.",
+    "mention": true,
+    "attachments": [
+      {
+        "type": "photo",
+        "url": "https://images.unsplash.com/photo-1543269865-cbf427effbad?w=800&auto=format&fit=crop"
+      }
+    ]
+  },
+  "kick": {
+    "text": "⚠️ Attention @mention! You have been kicked out of the group due to policy violations (spamming/harassment). Please review the community rules.",
+    "mention": true,
+    "attachments": []
+  },
+  "nt": {
+    "text": "🌙 Good night everyone! The group chat is now going into slow mode. Rest well and see you tomorrow morning!",
+    "mention": false,
+    "attachments": []
+  },
+  "gt": {
+    "text": "☀️ Good morning! Let's start the day with positive vibes and great ideas. How is everyone doing today?",
+    "mention": false,
+    "attachments": []
+  },
+  "n": {
+    "text": "📢 ATTENTION! @mention please check this important announcement from the moderation team immediately.",
+    "mention": true,
+    "attachments": []
+  },
+  "gr": {
+    "text": "🎉 Welcome to the official repository of Riyad Bot! This framework is fast, lightweight, and completely ready to run.",
+    "mention": false,
+    "attachments": [
+      {
+        "type": "photo",
+        "url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop"
+      }
+    ]
+  }
+}
