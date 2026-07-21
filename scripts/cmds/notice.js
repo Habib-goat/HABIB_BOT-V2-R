@@ -5,7 +5,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 
 // Resolve the notice database path
 const dataDir = path.join(process.cwd(), 'data');
@@ -18,42 +17,37 @@ if (!fs.existsSync(dataDir)) {
 
 if (!fs.existsSync(noticesPath)) {
   const initialNotices = {
-    "gan": {
-      "text": "Welcome to our group @mention! Let's build something awesome together.",
-      "mention": true,
-      "attachments": [
-        {
-          "type": "photo",
-          "url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop"
-        }
-      ]
-    },
-    "kick": {
-      "text": "User @mention has been kicked out of the group for violating the terms.",
-      "mention": true,
-      "attachments": []
-    },
-    "nt": {
-      "text": "Friendly reminder: Please keep the conversations polite and constructive.",
-      "mention": false,
-      "attachments": []
-    },
-    "gt": {
-      "text": "Good morning everyone! Have a productive and wonderful day ahead.",
-      "mention": false,
-      "attachments": []
-    },
-    "n": {
-      "text": "Attention @mention, please check the pinned messages for important updates.",
-      "mention": true,
-      "attachments": []
-    },
-    "gr": {
-      "text": "Welcome to our team! We are thrilled to have you with us.",
-      "mention": false,
-      "attachments": []
-    }
-  };
+  "gn": {
+    "text": "",
+    "mention": false,
+    "image": "notice 1.png"
+  },
+  "nt": {
+    "text": "",
+    "mention": false,
+    "image": "notice 2.png"
+  },
+  "ki": {
+    "text": "",
+    "mention": true,
+    "image": "notice 4.png"
+  },
+  "ga": {
+    "text": "",
+    "mention": true,
+    "image": "notice 5.png"
+  },
+  "gr": {
+    "text": "",
+    "mention": false,
+    "image": "notice 6.png"
+  },
+  "nm": {
+    "text": "",
+    "mention": false,
+    "image": "notice 7.png"
+  }
+}
   fs.writeFileSync(noticesPath, JSON.stringify(initialNotices, null, 2), 'utf-8');
 }
 
@@ -107,24 +101,12 @@ async function handleCommand({ api, event, args }) {
     }
 
     const textToSave = replyMsg.body || "";
-    const attachmentsToSave = [];
-
-    if (replyMsg.attachments && Array.isArray(replyMsg.attachments)) {
-      for (const att of replyMsg.attachments) {
-        if (att.url || att.largePreviewUrl || att.previewUrl) {
-          attachmentsToSave.push({
-            type: att.type || 'photo',
-            url: att.url || att.largePreviewUrl || att.previewUrl
-          });
-        }
-      }
-    }
 
     notices[noticeName] = {
-      text: textToSave,
-      mention: textToSave.includes("@mention"),
-      attachments: attachmentsToSave
-    };
+  text: textToSave,
+  mention: textToSave.includes("@mention"),
+  image: notices[noticeName]?.image || ""
+};
 
     try {
       fs.writeFileSync(noticesPath, JSON.stringify(notices, null, 2), 'utf-8');
@@ -248,67 +230,25 @@ async function handleCommand({ api, event, args }) {
   // Append Mandatory Footer
   finalBody = `${finalBody}\n\n⚡🔥 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 🔥⚡`;
 
-  // Send with Attachments (if available)
-  if (notice.attachments && Array.isArray(notice.attachments) && notice.attachments.length > 0) {
-    const tempFiles = [];
-    try {
-      for (let i = 0; i < notice.attachments.length; i++) {
-        const att = notice.attachments[i];
-        if (!att.url) continue;
+  const imagePath = path.join(process.cwd(), "assets", notice.image || "");
 
-        let ext = '.png';
-        if (att.type === 'video' || att.type === 'video_gif') ext = '.mp4';
-        else if (att.type === 'animated_image' || att.type === 'gif') ext = '.gif';
-        else if (att.type === 'audio') ext = '.mp3';
+const message = {
+  body: finalBody,
+  mentions: finalMentions
+};
 
-        const tempPath = path.join(os.tmpdir(), `notice_${noticeName}_${Date.now()}_${i}${ext}`);
-        
-        const response = await fetch(att.url);
-        if (!response.ok) throw new Error(`Fetch failed with code ${response.status}`);
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        fs.writeFileSync(tempPath, buffer);
-        
-        tempFiles.push(tempPath);
-      }
+if (notice.image && fs.existsSync(imagePath)) {
+  message.attachment = [
+  fs.createReadStream(imagePath)
+];
+}
 
-      const messageObj = {
-        body: finalBody,
-        mentions: finalMentions,
-        attachment: tempFiles.map(f => fs.createReadStream(f))
-      };
-
-      if (api && typeof api.sendMessage === 'function') {
-        return api.sendMessage(messageObj, threadID, (err) => {
-          // Async Cleanup
-          for (const f of tempFiles) {
-            fs.unlink(f, () => {});
-          }
-        }, messageID);
-      } else {
-        console.log(`[Riyad Bot - SendMessage with Attachment]:`, messageObj);
-        // Direct local emulation clean up
-        for (const f of tempFiles) {
-          fs.unlink(f, () => {});
-        }
-      }
-
-    } catch (downloadError) {
-      console.error("Failed to process notice attachments:", downloadError);
-      const errorMsg = `\n\n⚠️ (Could not load attachments: ${downloadError.message})`;
-      return reply(finalBody + errorMsg);
-    }
-  } else {
-    // Standard Text Notice
-    if (api && typeof api.sendMessage === 'function') {
-      return api.sendMessage({
-        body: finalBody,
-        mentions: finalMentions
-      }, threadID, () => {}, messageID);
-    } else {
-      console.log(`[Riyad Bot - SendMessage]:`, { body: finalBody, mentions: finalMentions });
-    }
-  }
+return api.sendMessage(
+  message,
+  threadID,
+  () => {},
+  messageID
+);
 }
 
 // Export for high-level framework loaders (Goat-bot, Mirai-bot, Custom-loaders)
