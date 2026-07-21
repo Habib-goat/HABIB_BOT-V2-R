@@ -2,7 +2,8 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const FormData = require("form-data");
-
+const { downloadFile } = require("../../utils/index");
+/*
 function getMimeType(ext) {
   const mimeTypes = {
     ".png": "image/png",
@@ -25,7 +26,7 @@ function getMimeType(ext) {
   };
   return mimeTypes[ext.toLowerCase()] || "application/octet-stream";
 }
-
+*/
 module.exports = {
   config: {
     name: "catbox",
@@ -78,20 +79,7 @@ module.exports = {
     });
 
     try {
-      const response = await axios({
-        method: "get",
-        url: attachment.url,
-        responseType: "stream",
-        timeout: 30000
-      });
-
-      const writer = fs.createWriteStream(filePath);
-      response.data.pipe(writer);
-
-      await new Promise((resolve, reject) => {
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-      });
+      await downloadFile(attachment.url, filePath);
 
       if (!fs.existsSync(filePath)) {
         throw new Error("Downloaded file could not be saved to disk.");
@@ -104,32 +92,20 @@ module.exports = {
 
       const form = new FormData();
       form.append("reqtype", "fileupload");
-      form.append("fileToUpload", fs.createReadStream(filePath), {
-        filename: "file" + ext,
-        contentType: getMimeType(ext)
-      });
+      form.append("fileToUpload", fs.createReadStream(filePath));
 
-      const formLength = await new Promise((resolve, reject) => {
-        form.getLength((err, length) => {
-          if (err) reject(err);
-          else resolve(length);
-        });
-      });
 
       const uploadResponse = await axios.post(
-        "https://catbox.moe/user/api.php",
-        form,
-        {
-          headers: {
-            ...form.getHeaders(),
-            "Content-Length": formLength,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-          },
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-          timeout: 60000
-        }
-      );
+      const uploadResponse = await axios.post(
+  "https://catbox.moe/user/api.php",
+  form,
+  {
+    headers: form.getHeaders(),
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    timeout: 60000
+  }
+);
 
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
