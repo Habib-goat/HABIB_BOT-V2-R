@@ -106,7 +106,7 @@ module.exports = {
 },
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
-    timeout: 60000
+    timeout: 60000,
     validateStatus: () => true,
   }
 );
