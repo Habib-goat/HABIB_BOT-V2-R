@@ -175,9 +175,14 @@ async function handleCommand({ api, event, args }) {
   }
 
   const notice = notices[noticeName];
-  if (!notice) {
-    return reply(`❌ Notice "${noticeName}" does not exist.`);
-  }
+
+console.log("Notice Path:", noticesPath);
+console.log("Notice Name:", noticeName);
+console.log("Notice Data:", notice);
+
+if (!notice) {
+  return reply(`❌ Notice "${noticeName}" does not exist.`);
+}
 
   // Handle Mention Formatting
   let finalBody = notice.text;
