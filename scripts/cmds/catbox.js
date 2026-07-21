@@ -95,7 +95,7 @@ module.exports = {
       form.append("fileToUpload", fs.createReadStream(filePath));
 
 
-      const uploadResponse = await axios.post(
+      
       const uploadResponse = await axios.post(
   "https://catbox.moe/user/api.php",
   form,
