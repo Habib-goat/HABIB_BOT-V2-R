@@ -92,7 +92,7 @@ module.exports = {
 
       const form = new FormData();
       form.append("reqtype", "fileupload");
-      form.append("fileToUpload", fs.createReadStream(filePath));
+      form.append("fileToUpload", fs.createReadStream(filePath), path.basename(filePath));
 
 
       
@@ -100,10 +100,14 @@ module.exports = {
   "https://catbox.moe/user/api.php",
   form,
   {
-    headers: form.getHeaders(),
+    headers: {
+  ...form.getHeaders(),
+  "User-Agent": "Mozilla/5.0"
+},
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
     timeout: 60000
+    validateStatus: () => true,
   }
 );
 
