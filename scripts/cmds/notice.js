@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Resolve the notice database path
-const dataDir = path.join(process.cwd(), 'data');
+const dataDir = path.join(__dirname, '..', 'data');
 const noticesPath = path.join(dataDir, 'notices.json');
 
 // Ensure data/notices.json exists
