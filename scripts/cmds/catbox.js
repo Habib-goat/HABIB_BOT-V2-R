@@ -2,7 +2,7 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const FormData = require("form-data");
-const { downloadFile } = require("../../utils/index");
+const { downloadFile } = require("../utils/index");
 /*
 function getMimeType(ext) {
   const mimeTypes = {
