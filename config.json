@@ -42,7 +42,7 @@
   },
   "database": {
   "type": "mongodb",
-  "uriMongodb": "mongodb+srv://eryxenxdb:eryxenxdbgoatv2@cluster0.523a3n0.mongodb.net/?appName=Cluster0",
+  "uriMongodb": "mongodb+srv://eryxenxdb:eryxenxdbgoatv2@cluster0.523a3n0.mongodb.net/riyadbot?retryWrites=true&w=majority",
   "autoSyncWhenStart": false,
   "autoRefreshThreadInfoFirstTime": true,
   "notes": "Recommended using 'mongodb' or 'sqlite'."
