@@ -2,6 +2,7 @@ const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
 const vm = require('vm');
+const commandLoader = require("../handlers/commandLoader");
 
 const BASE_URL = 'https://riyad-store-api.onrender.com';
 
@@ -59,7 +60,7 @@ function getMsgID(sent) {
 async function editProgress(api, msgID, text, event) {
     try {
         if (msgID) {
-            await api.editMessage(text, msgID);
+            await api.editMessage(msgID, text);
         } else {
             await api.reply(text, event);
         }
@@ -118,18 +119,14 @@ function validateCode(rawCode) {
 /**
  * Reload command in Riyad Bot Framework
  */
-async function reloadCommand(cmdName, filePath, api) {
+async function reloadCommand(cmdName) {
     try {
-        const resolvedPath = path.resolve(filePath);
-        if (require.cache[resolvedPath]) {
-            delete require.cache[resolvedPath];
-        }
-        if (typeof api?.reloadCommand === 'function') {
-            await api.reloadCommand(cmdName);
-        } else if (typeof global?.reloadCommand === 'function') {
-            await global.reloadCommand(cmdName);
-        }
-    } catch (err) {}
+        commandLoader.reloadCommand(cmdName);
+        return true;
+    } catch (err) {
+        console.error("Reload failed:", err);
+        return false;
+    }
 }
 
 /**
@@ -420,7 +417,7 @@ module.exports = {
                 await editProgress(api, msgID, renderAnimFrame(80), event);
 
                 // Reload Command
-                await reloadCommand(finalCmdName, targetPath, api);
+                await reloadCommand(finalCmdName);
 
                 // Animation Step: 100%
                 await sleep(250);
