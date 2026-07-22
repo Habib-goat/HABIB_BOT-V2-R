@@ -382,6 +382,9 @@ console.log("STEP 6");
                 // Metadata Fetch
                 try {
                     const infoRes = await fetchWithRetry(`${BASE_URL}/api/store/info/${cmdId}`, {}, 1);
+                    
+                    console.log("STEP 7");
+                    
                     const infoData = infoRes.data?.data || infoRes.data?.result || infoRes.data;
                     if (infoData && typeof infoData === 'object') {
                         if (infoData.name) metaInfo.name = infoData.name;
