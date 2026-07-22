@@ -82,6 +82,15 @@ await Notice.bulkWrite(
   }))
 );
 const action = (args?.[0] || "").toLowerCase();
+  const noticeNames = {
+  gn: "Group Notice",
+  nt: "No Text",
+  ki: "Kick Notice",
+  ga: "Gan Notice",
+  ga2: "Gan Notice 2",
+  gr: "Group Rules",
+  nm: "Namaz Break"
+};
 
 const noticeDocs = await Notice.find({});
 
@@ -107,10 +116,12 @@ for (const doc of noticeDocs) {
     }
 
     return reply(
-      "📋 Notice List\n\n" +
-      names.map(i => `• ${i}`).join("\n") +
-      "\n\n⚡🔥 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 🔥⚡"
-    );
+  "📋 Notice List\n\n" +
+  names
+    .map(i => `• ${i} ➜ ${noticeNames[i] || "Unknown"}`)
+    .join("\n") +
+  "\n\n⚡🔥 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 🔥⚡"
+);
   }
 
   // =========================
