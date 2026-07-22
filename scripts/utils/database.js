@@ -1,123 +1,146 @@
-const fs = require('fs-extra');
-const path = require('path');
+const mongoose = require("mongoose");
+const config = require("../../config.json");
 
-const dbDir = path.join(__dirname, '../../database');
-const usersPath = path.join(dbDir, 'users.json');
-const threadsPath = path.join(dbDir, 'threads.json');
-const settingsPath = path.join(dbDir, 'settings.json');
+const User = require("../models/User");
+const Thread = require("../models/Thread");
+const Settings = require("../models/Settings");
 
-// Ensure database directory and files exist
-fs.ensureDirSync(dbDir);
-if (!fs.existsSync(usersPath)) fs.writeJsonSync(usersPath, {});
-if (!fs.existsSync(threadsPath)) fs.writeJsonSync(threadsPath, {});
-if (!fs.existsSync(settingsPath)) {
-  fs.writeJsonSync(settingsPath, {
-    totalCommandsExecuted: 0,
-    blockedUsers: {},
-    systemUptimeStart: Date.now()
-  });
+let isConnected = false;
+
+async function connectDB() {
+  if (isConnected || mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+
+  await mongoose.connect(config.database.uriMongodb);
+
+  isConnected = true;
+  console.log("✅ MongoDB Connected");
+
+  return mongoose.connection;
 }
+async function getUser(userId) {
+  await connectDB();
 
-class Database {
-  constructor() {
-    this.users = fs.readJsonSync(usersPath);
-    this.threads = fs.readJsonSync(threadsPath);
-    this.settings = fs.readJsonSync(settingsPath);
+  let user = await User.findOne({ id: String(userId) });
+
+  if (!user) {
+    user = await User.create({
+      id: String(userId),
+      name: `User ${String(userId).slice(-4)}`,
+      exp: 0,
+      level: 1,
+      money: 500,
+      bank: 0,
+      lastDaily: 0,
+      banned: false,
+      inventory: []
+    });
   }
 
-  // Save changes to disk
-  saveUsers() {
-    fs.writeJsonSync(usersPath, this.users, { spaces: 2 });
-  }
-
-  saveThreads() {
-    fs.writeJsonSync(threadsPath, this.threads, { spaces: 2 });
-  }
-
-  saveSettings() {
-    fs.writeJsonSync(settingsPath, this.settings, { spaces: 2 });
-  }
-
-  // --- Users Methods ---
-  getUser(userId) {
-    if (!this.users[userId]) {
-      const idStr = String(userId);
-      this.users[userId] = {
-        id: userId,
-        name: `User ${idStr.slice(-4)}`,
-        exp: 0,
-        level: 1,
-        money: 500,
-        bank: 0,
-        lastDaily: 0,
-        banned: false,
-        inventory: []
-      };
-      this.saveUsers();
-    }
-    return this.users[userId];
-  }
-
-  updateUser(userId, data) {
-    const user = this.getUser(userId);
-    this.users[userId] = { ...user, ...data };
-    this.saveUsers();
-    return this.users[userId];
-  }
-
-  getAllUsers() {
-    return this.users;
-  }
-
-  // --- Threads Methods ---
-  getThread(threadId) {
-    if (!this.threads[threadId]) {
-      const threadIdStr = String(threadId);
-      this.threads[threadId] = {
-        id: threadId,
-        name: `Group Thread ${threadIdStr.slice(-4)}`,
-        prefix: null, // Custom prefix for this group
-        settings: {
-          antiSpam: true,
-          antiLink: false,
-          antiBadword: false,
-          autoReply: true,
-          welcomeMessage: "Welcome {name} to our group!",
-          goodbyeMessage: "{name} has left the group."
-        },
-        members: []
-      };
-      this.saveThreads();
-    }
-    return this.threads[threadId];
-  }
-
-  updateThread(threadId, data) {
-    const thread = this.getThread(threadId);
-    this.threads[threadId] = { ...thread, ...data };
-    this.saveThreads();
-    return this.threads[threadId];
-  }
-
-  getAllThreads() {
-    return this.threads;
-  }
-
-  // --- Settings Methods ---
-  getSettings() {
-    return this.settings;
-  }
-
-  updateSettings(data) {
-    this.settings = { ...this.settings, ...data };
-    this.saveSettings();
-    return this.settings;
-  }
-
-  incrementCommandCount() {
-    this.settings.totalCommandsExecuted = (this.settings.totalCommandsExecuted || 0) + 1;
-    this.saveSettings();
-  }
+  return user;
 }
+async function updateUser(userId, data) {
+  await connectDB();
 
-module.exports = new Database();
+  const user = await getUser(userId);
+
+  Object.assign(user, data);
+
+  await user.save();
+
+  return user;
+}
+async function getAllUsers() {
+  await connectDB();
+  return await User.find({});
+}
+async function getThread(threadId) {
+  await connectDB();
+
+  let thread = await Thread.findOne({ id: String(threadId) });
+
+  if (!thread) {
+    thread = await Thread.create({
+      id: String(threadId),
+      name: `Group Thread ${String(threadId).slice(-4)}`,
+      prefix: null,
+      settings: {
+        antiSpam: true,
+        antiLink: false,
+        antiBadword: false,
+        autoReply: true,
+        welcomeMessage: "Welcome {name} to our group!",
+        goodbyeMessage: "{name} has left the group."
+      },
+      members: []
+    });
+  }
+
+  return thread;
+}
+async function updateThread(threadId, data) {
+  await connectDB();
+
+  const thread = await getThread(threadId);
+
+  Object.assign(thread, data);
+
+  await thread.save();
+
+  return thread;
+}
+async function getAllThreads() {
+  await connectDB();
+  return await Thread.find({});
+}
+async function getSettings() {
+  await connectDB();
+
+  let settings = await Settings.findOne();
+
+  if (!settings) {
+    settings = await Settings.create({
+      totalCommandsExecuted: 0,
+      blockedUsers: {},
+      systemUptimeStart: Date.now()
+    });
+  }
+
+  return settings;
+}
+async function updateSettings(data) {
+  await connectDB();
+
+  let settings = await getSettings();
+
+  Object.assign(settings, data);
+
+  await settings.save();
+
+  return settings;
+}
+async function incrementCommandCount() {
+  await connectDB();
+
+  const settings = await getSettings();
+
+  settings.totalCommandsExecuted =
+    (settings.totalCommandsExecuted || 0) + 1;
+
+  await settings.save();
+
+  return settings.totalCommandsExecuted;
+}
+module.exports = {
+  connectDB,
+  getUser,
+  updateUser,
+  getAllUsers,
+  getThread,
+  updateThread,
+  getAllThreads,
+  getSettings,
+  updateSettings,
+  incrementCommandCount
+};
