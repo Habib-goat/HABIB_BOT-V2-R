@@ -78,11 +78,10 @@ console.log("LOADED COMMAND:", cmdName);
     return count;
   },
 
-  reloadCommand: (commandName) => {
+    reloadCommand: (commandName) => {
     const cmdName = commandName.toLowerCase();
     let targetCmd = commands.get(cmdName);
 
-    // If not found directly, check aliases
     if (!targetCmd && aliases.has(cmdName)) {
       const actualName = aliases.get(cmdName);
       targetCmd = commands.get(actualName);
@@ -93,25 +92,25 @@ console.log("LOADED COMMAND:", cmdName);
     }
 
     const filePath = targetCmd.filePath;
+
     try {
       delete require.cache[require.resolve(filePath)];
-      const exported = require(filePath);
 
+      const exported = require(filePath);
       const cmdsToRegister = Array.isArray(exported) ? exported : [exported];
 
-      // Verify all elements in the array are valid
       for (const cmd of cmdsToRegister) {
         if (!cmd || !cmd.config || !cmd.config.name) {
           throw new Error("Missing config or config.name in the reloaded command file.");
         }
       }
 
-      // Remove all old commands and aliases associated with this filePath
       for (const [name, existingCmd] of commands.entries()) {
         if (existingCmd.filePath === filePath) {
           commands.delete(name);
         }
       }
+
       for (const [alias, mappedName] of aliases.entries()) {
         const existingCmd = commands.get(mappedName);
         if (!existingCmd || existingCmd.filePath === filePath) {
@@ -119,15 +118,15 @@ console.log("LOADED COMMAND:", cmdName);
         }
       }
 
-      // Register new ones
       for (const cmd of cmdsToRegister) {
         const newCmdName = cmd.config.name.toLowerCase();
+
         commands.set(newCmdName, {
           ...cmd,
           filePath
         });
 
-        if (cmd.config.aliases && Array.isArray(cmd.config.aliases)) {
+        if (Array.isArray(cmd.config.aliases)) {
           for (const alias of cmd.config.aliases) {
             aliases.set(alias.toLowerCase(), newCmdName);
           }
@@ -136,9 +135,45 @@ console.log("LOADED COMMAND:", cmdName);
 
       logger.info(`Reloaded command file: ${path.relative(cmdsDir, filePath)}`);
       return true;
+
     } catch (err) {
       logger.error(`Error reloading command '${commandName}':`, err);
       throw err;
+    }
+  },
+
+  loadCommand: (filePath) => {
+    try {
+      delete require.cache[require.resolve(filePath)];
+
+      const exported = require(filePath);
+      const cmdsToRegister = Array.isArray(exported) ? exported : [exported];
+
+      for (const cmd of cmdsToRegister) {
+        if (!cmd || !cmd.config || !cmd.config.name) {
+          throw new Error("Missing config or config.name");
+        }
+
+        const cmdName = cmd.config.name.toLowerCase();
+
+        commands.set(cmdName, {
+          ...cmd,
+          filePath
+        });
+
+        if (Array.isArray(cmd.config.aliases)) {
+          for (const alias of cmd.config.aliases) {
+            aliases.set(alias.toLowerCase(), cmdName);
+          }
+        }
+      }
+
+      logger.info(`Loaded new command: ${path.basename(filePath)}`);
+      return true;
+
+    } catch (err) {
+      logger.error("Failed to load new command:", err);
+      return false;
     }
   }
 };
