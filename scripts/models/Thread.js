@@ -52,7 +52,26 @@ const threadSchema = new mongoose.Schema(
     },
 
     members: {
-      type: [String],
+      type: [
+        {
+          userID: {
+            type: String,
+            required: true
+          },
+          name: {
+            type: String,
+            default: ""
+          },
+          inGroup: {
+            type: Boolean,
+            default: true
+          },
+          isAdmin: {
+            type: Boolean,
+            default: false
+          }
+        }
+      ],
       default: []
     }
   },
