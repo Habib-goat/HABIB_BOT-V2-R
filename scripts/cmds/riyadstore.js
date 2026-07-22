@@ -332,19 +332,32 @@ module.exports = {
                 }
 
                 // Initial animation message (0%)
-                const sentMsg = await api.reply(renderAnimFrame(0), event);
-                const msgID = getMsgID(sentMsg);
+                console.log("STEP 1");
+
+const sentMsg = await api.reply(renderAnimFrame(0), event);
+
+console.log("STEP 2");
+
+const msgID = getMsgID(sentMsg);
+
+console.log("STEP 3");
 
                 // Animation Step: 10%
                 await sleep(250);
-                await editProgress(api, msgID, renderAnimFrame(10), event);
+await editProgress(api, msgID, renderAnimFrame(10), event);
+
+console.log("STEP 4");
 
                 let rawCode = "";
                 let metaInfo = { name: null, author: "Unknown", category: "General", version: "1.0.0" };
 
                 // Download Code
                 try {
-                    const rawRes = await fetchWithRetry(`${BASE_URL}/api/store/raw/${cmdId}`);
+                    console.log("STEP 5");
+
+const rawRes = await fetchWithRetry(`${BASE_URL}/api/store/raw/${cmdId}`);
+
+console.log("STEP 6");
                     if (typeof rawRes.data === 'string') {
                         rawCode = rawRes.data;
                     } else if (rawRes.data && typeof rawRes.data.rawCode === 'string') {
