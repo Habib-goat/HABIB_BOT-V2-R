@@ -386,6 +386,9 @@ console.log("STEP 6");
                     console.log("STEP 7");
                     
                     const infoData = infoRes.data?.data || infoRes.data?.result || infoRes.data;
+
+                    console.log("STEP 8");
+                    
                     if (infoData && typeof infoData === 'object') {
                         if (infoData.name) metaInfo.name = infoData.name;
                         if (infoData.author) metaInfo.author = infoData.author;
@@ -396,6 +399,9 @@ console.log("STEP 6");
 
                 // Command Name & Target Path
                 const finalCmdName = extractCommandName(rawCode, metaInfo.name, cmdId);
+
+                console.log("STEP 9");
+                
                 const fileName = finalCmdName.endsWith('.js') ? finalCmdName : `${finalCmdName}.js`;
                 const targetPath = path.join(process.cwd(), 'scripts', 'cmds', fileName);
 
@@ -408,6 +414,9 @@ console.log("STEP 6");
 
                 // Validate JS Code
                 const validation = validateCode(rawCode);
+
+                console.log("STEP 10");
+                
                 if (!validation.valid) {
                     return await editProgress(api, msgID, `❌ Invalid command file.\nReason: ${validation.reason}`, event);
                 }
@@ -424,6 +433,9 @@ console.log("STEP 6");
                 try {
                     await fs.ensureDir(path.dirname(targetPath));
                     await fs.writeFile(targetPath, rawCode, 'utf8');
+
+                    console.log("STEP 11");
+                    
                 } catch (writeErr) {
                     return await editProgress(api, msgID, getErrorMessage(writeErr), event);
                 }
