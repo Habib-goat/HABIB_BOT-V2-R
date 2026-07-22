@@ -5,51 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-
-// Resolve the notice database path
-const dataDir = path.join(__dirname, '..', 'data');
-const noticesPath = path.join(dataDir, 'notices.json');
-
-// Ensure data/notices.json exists
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-if (!fs.existsSync(noticesPath)) {
-  const initialNotices = {
-  "gn": {
-    "text": "",
-    "mention": false,
-    "image": "notice 1.png"
-  },
-  "nt": {
-    "text": "",
-    "mention": false,
-    "image": "notice 2.png"
-  },
-  "ki": {
-    "text": "",
-    "mention": true,
-    "image": "notice 4.png"
-  },
-  "ga": {
-    "text": "",
-    "mention": true,
-    "image": "notice 5.png"
-  },
-  "gr": {
-    "text": "",
-    "mention": false,
-    "image": "notice 6.png"
-  },
-  "nm": {
-    "text": "",
-    "mention": false,
-    "image": "notice 7.png"
-  }
-}
-  fs.writeFileSync(noticesPath, JSON.stringify(initialNotices, null, 2), 'utf-8');
-}
+const Notice = require("../models/Notice");
 
 /**
  * Core handler logic for the notice system.
@@ -69,13 +25,17 @@ async function handleCommand({ api, event, args }) {
   const action = args && args[0] ? args[0].toLowerCase() : '';
 
   // Load latest notices
-  let notices = {};
-  try {
-    notices = JSON.parse(fs.readFileSync(noticesPath, 'utf-8'));
-  } catch (error) {
-    console.error("Error reading notices database:", error);
-    notices = {};
-  }
+  const noticeDocs = await Notice.find();
+
+const notices = {};
+
+for (const item of noticeDocs) {
+  notices[item.name] = {
+    text: item.text,
+    mention: item.mention,
+    image: item.image
+  };
+}
 
   // 1. LIST COMMAND (/n list)
   if (action === 'list') {
@@ -102,18 +62,27 @@ async function handleCommand({ api, event, args }) {
 
     const textToSave = replyMsg.body || "";
 
-    notices[noticeName] = {
-  text: textToSave,
-  mention: textToSave.includes("@mention"),
-  image: notices[noticeName]?.image || ""
-};
-
     try {
-      fs.writeFileSync(noticesPath, JSON.stringify(notices, null, 2), 'utf-8');
-      return reply(`✅ Notice "${noticeName}" has been successfully saved!`);
-    } catch (err) {
-      return reply(`❌ Failed to save notice: ${err.message}`);
+  const oldNotice = await Notice.findOne({ name: noticeName });
+
+  await Notice.findOneAndUpdate(
+    { name: noticeName },
+    {
+      name: noticeName,
+      text: textToSave,
+      mention: textToSave.includes("@mention"),
+      image: oldNotice?.image || ""
+    },
+    {
+      upsert: true,
+      new: true
     }
+  );
+
+  return reply(`✅ Notice "${noticeName}" has been successfully saved!`);
+} catch (err) {
+  return reply(`❌ Failed to save notice: ${err.message}`);
+}
   }
 
   // 3. REMOVE COMMAND (/n remove or /n remove <notice_name>)
@@ -122,19 +91,15 @@ async function handleCommand({ api, event, args }) {
     const replyMsg = messageReply || event.message_reply;
 
     // Direct deletion by name
-    if (noticeNameArg) {
-      if (notices[noticeNameArg]) {
-        delete notices[noticeNameArg];
-        try {
-          fs.writeFileSync(noticesPath, JSON.stringify(notices, null, 2), 'utf-8');
-          return reply(`🗑️ Notice "${noticeNameArg}" has been deleted.`);
-        } catch (err) {
-          return reply(`❌ Failed to delete notice: ${err.message}`);
-        }
-      } else {
-        return reply(`❌ Notice "${noticeNameArg}" does not exist.`);
-      }
-    }
+if (noticeNameArg) {
+  const deleted = await Notice.findOneAndDelete({ name: noticeNameArg });
+
+  if (deleted) {
+    return reply(`🗑️ Notice "${noticeNameArg}" has been deleted.`);
+  }
+
+  return reply(`❌ Notice "${noticeNameArg}" does not exist.`);
+}
 
     // Deletion by replying to notice
     if (!replyMsg) {
@@ -156,17 +121,11 @@ async function handleCommand({ api, event, args }) {
     }
 
     if (foundKey) {
-      delete notices[foundKey];
-      try {
-        fs.writeFileSync(noticesPath, JSON.stringify(notices, null, 2), 'utf-8');
-        return reply(`🗑️ Notice "${foundKey}" has been deleted successfully!`);
-      } catch (err) {
-        return reply(`❌ Failed to delete notice: ${err.message}`);
-      }
-    } else {
-      return reply("❌ Could not find a notice matching this message in notices.json.");
-    }
-  }
+  await Notice.findOneAndDelete({ name: foundKey });
+  return reply(`🗑️ Notice "${foundKey}" has been deleted successfully!`);
+} else {
+  return reply("❌ Could not find a notice matching this message.");
+}
 
   // 4. TRIGGER NOTICE (/n <notice_name>)
   const noticeName = action;
