@@ -157,12 +157,14 @@ if (!senderID || !threadID) return;
     }
 
     // Load thread and user info
-    const threadData = database.getThread(threadID);
-    const userData = database.getUser(senderID);
+    const threadData = await database.getThread(threadID);
+const userData = await database.getUser(senderID);
 
     // Update user display name if captured
     if (event.senderName && userData.name !== event.senderName) {
-      database.updateUser(senderID, { name: event.senderName });
+      await database.updateUser(senderID, {
+  name: event.senderName
+});
     }
 
     // 2. Anti-Link Filter
@@ -343,7 +345,7 @@ for (const [name, cmd] of commandLoader.commands.entries()) {
     // 9. Execute onStart
     if (typeof cmd.onStart === 'function') {
       try {
-        database.incrementCommandCount();
+        await database.incrementCommandCount();
         await cmd.onStart({
   api,
   event,
