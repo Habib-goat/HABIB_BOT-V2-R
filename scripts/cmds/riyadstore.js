@@ -416,8 +416,12 @@ module.exports = {
                 await sleep(250);
                 await editProgress(api, msgID, renderAnimFrame(80), event);
 
-                // Reload Command
-                await reloadCommand(finalCmdName);
+                // Load new command if not already loaded
+if (subCommand === "install") {
+    commandLoader.loadCommand(targetPath);
+} else {
+    await reloadCommand(finalCmdName);
+}
 
                 // Animation Step: 100%
                 await sleep(250);
@@ -480,7 +484,13 @@ Enjoy using Riyad Store ❤️`;
                     if (require.cache[resolvedPath]) {
                         delete require.cache[resolvedPath];
                     }
-                    await reloadCommand(targetName.replace(/\.js$/, ''), targetPath, api);
+                    commandLoader.commands.delete(targetName.replace(/\.js$/, "").toLowerCase());
+
+for (const [alias, cmd] of commandLoader.aliases.entries()) {
+    if (cmd === targetName.replace(/\.js$/, "").toLowerCase()) {
+        commandLoader.aliases.delete(alias);
+    }
+}
 
                     try {
                         if (typeof api.react === 'function' && event.messageID) {
