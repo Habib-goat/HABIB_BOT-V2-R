@@ -1,5 +1,5 @@
-const mongoose = require("mongoose");
-const Notice = require("./models/Notice");
+const Notice = require("./scripts/models/Notice");
+const { connectDB } = require("./scripts/utils/database");
 
 const notices = {
   // এখানে তোমার পাঠানো পুরো JSON টা পেস্ট করো
@@ -38,6 +38,7 @@ const notices = {
 
 async function importNotices() {
   try {
+    await connectDB();
     for (const [name, data] of Object.entries(notices)) {
       await Notice.findOneAndUpdate(
         { name },
