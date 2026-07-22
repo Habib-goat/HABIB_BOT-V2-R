@@ -5,68 +5,26 @@ const vm = require('vm');
 
 const BASE_URL = 'https://riyad-store-api.onrender.com';
 
-/**
- * Helper to pause execution for a given duration.
- * @param {number} ms Milliseconds to sleep.
- */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Helper to reply to a message across different bot framework implementations.
+ * Perform API request with automatic retry on failure
  */
-async function replyMsg(api, event, message, text) {
-    try {
-        if (message && typeof message.reply === 'function') {
-            return await message.reply(text);
-        }
-        if (message && typeof message.send === 'function') {
-            return await message.send(text);
-        }
-        if (api && typeof api.sendMessage === 'function' && event && event.threadID) {
-            return new Promise((resolve) => {
-                api.sendMessage(text, event.threadID, (err, info) => {
-                    resolve(info || null);
-                }, event.messageID);
-            });
-        }
-    } catch (err) {
-        console.error('[RiyadStore] Error sending message:', err.message);
-    }
-    return null;
-}
-
-/**
- * Helper to edit a previously sent message with graceful fallback if unsupported or failing.
- */
-async function editMsg(api, event, message, targetMsg, newText) {
-    if (!targetMsg) {
-        return await replyMsg(api, event, message, newText);
-    }
-    const msgID = targetMsg.messageID || targetMsg.message_id || targetMsg;
-    try {
-        if (message && typeof message.edit === 'function') {
-            return await message.edit(newText, msgID);
-        }
-        if (api && typeof api.editMessage === 'function') {
-            return await api.editMessage(newText, msgID);
-        }
-        if (api && typeof api.sendMessage === 'function' && event && event.threadID) {
-            return await replyMsg(api, event, message, newText);
-        }
-    } catch (err) {
+async function fetchWithRetry(url, options = {}, retries = 2) {
+    for (let i = 0; i <= retries; i++) {
         try {
-            return await replyMsg(api, event, message, newText);
-        } catch (e) {
-            // Ignore fallback send error
+            return await axios.get(url, { timeout: 10000, ...options });
+        } catch (err) {
+            if (i === retries) throw err;
+            await sleep(1000);
         }
     }
-    return targetMsg;
 }
 
 /**
- * Helper to format clean, readable error messages for all edge cases.
+ * Handle API & FS error messages cleanly
  */
-function handleApiOrFsError(error) {
+function getErrorMessage(error) {
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
         return "❌ Request timed out. Please try again later.";
     }
@@ -80,170 +38,104 @@ function handleApiOrFsError(error) {
         return "❌ Disk write error: Storage full.";
     }
     if (error.response) {
-        const status = error.response.status;
-        if (status === 404) return "❌ Command not found.";
-        if (status >= 500) return "❌ Unknown server error.";
-        return `❌ Server error (${status}).`;
+        if (error.response.status === 404) return "❌ Command not found.";
+        return `❌ Server error (${error.response.status}).`;
     }
-    if (error.message && error.message.startsWith('❌')) {
-        return error.message;
-    }
-    return "❌ Riyad Store API is unavailable.";
+    return "❌ Network error or Riyad Store API is unavailable.";
 }
 
 /**
- * Safely detect the commands directory.
+ * Extract target message ID from api.reply response
  */
-function getCommandsDir() {
-    const candidates = [
-        path.join(process.cwd(), 'scripts', 'cmds'),
-        path.join(process.cwd(), 'modules', 'commands'),
-        path.join(process.cwd(), 'commands'),
-        path.join(process.cwd(), 'cmds')
-    ];
-    for (const dir of candidates) {
-        if (fs.existsSync(dir)) {
-            return dir;
+function getMsgID(sent) {
+    if (!sent) return null;
+    if (typeof sent === 'string' || typeof sent === 'number') return sent;
+    return sent.messageID || sent.message_id || sent.mid || null;
+}
+
+/**
+ * Edit progress message safely
+ */
+async function editProgress(api, msgID, text, event) {
+    try {
+        if (msgID) {
+            await api.editMessage(text, msgID);
+        } else {
+            await api.reply(text, event);
         }
+    } catch (e) {
+        try {
+            await api.reply(text, event);
+        } catch (err) {}
     }
-    return path.join(process.cwd(), 'scripts', 'cmds');
 }
 
 /**
- * Detect command name from raw JS code or API metadata.
+ * Detect command name from code or metadata
  */
-function detectCommandName(rawCode, metaInfoName, cmdId) {
+function extractCommandName(rawCode, metaName, cmdId) {
     if (rawCode && typeof rawCode === 'string') {
         const patterns = [
             /name\s*:\s*["'`]\s*([a-zA-Z0-9_-]+)\s*["'`]/i,
-            /name\s*=\s*["'`]\s*([a-zA-Z0-9_-]+)\s*["'`]/i,
-            /config\s*=\s*\{\s*name\s*:\s*["'`]\s*([a-zA-Z0-9_-]+)\s*["'`]/i,
-            /exports\.config\s*=\s*\{\s*name\s*:\s*["'`]\s*([a-zA-Z0-9_-]+)\s*["'`]/i
+            /name\s*=\s*["'`]\s*([a-zA-Z0-9_-]+)\s*["'`]/i
         ];
         for (const pattern of patterns) {
             const match = rawCode.match(pattern);
-            if (match && match[1]) {
-                return match[1].trim();
-            }
+            if (match && match[1]) return match[1].trim();
         }
     }
-
-    if (metaInfoName && typeof metaInfoName === 'string') {
-        const sanitized = metaInfoName.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+    if (metaName && typeof metaName === 'string') {
+        const sanitized = metaName.trim().replace(/[^a-zA-Z0-9_-]/g, '');
         if (sanitized.length > 0) return sanitized;
     }
-
     return `cmd_${cmdId}`;
 }
 
 /**
- * Validate downloaded code before writing to disk.
+ * Validate command JS syntax and structure
  */
-function validateCommandCode(rawCode) {
+function validateCode(rawCode) {
     if (!rawCode || typeof rawCode !== 'string' || rawCode.trim().length === 0) {
-        return { valid: false, reason: "Empty response from server." };
+        return { valid: false, reason: "Downloaded code is empty." };
     }
-
-    // 1. Verify valid JavaScript syntax
     try {
         new vm.Script(rawCode);
     } catch (err) {
-        return { valid: false, reason: `Invalid JavaScript: ${err.message}` };
+        return { valid: false, reason: `Syntax Error: ${err.message}` };
     }
+    const hasExport = /module\.exports|exports\./i.test(rawCode);
+    if (!hasExport) return { valid: false, reason: "Missing module.exports." };
 
-    // 2. Verify module.exports exists
-    const hasExport = /module\.exports|exports\.|export\s+default/i.test(rawCode);
-    if (!hasExport) {
-        return { valid: false, reason: "Missing module.exports in command file." };
-    }
+    const hasConfig = /config\s*:\s*\{|config\s*=/i.test(rawCode);
+    if (!hasConfig) return { valid: false, reason: "Missing config object." };
 
-    // 3. Verify config object exists
-    const hasConfig = /config\s*:\s*\{|config\s*=|exports\.config/i.test(rawCode);
-    if (!hasConfig) {
-        return { valid: false, reason: "Missing config object in command file." };
-    }
-
-    // 4. Verify config.name exists
-    const hasName = /name\s*:\s*["'`][a-zA-Z0-9_-]+["'`]|name\s*=\s*["'`][a-zA-Z0-9_-]+["'`]/i.test(rawCode);
-    if (!hasName) {
-        return { valid: false, reason: "Missing config.name in command file." };
-    }
+    const hasName = /name\s*:\s*["'`][a-zA-Z0-9_-]+["'`]/i.test(rawCode);
+    if (!hasName) return { valid: false, reason: "Missing config.name." };
 
     return { valid: true };
 }
 
 /**
- * Automatically reload installed command into bot context.
+ * Reload command in Riyad Bot Framework
  */
-async function reloadInstalledCommand(cmdName, filePath, api) {
+async function reloadCommand(cmdName, filePath, api) {
     try {
         const resolvedPath = path.resolve(filePath);
         if (require.cache[resolvedPath]) {
             delete require.cache[resolvedPath];
         }
-
-        const loadedCmd = require(resolvedPath);
-        let reloaded = false;
-
-        // GoatBot framework
-        if (global.GoatBot) {
-            if (typeof global.GoatBot.loadCommand === 'function') {
-                try {
-                    await global.GoatBot.loadCommand({ commandName: cmdName, filePath: resolvedPath, api });
-                    reloaded = true;
-                } catch (e) {}
-            }
-            if (global.GoatBot.commands && typeof global.GoatBot.commands.set === 'function') {
-                global.GoatBot.commands.set(cmdName, loadedCmd);
-                reloaded = true;
-            }
+        if (typeof api?.reloadCommand === 'function') {
+            await api.reloadCommand(cmdName);
+        } else if (typeof global?.reloadCommand === 'function') {
+            await global.reloadCommand(cmdName);
         }
-
-        // Mirai / FCA / C3C frameworks
-        if (global.client) {
-            if (typeof global.client.loadCommand === 'function') {
-                try {
-                    await global.client.loadCommand(resolvedPath);
-                    reloaded = true;
-                } catch (e) {}
-            }
-            if (global.client.commands && typeof global.client.commands.set === 'function') {
-                global.client.commands.set(cmdName, loadedCmd);
-                if (loadedCmd.config && loadedCmd.config.name) {
-                    global.client.commands.set(loadedCmd.config.name.toLowerCase(), loadedCmd);
-                }
-                reloaded = true;
-            }
-        }
-
-        // Generic collections
-        if (global.commands && typeof global.commands.set === 'function') {
-            global.commands.set(cmdName, loadedCmd);
-            reloaded = true;
-        }
-
-        if (global.plugins && typeof global.plugins.set === 'function') {
-            global.plugins.set(cmdName, loadedCmd);
-            reloaded = true;
-        }
-
-        if (global.utils && typeof global.utils.loadCommand === 'function') {
-            try {
-                await global.utils.loadCommand(cmdName);
-                reloaded = true;
-            } catch (e) {}
-        }
-
-        return reloaded;
-    } catch (err) {
-        return false;
-    }
+    } catch (err) {}
 }
 
 /**
- * Format animation frame with step text indicator.
+ * Generate formatted progress box frame
  */
-function getAnimFrame(percent, stepText) {
+function renderAnimFrame(percent) {
     const totalBars = 10;
     const filled = Math.round((percent / 100) * totalBars);
     const empty = totalBars - filled;
@@ -251,22 +143,21 @@ function getAnimFrame(percent, stepText) {
     const paddedPercent = `${percent}%`.padEnd(4, ' ');
 
     return `╭───────────────╮
-│      📦 Riyad Store      │
+│ 📦 Riyad Store │
 ├───────────────┤
-│ ${bar} ${paddedPercent} │
-╰───────────────╯
-${stepText}`;
+│ ${bar} ${paddedPercent}│
+╰───────────────╯`;
 }
 
 module.exports = {
     config: {
         name: "rs",
         aliases: ["store", "riyadstore"],
-        version: "1.1.0",
+        version: "1.2.0",
         author: "Riyad",
         countDown: 5,
         role: 0,
-        description: "Access Riyad Store to search, view, install, and update bot commands",
+        description: "Access Riyad Store to search, view, install, update, and uninstall commands",
         category: "store",
         guide: {
             en: "Commands:\n" +
@@ -276,22 +167,23 @@ module.exports = {
                 "/rs info <id> - View command details\n" +
                 "/rs install <id> - Install a command\n" +
                 "/rs update <id> - Update a command\n" +
+                "/rs uninstall <name|id> - Uninstall a command\n" +
                 "/rs featured - View featured commands\n" +
                 "/rs latest - View latest commands"
         }
     },
 
-    onStart: async function ({ api, event, args, message, usersData, threadsData }) {
+    onStart: async function ({ api, event, args, usersData, threadsData, replyManager, reactionManager }) {
         const subCommand = (args[0] || '').toLowerCase();
 
         switch (subCommand) {
             case 'list': {
                 try {
-                    const res = await axios.get(`${BASE_URL}/api/store/list`, { timeout: 10000 });
+                    const res = await fetchWithRetry(`${BASE_URL}/api/store/list`);
                     const items = Array.isArray(res.data) ? res.data : (res.data?.data || res.data?.result || []);
 
                     if (!items || items.length === 0) {
-                        return await replyMsg(api, event, message, "❌ No commands available in Riyad Store.");
+                        return await api.reply("❌ No commands available in Riyad Store.", event);
                     }
 
                     let listText = "📦 𝗥𝗜𝗬𝗔𝗗 𝗦𝗧𝗢𝗥𝗘 - 𝗔𝗩𝗔𝗜𝗟𝗔𝗕𝗟𝗘 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦\n━━━━━━━━━━━━━━━━━━\n\n";
@@ -305,27 +197,24 @@ module.exports = {
                     });
 
                     listText += "━━━━━━━━━━━━━━━━━━\n💡 Use /rs info <id> to view details\n💡 Use /rs install <id> to install a command";
-                    return await replyMsg(api, event, message, listText);
+                    return await api.reply(listText, event);
                 } catch (error) {
-                    return await replyMsg(api, event, message, handleApiOrFsError(error));
+                    return await api.reply(getErrorMessage(error), event);
                 }
             }
 
             case 'search': {
                 const query = args.slice(1).join(" ").trim();
                 if (!query) {
-                    return await replyMsg(api, event, message, "❌ Please provide a search keyword.\nExample: /rs search ai");
+                    return await api.reply("❌ Please provide a search keyword.\nExample: /rs search ai", event);
                 }
 
                 try {
-                    const res = await axios.get(`${BASE_URL}/api/store/search`, {
-                        params: { q: query },
-                        timeout: 10000
-                    });
+                    const res = await fetchWithRetry(`${BASE_URL}/api/store/search`, { params: { q: query } });
                     const items = Array.isArray(res.data) ? res.data : (res.data?.data || res.data?.result || []);
 
                     if (!items || items.length === 0) {
-                        return await replyMsg(api, event, message, `❌ No commands found matching "${query}".`);
+                        return await api.reply(`❌ No commands found matching "${query}".`, event);
                     }
 
                     let searchText = `📦 𝗥𝗜𝗬𝗔𝗗 𝗦𝗧𝗢𝗥𝗘 - 𝗦𝗘𝗔𝗥𝗖𝗛 𝗥𝗘𝗦𝗨𝗟𝗧𝗦 ("${query}")\n━━━━━━━━━━━━━━━━━━\n\n`;
@@ -339,24 +228,24 @@ module.exports = {
                     });
 
                     searchText += "━━━━━━━━━━━━━━━━━━\n💡 Use /rs install <id> to install a command";
-                    return await replyMsg(api, event, message, searchText);
+                    return await api.reply(searchText, event);
                 } catch (error) {
-                    return await replyMsg(api, event, message, handleApiOrFsError(error));
+                    return await api.reply(getErrorMessage(error), event);
                 }
             }
 
             case 'info': {
                 const cmdId = args[1];
                 if (!cmdId) {
-                    return await replyMsg(api, event, message, "❌ Please provide a command ID.\nExample: /rs info 15");
+                    return await api.reply("❌ Please provide a command ID.\nExample: /rs info 15", event);
                 }
 
                 try {
-                    const res = await axios.get(`${BASE_URL}/api/store/info/${cmdId}`, { timeout: 10000 });
+                    const res = await fetchWithRetry(`${BASE_URL}/api/store/info/${cmdId}`);
                     const item = res.data?.data || res.data?.result || res.data;
 
                     if (!item || (!item.name && !item.id)) {
-                        return await replyMsg(api, event, message, "❌ Command not found.");
+                        return await api.reply("❌ Command not found.", event);
                     }
 
                     const infoText = `📦 𝗖𝗢𝗠𝗠𝗔𝗡𝗗 𝗜𝗡𝗙𝗢𝗥𝗠𝗔𝗧𝗜𝗢𝗡
@@ -370,22 +259,22 @@ module.exports = {
 ━━━━━━━━━━━━━━━━━━
 💡 Use /rs install ${item.id || cmdId} to install this command`;
 
-                    return await replyMsg(api, event, message, infoText);
+                    return await api.reply(infoText, event);
                 } catch (error) {
-                    return await replyMsg(api, event, message, handleApiOrFsError(error));
+                    return await api.reply(getErrorMessage(error), event);
                 }
             }
 
             case 'featured': {
                 try {
-                    const res = await axios.get(`${BASE_URL}/api/store/list`, { timeout: 10000 });
+                    const res = await fetchWithRetry(`${BASE_URL}/api/store/list`);
                     const allItems = Array.isArray(res.data) ? res.data : (res.data?.data || res.data?.result || []);
                     
                     const featuredItems = allItems.filter(item => item.featured || item.isFeatured);
                     const displayItems = featuredItems.length > 0 ? featuredItems : allItems.slice(0, 5);
 
                     if (!displayItems || displayItems.length === 0) {
-                        return await replyMsg(api, event, message, "❌ No featured commands available right now.");
+                        return await api.reply("❌ No featured commands available right now.", event);
                     }
 
                     let featuredText = "🌟 𝗥𝗜𝗬𝗔𝗗 𝗦𝗧𝗢𝗥𝗘 - 𝗙𝗘𝗔𝗧𝗨𝗥𝗘𝗗 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦\n━━━━━━━━━━━━━━━━━━\n\n";
@@ -399,15 +288,15 @@ module.exports = {
                     });
 
                     featuredText += "━━━━━━━━━━━━━━━━━━\n💡 Use /rs install <id> to install a command";
-                    return await replyMsg(api, event, message, featuredText);
+                    return await api.reply(featuredText, event);
                 } catch (error) {
-                    return await replyMsg(api, event, message, handleApiOrFsError(error));
+                    return await api.reply(getErrorMessage(error), event);
                 }
             }
 
             case 'latest': {
                 try {
-                    const res = await axios.get(`${BASE_URL}/api/store/list`, { timeout: 10000 });
+                    const res = await fetchWithRetry(`${BASE_URL}/api/store/list`);
                     const allItems = Array.isArray(res.data) ? res.data : (res.data?.data || res.data?.result || []);
 
                     const sortedItems = [...allItems].sort((a, b) => {
@@ -418,7 +307,7 @@ module.exports = {
                     const latestItems = sortedItems.slice(0, 10);
 
                     if (!latestItems || latestItems.length === 0) {
-                        return await replyMsg(api, event, message, "❌ No latest commands available.");
+                        return await api.reply("❌ No latest commands available.", event);
                     }
 
                     let latestText = "🔥 𝗥𝗜𝗬𝗔𝗗 𝗦𝗧𝗢𝗥𝗘 - 𝗟𝗔𝗧𝗘𝗦𝗧 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦\n━━━━━━━━━━━━━━━━━━\n\n";
@@ -432,9 +321,9 @@ module.exports = {
                     });
 
                     latestText += "━━━━━━━━━━━━━━━━━━\n💡 Use /rs install <id> to install a command";
-                    return await replyMsg(api, event, message, latestText);
+                    return await api.reply(latestText, event);
                 } catch (error) {
-                    return await replyMsg(api, event, message, handleApiOrFsError(error));
+                    return await api.reply(getErrorMessage(error), event);
                 }
             }
 
@@ -442,26 +331,23 @@ module.exports = {
             case 'update': {
                 const cmdId = args[1];
                 if (!cmdId) {
-                    return await replyMsg(api, event, message, `❌ Please provide a command ID.\nExample: /rs ${subCommand} 15`);
+                    return await api.reply(`❌ Please provide a command ID.\nExample: /rs ${subCommand} 15`, event);
                 }
 
-                // Step 1: Connecting...
-                let animMsg = await replyMsg(api, event, message, getAnimFrame(0, "📡 Connecting..."));
+                // Initial animation message (0%)
+                const sentMsg = await api.reply(renderAnimFrame(0), event);
+                const msgID = getMsgID(sentMsg);
+
+                // Animation Step: 10%
+                await sleep(250);
+                await editProgress(api, msgID, renderAnimFrame(10), event);
 
                 let rawCode = "";
-                let metaInfo = {
-                    name: null,
-                    author: "Unknown",
-                    category: "General",
-                    version: "1.0.0"
-                };
+                let metaInfo = { name: null, author: "Unknown", category: "General", version: "1.0.0" };
 
-                // Step 2: Downloading code...
-                await sleep(250);
-                animMsg = await editMsg(api, event, message, animMsg, getAnimFrame(20, "🔍 Downloading..."));
-
+                // Download Code
                 try {
-                    const rawRes = await axios.get(`${BASE_URL}/api/store/raw/${cmdId}`, { timeout: 10000 });
+                    const rawRes = await fetchWithRetry(`${BASE_URL}/api/store/raw/${cmdId}`);
                     if (typeof rawRes.data === 'string') {
                         rawCode = rawRes.data;
                     } else if (rawRes.data && typeof rawRes.data.rawCode === 'string') {
@@ -472,19 +358,20 @@ module.exports = {
                         rawCode = rawRes.data.data;
                     }
                 } catch (error) {
-                    const errMsg = handleApiOrFsError(error);
-                    await editMsg(api, event, message, animMsg, errMsg);
-                    return;
+                    return await editProgress(api, msgID, getErrorMessage(error), event);
                 }
+
+                // Animation Step: 20%
+                await sleep(200);
+                await editProgress(api, msgID, renderAnimFrame(20), event);
 
                 if (!rawCode || rawCode.trim().length === 0) {
-                    await editMsg(api, event, message, animMsg, "❌ Command not found.");
-                    return;
+                    return await editProgress(api, msgID, "❌ Command not found.", event);
                 }
 
-                // Fetch extra metadata
+                // Metadata Fetch
                 try {
-                    const infoRes = await axios.get(`${BASE_URL}/api/store/info/${cmdId}`, { timeout: 8000 });
+                    const infoRes = await fetchWithRetry(`${BASE_URL}/api/store/info/${cmdId}`, {}, 1);
                     const infoData = infoRes.data?.data || infoRes.data?.result || infoRes.data;
                     if (infoData && typeof infoData === 'object') {
                         if (infoData.name) metaInfo.name = infoData.name;
@@ -492,80 +379,74 @@ module.exports = {
                         if (infoData.category) metaInfo.category = infoData.category;
                         if (infoData.version) metaInfo.version = infoData.version;
                     }
-                } catch (err) {
-                    // Non-fatal metadata fetch fail
-                }
+                } catch (e) {}
 
-                // Detect command name
-                const finalCmdName = detectCommandName(rawCode, metaInfo.name, cmdId);
+                // Command Name & Target Path
+                const finalCmdName = extractCommandName(rawCode, metaInfo.name, cmdId);
                 const fileName = finalCmdName.endsWith('.js') ? finalCmdName : `${finalCmdName}.js`;
-                const cmdsDir = getCommandsDir();
-                const targetPath = path.join(cmdsDir, fileName);
+                const targetPath = path.join(process.cwd(), 'scripts', 'cmds', fileName);
 
-                // Duplicate Detection
+                // Duplicate Check on Install
                 if (subCommand === 'install') {
-                    const fileExists = await fs.pathExists(targetPath);
-                    if (fileExists) {
-                        const duplicateNotice = `⚠️ Command already exists.\n\nUse /rs update ${cmdId} to update this command.`;
-                        await editMsg(api, event, message, animMsg, duplicateNotice);
-                        return;
+                    if (await fs.pathExists(targetPath)) {
+                        return await editProgress(api, msgID, `⚠️ Command already exists.\n\nUse /rs update ${cmdId} to update this command.`, event);
                     }
                 }
 
-                // Code Validation
-                const validation = validateCommandCode(rawCode);
+                // Validate JS Code
+                const validation = validateCode(rawCode);
                 if (!validation.valid) {
-                    await editMsg(api, event, message, animMsg, `❌ Invalid command file.\nReason: ${validation.reason}`);
-                    return;
+                    return await editProgress(api, msgID, `❌ Invalid command file.\nReason: ${validation.reason}`, event);
                 }
 
+                // Animation Step: 40%
                 await sleep(250);
-                animMsg = await editMsg(api, event, message, animMsg, getAnimFrame(50, "🔍 Downloading..."));
+                await editProgress(api, msgID, renderAnimFrame(40), event);
 
-                // Step 3: Saving...
+                // Animation Step: 60%
                 await sleep(250);
-                animMsg = await editMsg(api, event, message, animMsg, getAnimFrame(70, "💾 Saving..."));
+                await editProgress(api, msgID, renderAnimFrame(60), event);
 
+                // Save to Disk
                 try {
                     await fs.ensureDir(path.dirname(targetPath));
                     await fs.writeFile(targetPath, rawCode, 'utf8');
                 } catch (writeErr) {
-                    const errMsg = handleApiOrFsError(writeErr);
-                    await editMsg(api, event, message, animMsg, errMsg);
-                    return;
+                    return await editProgress(api, msgID, getErrorMessage(writeErr), event);
                 }
 
-                // Step 4: Reloading...
+                // Animation Step: 80%
                 await sleep(250);
-                animMsg = await editMsg(api, event, message, animMsg, getAnimFrame(90, "🔄 Reloading..."));
+                await editProgress(api, msgID, renderAnimFrame(80), event);
 
-                const isReloaded = await reloadInstalledCommand(finalCmdName, targetPath, api);
+                // Reload Command
+                await reloadCommand(finalCmdName, targetPath, api);
 
-                // Step 5: Finished
+                // Animation Step: 100%
                 await sleep(250);
-                animMsg = await editMsg(api, event, message, animMsg, getAnimFrame(100, "✅ Finished"));
+                await editProgress(api, msgID, renderAnimFrame(100), event);
 
+                // Final Completion Status
                 await sleep(300);
-                await editMsg(api, event, message, animMsg, "✅ Installation Completed Successfully");
+                await editProgress(api, msgID, "✅ Installation Completed Successfully", event);
 
                 // Verify file exists on disk
                 try {
-                    const existsOnDisk = await fs.pathExists(targetPath);
-                    const diskContent = existsOnDisk ? await fs.readFile(targetPath, 'utf8') : '';
-                    if (!existsOnDisk || !diskContent || diskContent.trim().length === 0) {
-                        return await replyMsg(api, event, message, "❌ Unable to save command.");
+                    const exists = await fs.pathExists(targetPath);
+                    if (!exists) return await api.reply("❌ Unable to save command.", event);
+                } catch (err) {
+                    return await api.reply(getErrorMessage(err), event);
+                }
+
+                // React Success
+                try {
+                    if (typeof api.react === 'function' && event.messageID) {
+                        await api.react("✅", event.messageID);
                     }
-                } catch (verifyErr) {
-                    return await replyMsg(api, event, message, handleApiOrFsError(verifyErr));
-                }
+                } catch (e) {}
 
-                // Construct success summary
-                let header = `✅ Command ${subCommand === 'update' ? 'Updated' : 'Installed'} Successfully`;
-                if (!isReloaded) {
-                    header = `⚠️ Command installed successfully.\nRestart the bot to load the command.`;
-                }
-
-                const successSummary = `${header}
+                // Success Message Summary
+                const successSummary = `✅ Command ${subCommand === 'update' ? 'Updated' : 'Installed'} Successfully
 
 📦 Name: ${finalCmdName}
 👤 Author: ${metaInfo.author}
@@ -577,11 +458,46 @@ module.exports = {
 
 Enjoy using Riyad Store ❤️`;
 
-                return await replyMsg(api, event, message, successSummary);
+                return await api.reply(successSummary, event);
+            }
+
+            case 'uninstall': {
+                const targetName = args[1];
+                if (!targetName) {
+                    return await api.reply("❌ Please provide a command name or ID to uninstall.\nExample: /rs uninstall mycmd", event);
+                }
+
+                const fileName = targetName.endsWith('.js') ? targetName : `${targetName}.js`;
+                const targetPath = path.join(process.cwd(), 'scripts', 'cmds', fileName);
+
+                try {
+                    const exists = await fs.pathExists(targetPath);
+                    if (!exists) {
+                        return await api.reply(`❌ Command "${targetName}" is not installed.`, event);
+                    }
+
+                    await fs.remove(targetPath);
+
+                    // Clear require cache & reload
+                    const resolvedPath = path.resolve(targetPath);
+                    if (require.cache[resolvedPath]) {
+                        delete require.cache[resolvedPath];
+                    }
+                    await reloadCommand(targetName.replace(/\.js$/, ''), targetPath, api);
+
+                    try {
+                        if (typeof api.react === 'function' && event.messageID) {
+                            await api.react("✅", event.messageID);
+                        }
+                    } catch (e) {}
+
+                    return await api.reply(`✅ Command "${targetName}" uninstalled successfully.`, event);
+                } catch (err) {
+                    return await api.reply(getErrorMessage(err), event);
+                }
             }
 
             default: {
-                // Default / Help Menu
                 const helpText = `📦 𝗥𝗜𝗬𝗔𝗗 𝗦𝗧𝗢𝗥𝗘 - 𝗛𝗘𝗟𝗣 𝗠𝗘𝗡𝗨
 ━━━━━━━━━━━━━━━━━━
 /rs list
@@ -599,6 +515,9 @@ Enjoy using Riyad Store ❤️`;
 /rs update <id>
   └ Update installed command to latest version
 
+/rs uninstall <name>
+  └ Uninstall a command from bot
+
 /rs featured
   └ View featured store commands
 
@@ -607,7 +526,7 @@ Enjoy using Riyad Store ❤️`;
 ━━━━━━━━━━━━━━━━━━
 Usage: /rs <subcommand> [args]`;
 
-                return await replyMsg(api, event, message, helpText);
+                return await api.reply(helpText, event);
             }
         }
     }
