@@ -23,7 +23,10 @@ const messenger = require('./scripts/utils/messenger');
 const autoTimerService = require('./scripts/services/autotimerService');
 async function startBot() {
   logger.system("Initializing Riyad Bot Framework...");
-
+  
+await database.connectDB();
+logger.success("MongoDB initialized successfully.");
+  
   // 1. Create required directories if they don't exist
   fs.ensureDirSync(path.join(__dirname, 'database'));
   fs.ensureDirSync(path.join(__dirname, 'cache'));
