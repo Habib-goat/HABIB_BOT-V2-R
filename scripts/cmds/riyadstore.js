@@ -430,10 +430,27 @@ console.log("STEP 6");
                 await editProgress(api, msgID, renderAnimFrame(80), event);
 
                 // Load new command if not already loaded
-if (subCommand === "install") {
-    commandLoader.loadCommand(targetPath);
-} else {
-    await reloadCommand(finalCmdName);
+try {
+    if (subCommand === "install") {
+        console.log("STEP 10");
+
+        commandLoader.loadCommand(targetPath);
+
+        console.log("STEP 11");
+    } else {
+        await reloadCommand(finalCmdName);
+    }
+} catch (err) {
+    console.error("INSTALL ERROR:");
+    console.error(err);
+    console.error(err.stack);
+
+    return await editProgress(
+        api,
+        msgID,
+        `❌ ${err.message}`,
+        event
+    );
 }
 
                 // Animation Step: 100%
