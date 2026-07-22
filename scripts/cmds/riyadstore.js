@@ -96,11 +96,13 @@ function extractCommandName(rawCode, metaName, cmdId) {
  * Validate command JS syntax and structure
  */
 function validateCode(rawCode) {
+    console.log("VALIDATE START");
     if (!rawCode || typeof rawCode !== 'string' || rawCode.trim().length === 0) {
         return { valid: false, reason: "Downloaded code is empty." };
     }
     try {
         new vm.Script(rawCode);
+        console.log("VALIDATE VM OK");
     } catch (err) {
         return { valid: false, reason: `Syntax Error: ${err.message}` };
     }
@@ -113,6 +115,7 @@ function validateCode(rawCode) {
     const hasName = /name\s*:\s*["'`][a-zA-Z0-9_-]+["'`]/i.test(rawCode);
     if (!hasName) return { valid: false, reason: "Missing config.name." };
 
+    console.log("VALIDATE SUCCESS");
     return { valid: true };
 }
 
