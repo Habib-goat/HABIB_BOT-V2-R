@@ -3,236 +3,288 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 const Notice = require("../models/Notice");
 
-/**
- * Core handler logic for the notice system.
- * Highly compatible and robust, parsing all typical structures of Messenger Bot frameworks.
- */
 async function handleCommand({ api, event, args }) {
-  const { threadID, messageID, messageReply, mentions } = event;
-  
-  // Safe reply function
+  const {
+    threadID,
+    messageID,
+    messageReply,
+    mentions
+  } = event;
+
   const reply = (text, cb) => {
-    if (api && typeof api.sendMessage === 'function') {
-      return api.sendMessage(text, threadID, cb || (() => {}), messageID);
+    if (api && typeof api.sendMessage === "function") {
+      return api.sendMessage(
+        text,
+        threadID,
+        cb || (() => {}),
+        messageID
+      );
     }
-    console.log(`[Riyad Bot - Reply]: ${text}`);
+
+    console.log(text);
   };
 
-  const action = args && args[0] ? args[0].toLowerCase() : '';
+  const action = (args?.[0] || "").toLowerCase();
 
-  // Load latest notices
-  const noticeDocs = await Notice.find();
+  // Load all notices from MongoDB
+  const noticeDocs = await Notice.find({});
 
-const notices = {};
+  const notices = {};
 
-for (const item of noticeDocs) {
-  notices[item.name] = {
-    text: item.text,
-    mention: item.mention,
-    image: item.image
-  };
-}
+  for (const doc of noticeDocs) {
+    notices[doc.name] = {
+      text: doc.text,
+      mention: doc.mention,
+      image: doc.image
+    };
+  }
 
-  // 1. LIST COMMAND (/n list)
-  if (action === 'list') {
-    const keys = Object.keys(notices);
-    if (keys.length === 0) {
+  // =========================
+  // LIST
+  // =========================
+
+  if (action === "list") {
+    const names = Object.keys(notices);
+
+    if (!names.length) {
       return reply("📋 Notice List is empty.");
     }
-    const listBody = keys.map(k => `• ${k}`).join('\n');
-    const finalText = `📋 Notice List\n\n${listBody}\n\n⚡🔥 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 🔥⚡`;
-    return reply(finalText);
+
+    return reply(
+      "📋 Notice List\n\n" +
+      names.map(i => `• ${i}`).join("\n") +
+      "\n\n⚡🔥 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 🔥⚡"
+    );
   }
 
-  // 2. ADD COMMAND (/n add <notice_name>)
-  if (action === 'add') {
-    const noticeName = args[1] ? args[1].toLowerCase() : '';
+  // =========================
+  // ADD
+  // =========================
+
+  if (action === "add") {
+    const noticeName = (args[1] || "").toLowerCase();
+
     if (!noticeName) {
-      return reply("❌ Please specify a notice name.\nExample: Reply to a message with '/n add rules'");
+      return reply(
+        "❌ Example:\nReply a message then:\n/n add rules"
+      );
     }
 
-    const replyMsg = messageReply || event.message_reply;
-    if (!replyMsg) {
-      return reply("❌ Please reply to a message to add it as a notice.");
+    const replied = messageReply || event.message_reply;
+
+    if (!replied) {
+      return reply("❌ Reply to a message first.");
     }
 
-    const textToSave = replyMsg.body || "";
+    const body = replied.body || "";
+        try {
+      const oldNotice = await Notice.findOne({ name: noticeName });
 
-    try {
-  const oldNotice = await Notice.findOne({ name: noticeName });
+      await Notice.findOneAndUpdate(
+        { name: noticeName },
+        {
+          name: noticeName,
+          text: body,
+          mention: body.includes("@mention"),
+          image: oldNotice?.image || ""
+        },
+        {
+          upsert: true,
+          new: true
+        }
+      );
 
-  await Notice.findOneAndUpdate(
-    { name: noticeName },
-    {
-      name: noticeName,
-      text: textToSave,
-      mention: textToSave.includes("@mention"),
-      image: oldNotice?.image || ""
-    },
-    {
-      upsert: true,
-      new: true
+      return reply(`✅ Notice "${noticeName}" has been saved.`);
+    } catch (err) {
+      return reply(`❌ ${err.message}`);
     }
-  );
-
-  return reply(`✅ Notice "${noticeName}" has been successfully saved!`);
-} catch (err) {
-  return reply(`❌ Failed to save notice: ${err.message}`);
-}
   }
 
-  // 3. REMOVE COMMAND (/n remove or /n remove <notice_name>)
-  if (action === 'remove') {
-    const noticeNameArg = args[1] ? args[1].toLowerCase() : '';
-    const replyMsg = messageReply || event.message_reply;
+  // =========================
+  // REMOVE
+  // =========================
 
-    // Direct deletion by name
-if (noticeNameArg) {
-  const deleted = await Notice.findOneAndDelete({ name: noticeNameArg });
+  if (action === "remove") {
+    const noticeName = (args[1] || "").toLowerCase();
 
-  if (deleted) {
-    return reply(`🗑️ Notice "${noticeNameArg}" has been deleted.`);
-  }
+    // Remove by name
+    if (noticeName) {
+      const deleted = await Notice.findOneAndDelete({
+        name: noticeName
+      });
 
-  return reply(`❌ Notice "${noticeNameArg}" does not exist.`);
-}
-
-    // Deletion by replying to notice
-    if (!replyMsg) {
-      return reply("❌ Please reply to an existing notice message to remove it, or specify the notice name.\nExample: /n remove rules");
-    }
-
-    let repliedText = (replyMsg.body || "").trim();
-    const footer = "⚡🔥 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 🔥⚡";
-    if (repliedText.endsWith(footer)) {
-      repliedText = repliedText.substring(0, repliedText.length - footer.length).trim();
-    }
-
-    let foundKey = null;
-    for (const [key, notice] of Object.entries(notices)) {
-      if (notice.text.trim() === repliedText) {
-        foundKey = key;
-        break;
+      if (deleted) {
+        return reply(`🗑️ Notice "${noticeName}" deleted.`);
       }
+
+      return reply(`❌ Notice "${noticeName}" not found.`);
     }
 
-    if (foundKey) {
-  await Notice.findOneAndDelete({ name: foundKey });
-  return reply(`🗑️ Notice "${foundKey}" has been deleted successfully!`);
-} else {
-  return reply("❌ Could not find a notice matching this message.");
-}
+    // Remove by replying
+    const replied = messageReply || event.message_reply;
 
-  // 4. TRIGGER NOTICE (/n <notice_name>)
+    if (!replied) {
+      return reply(
+        "❌ Reply to a notice message or use:\n/n remove <name>"
+      );
+    }
+
+    let repliedText = (replied.body || "").trim();
+
+    const footer = "⚡🔥 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 🔥⚡";
+
+    if (repliedText.endsWith(footer)) {
+      repliedText = repliedText
+        .substring(0, repliedText.length - footer.length)
+        .trim();
+    }
+
+    const target = await Notice.findOne({
+      text: repliedText
+    });
+
+    if (!target) {
+      return reply("❌ Notice not found.");
+    }
+
+    await Notice.deleteOne({
+      _id: target._id
+    });
+
+    return reply(`🗑️ Notice "${target.name}" deleted.`);
+  }
+
+  // =========================
+  // SEND NOTICE
+  // =========================
+
   const noticeName = action;
+
   if (!noticeName) {
-    return reply("💡 Usage:\n• /n <notice_name>\n• /n list\n• Reply to message: /n add <notice_name>\n• Reply to notice: /n remove");
+    return reply(
+      "💡 Usage:\n" +
+      "/n list\n" +
+      "/n add <name>\n" +
+      "/n remove <name>\n" +
+      "/n <name>"
+    );
   }
 
   const notice = notices[noticeName];
 
-console.log("Notice Path:", noticesPath);
-console.log("Notice Name:", noticeName);
-console.log("Notice Data:", notice);
+  if (!notice) {
+    return reply(`❌ Notice "${noticeName}" not found.`);
+  }
 
-if (!notice) {
-  return reply(`❌ Notice "${noticeName}" does not exist.`);
-}
-
-  // Handle Mention Formatting
   let finalBody = notice.text;
   let finalMentions = [];
+    const incomingMentions = mentions || event.mentions || {};
 
-  const incomingMentions = mentions || event.mentions;
-  if (incomingMentions && Object.keys(incomingMentions).length > 0) {
-    const mentionKeys = Object.keys(incomingMentions);
-    let tagIndexOffset = 0;
+  if (Object.keys(incomingMentions).length > 0) {
 
     if (finalBody.includes("@mention")) {
-      for (const uid of mentionKeys) {
+
+      for (const uid of Object.keys(incomingMentions)) {
+
         const tag = incomingMentions[uid] || "@User";
-        const placeholderIndex = finalBody.indexOf("@mention");
-        if (placeholderIndex !== -1) {
+
+        const index = finalBody.indexOf("@mention");
+
+        if (index !== -1) {
           finalBody = finalBody.replace("@mention", tag);
+
           finalMentions.push({
-            tag: tag,
+            tag,
             id: uid,
-            fromIndex: placeholderIndex
+            fromIndex: index
           });
         }
       }
+
     } else {
-      // No placeholder, so we append the tags
-      const tagStrings = [];
-      for (const uid of mentionKeys) {
-        const tag = incomingMentions[uid] || "@User";
-        tagStrings.push(tag);
+
+      const tags = [];
+
+      for (const uid of Object.keys(incomingMentions)) {
+        tags.push(incomingMentions[uid] || "@User");
       }
-      if (tagStrings.length > 0) {
-        finalBody += "\n\nTags: " + tagStrings.join(" ");
-        let tagIndex = finalBody.indexOf("Tags: ") + 6;
-        for (const uid of mentionKeys) {
+
+      if (tags.length) {
+
+        finalBody += "\n\nTags: " + tags.join(" ");
+
+        let start = finalBody.indexOf("Tags: ") + 6;
+
+        for (const uid of Object.keys(incomingMentions)) {
+
           const tag = incomingMentions[uid] || "@User";
-          const tagStart = finalBody.indexOf(tag, tagIndex);
-          if (tagStart !== -1) {
+
+          const pos = finalBody.indexOf(tag, start);
+
+          if (pos !== -1) {
             finalMentions.push({
-              tag: tag,
+              tag,
               id: uid,
-              fromIndex: tagStart
+              fromIndex: pos
             });
-            tagIndex = tagStart + tag.length;
+
+            start = pos + tag.length;
           }
         }
       }
     }
   }
 
-  // Append Mandatory Footer
-  finalBody = `${finalBody}\n\n⚡🔥 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 🔥⚡`;
+  finalBody += "\n\n⚡🔥 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 🔥⚡";
 
-  const imagePath = path.join(process.cwd(), "assets", notice.image || "");
+  const message = {
+    body: finalBody,
+    mentions: finalMentions
+  };
 
-const message = {
-  body: finalBody,
-  mentions: finalMentions
-};
+  if (notice.image) {
 
-if (notice.image && fs.existsSync(imagePath)) {
-  message.attachment = [
-  fs.createReadStream(imagePath)
-];
+    const imagePath = path.join(
+      process.cwd(),
+      "assets",
+      notice.image
+    );
+
+    if (fs.existsSync(imagePath)) {
+      message.attachment = [
+        fs.createReadStream(imagePath)
+      ];
+    }
+  }
+
+  return api.sendMessage(
+    message,
+    threadID,
+    () => {},
+    messageID
+  );
 }
 
-return api.sendMessage(
-  message,
-  threadID,
-  () => {},
-  messageID
-);
-}
-
-// Export for high-level framework loaders (Goat-bot, Mirai-bot, Custom-loaders)
 module.exports = {
   config: {
     name: "n",
     aliases: ["notice"],
-    version: "1.1.0",
+    version: "2.0.0",
     author: "Riyad",
     countDown: 5,
     role: 0,
-    shortDescription: "Manage and send custom group notices",
-    longDescription: "Allows saving, viewing, listing, and triggering media-rich notices inside Facebook Messenger chats.",
+    shortDescription: "Notice System",
+    longDescription: "MongoDB Notice System",
     category: "utility",
     guide: {
-      en: "/n <notice_name> | /n list | Reply to a message: /n add <notice_name> | Reply to notice: /n remove"
+      en: "/n <name>\n/n list\n/n add <name>\n/n remove <name>"
     }
   },
-  
-  // Handler hooks for all variations of Riyad Bot Framework
+
   onStart: handleCommand,
   run: handleCommand,
   execute: handleCommand
