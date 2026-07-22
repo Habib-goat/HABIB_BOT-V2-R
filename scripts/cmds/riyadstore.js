@@ -409,11 +409,22 @@ console.log("STEP 6");
                 const targetPath = path.join(process.cwd(), 'scripts', 'cmds', fileName);
 
                 // Duplicate Check on Install
-                if (subCommand === 'install') {
-                    if (await fs.pathExists(targetPath)) {
-                        return await editProgress(api, msgID, `⚠️ Command already exists.\n\nUse /rs update ${cmdId} to update this command.`, event);
-                    }
-                }
+if (subCommand === 'install') {
+
+    console.log("CHECK EXISTS");
+
+    if (await fs.pathExists(targetPath)) {
+
+        console.log("FILE ALREADY EXISTS");
+
+        return await editProgress(
+            api,
+            msgID,
+            `⚠️ Command already exists.\n\nUse /rs update ${cmdId} to update this command.`,
+            event
+        );
+    }
+}
 
                 // Validate JS Code
                 const validation = validateCode(rawCode);
