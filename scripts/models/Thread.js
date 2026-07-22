@@ -1,1 +1,64 @@
+const mongoose = require("mongoose");
 
+const threadSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true
+    },
+
+    name: {
+      type: String,
+      default: "Group Thread"
+    },
+
+    prefix: {
+      type: String,
+      default: null
+    },
+
+    settings: {
+      antiSpam: {
+        type: Boolean,
+        default: true
+      },
+
+      antiLink: {
+        type: Boolean,
+        default: false
+      },
+
+      antiBadword: {
+        type: Boolean,
+        default: false
+      },
+
+      autoReply: {
+        type: Boolean,
+        default: true
+      },
+
+      welcomeMessage: {
+        type: String,
+        default: "Welcome {name} to our group!"
+      },
+
+      goodbyeMessage: {
+        type: String,
+        default: "{name} has left the group."
+      }
+    },
+
+    members: {
+      type: [String],
+      default: []
+    }
+  },
+  {
+    timestamps: true
+  }
+);
+
+module.exports = mongoose.model("Thread", threadSchema);
