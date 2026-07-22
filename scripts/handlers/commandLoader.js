@@ -172,9 +172,15 @@ console.log("LOADED COMMAND:", cmdName);
       return true;
 
     } catch (err) {
-      logger.error("Failed to load new command:", err);
-      return false;
-    }
+  logger.error("Failed to load new command:", err);
+
+  console.error("========== LOAD COMMAND ERROR ==========");
+  console.error(err);
+  console.error(err.stack);
+  console.error("=======================================");
+
+  throw err;
+}
   }
 };
 
