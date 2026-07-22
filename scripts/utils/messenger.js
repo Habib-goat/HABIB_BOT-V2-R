@@ -65,7 +65,7 @@ async function ensureThreadData(api, threadID) {
 
   if (typeof api.getThreadInfo !== "function") return;
 
-  api.getThreadInfo(threadID, (err, info) => {
+  api.getThreadInfo(threadID, async (err, info) => {
     if (err || !info) return;
 
     const members = [];
