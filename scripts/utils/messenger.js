@@ -31,16 +31,16 @@ let isConnected = false;
 let stopListener = null;
 let reconnectTimer = null;
 // Ensure non-blocking fetching of user metadata
-function ensureUserData(api, senderID) {
+async function ensureUserData(api, senderID) {
   if (!senderID) return;
 
-  const user = database.getUser(senderID);
+  const user = await database.getUser(senderID);
 
   if (
     user.name.startsWith("User ") &&
     typeof api.getUserInfo === "function"
   ) {
-    api.getUserInfo(senderID, (err, info) => {
+    api.getUserInfo(senderID, async (err, info) => {
       if (err || !info || !info[senderID]) return;
 
       const realName =
@@ -49,9 +49,9 @@ function ensureUserData(api, senderID) {
 
       if (!realName) return;
 
-      database.updateUser(senderID, {
-        name: realName
-      });
+      await database.updateUser(senderID, {
+  name: realName
+});
 
       logger.info(
         `[Database] Synced user "${realName}" (${senderID})`
@@ -60,7 +60,7 @@ function ensureUserData(api, senderID) {
   }
 }
 // Ensure non-blocking fetching of metadata
-function ensureThreadData(api, threadID) {
+async function ensureThreadData(api, threadID) {
   if (!threadID) return;
 
   if (typeof api.getThreadInfo !== "function") return;
@@ -100,7 +100,7 @@ function ensureThreadData(api, threadID) {
       }
     }
 
-    database.updateThread(threadID, {
+    await database.updateThread(threadID, {
   id: String(threadID),
   name: info.threadName || info.name || "Unknown Group",
   adminIDs: (info.adminIDs || []).map(x => String(x.id || x)),
