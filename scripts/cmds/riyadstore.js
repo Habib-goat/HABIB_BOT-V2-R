@@ -432,16 +432,25 @@ console.log("STEP 6");
                 // Load new command if not already loaded
 try {
     if (subCommand === "install") {
+
         console.log("STEP 10");
 
-        commandLoader.loadCommand(targetPath);
+        await commandLoader.loadCommand(targetPath);
 
         console.log("STEP 11");
+
     } else {
+
+        console.log("STEP 10 UPDATE");
+
         await reloadCommand(finalCmdName);
+
+        console.log("STEP 11 UPDATE");
     }
+
 } catch (err) {
-    console.error("INSTALL ERROR:");
+
+    console.error("INSTALL ERROR");
     console.error(err);
     console.error(err.stack);
 
