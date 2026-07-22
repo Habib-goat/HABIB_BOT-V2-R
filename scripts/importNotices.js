@@ -33,7 +33,6 @@ const notices = {
     "mention": false,
     "image": "notice 7.png"
   }
-    }
 };
 
 async function importNotices() {
