@@ -451,19 +451,19 @@ console.log("STEP 6");
 try {
     if (subCommand === "install") {
 
-        console.log("STEP 10");
+        console.log("STEP LOAD 1");
 
-        await commandLoader.loadCommand(targetPath);
+await commandLoader.loadCommand(targetPath);
 
-        console.log("STEP 11");
+console.log("STEP LOAD 2");
 
     } else {
 
-        console.log("STEP 10 UPDATE");
+        console.log("STEP UPDATE 1");
 
-        await reloadCommand(finalCmdName);
+await reloadCommand(finalCmdName);
 
-        console.log("STEP 11 UPDATE");
+console.log("STEP UPDATE 2");
     }
 
 } catch (err) {
