@@ -36,7 +36,17 @@ try {
   console.log("LEFT USER ID:", leftUserID);
   console.log("THREAD ID:", threadID);
 
-  await api.addUserToGroup(String(leftUserID), String(threadID));
+  await new Promise((resolve, reject) => {
+  api.addUserToGroup(String(leftUserID), String(threadID), (err) => {
+    if (err) {
+      console.error("ADD CALLBACK ERROR:", err);
+      return reject(err);
+    }
+
+    console.log("✅ USER RE-ADDED");
+    resolve();
+  });
+});
 
   console.log("✅ USER RE-ADDED");
 } catch (err) {
