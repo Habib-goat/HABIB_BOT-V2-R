@@ -1,7 +1,7 @@
 module.exports = {
   config: {
     name: "antileave",
-    version: "1.2.0",
+    version: "1.3.0",
     author: "Riyad Bot",
     eventType: ["log:unsubscribe"]
   },
@@ -13,72 +13,78 @@ module.exports = {
     const leftUserID = String(event.logMessageData.leftParticipantFbId);
     const authorID = String(event.author || "");
 
-    // শুধু নিজে Leave করলে কাজ করবে
+    // শুধুমাত্র নিজে Leave করলে কাজ করবে
     if (leftUserID !== authorID) return;
 
+    // বট Leave করলে কিছু করবে না
     let botID = "";
     try {
-      if (typeof api.getCurrentUserID === "function")
-        botID = String(api.getCurrentUserID());
-      else
-        botID = String(api.getCurrentUserID || api.botID || "");
+      botID = typeof api.getCurrentUserID === "function"
+        ? String(api.getCurrentUserID())
+        : String(api.botID || "");
     } catch {
       botID = String(api.botID || "");
     }
 
-    // বট নিজে Leave করলে কিছু করবে না
     if (leftUserID === botID) return;
 
     console.log("[ANTILEAVE] Re-adding:", leftUserID);
 
-    api.addUserToGroup(leftUserID, threadID, async (err) => {
-      if (err) {
-        console.error("ADD ERROR:", err);
+    // Facebook-এর প্রসেস শেষ হওয়ার জন্য একটু অপেক্ষা
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
-        return api.sendMessage(
-          `❌ AntiLeave Failed\n\n${err.errorDescription || err.message || JSON.stringify(err)}`,
-          threadID
-        );
-      }
+    try {
+      await api.addUserToGroup(leftUserID, threadID);
 
       console.log("✅ USER RE-ADDED");
 
       let userName = "Member";
 
       try {
-        const info = await new Promise(resolve => {
-          api.getUserInfo(leftUserID, (e, data) => {
-            if (e) return resolve(null);
-            resolve(data);
+        if (typeof api.getUserInfo === "function") {
+          const info = await new Promise((resolve, reject) => {
+            api.getUserInfo(leftUserID, (err, data) => {
+              if (err) return reject(err);
+              resolve(data);
+            });
           });
-        });
 
-        if (info && info[leftUserID])
-          userName = info[leftUserID].name;
-      } catch {}
+          if (info && info[leftUserID]?.name) {
+            userName = info[leftUserID].name;
+          }
+        }
+      } catch (e) {
+        console.log("getUserInfo failed:", e.message);
+      }
 
-      api.sendMessage({
+      await api.sendMessage({
         body:
 `╔════════════════════╗
-║ 🔥 RIYAD BOT 🔥
+║ 🛡️ ANTI LEAVE 🛡️
 ╠════════════════════╣
 
 👋 ${userName}
 
-⚠️ আপনি গ্রুপ থেকে বের হয়েছিলেন।
-
 ✅ আপনাকে আবার গ্রুপে যুক্ত করা হয়েছে।
 
-🛡️ AntiLeave Active
+⚠️ গ্রুপ থেকে নিজে বের হওয়া অনুমোদিত নয়।
 
 ╚════════════════════╝`,
         mentions: [
           {
-            tag: userName,
-            id: leftUserID
+            id: leftUserID,
+            tag: userName
           }
         ]
       }, threadID);
-    });
+
+    } catch (err) {
+      console.error("ADD ERROR:", err);
+
+      await api.sendMessage(
+        `❌ AntiLeave Failed\n\n${err.errorDescription || err.message || JSON.stringify(err)}`,
+        threadID
+      );
+    }
   }
 };
