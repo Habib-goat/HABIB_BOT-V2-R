@@ -23,6 +23,11 @@ delete: (messageID) => {
   return global.RiyadBot.onReply.delete(messageID);
 },
   register: (messageID, replyData) => {
+    
+    console.log("========== REGISTER REPLY ==========");
+console.log("MESSAGE ID:", messageID);
+console.log("DATA:", replyData);
+    
     global.RiyadBot.onReply.set(messageID, {
       ...replyData,
       timestamp: Date.now()
@@ -37,6 +42,11 @@ delete: (messageID) => {
     if (!messageReply) return false;
 
     const targetMessageID = messageReply.messageID;
+
+    console.log("========== HANDLE REPLY ==========");
+console.log("REPLY TO:", targetMessageID);
+console.log("REGISTERED IDS:", [...global.RiyadBot.onReply.keys()]);
+    
     if (global.RiyadBot.onReply.has(targetMessageID)) {
       const replyData = global.RiyadBot.onReply.get(targetMessageID);
       
