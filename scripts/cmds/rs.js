@@ -47,28 +47,20 @@ module.exports = {
     const subCommand = (args[0] || "").toLowerCase().trim();
 
     // Helper for sending messages safely
-    const send = async (msg) => {
-      try {
-        if (typeof api.reply === "function") {
-          return await api.reply(msg, threadID);
-        }
-        return await api.sendMessage(msg, threadID);
-      } catch (err) {
-        console.error("[RiyadStore] Send error:", err);
-      }
-    };
+    const send = (msg) => {
+  return api.sendMessage(msg, threadID, event.messageID);
+};
 
     // Helper for editing messages safely with fallback
     const edit = async (msg, messageID) => {
-      try {
-        if (messageID && typeof api.editMessage === "function") {
-          return await api.editMessage(msg, messageID);
-        }
-        return await send(msg);
-      } catch (_) {
-        return await send(msg);
-      }
-    };
+  if (messageID && typeof api.editMessage === "function") {
+    try {
+      return await api.editMessage(msg, messageID);
+    } catch {}
+  }
+
+  return api.sendMessage(msg, threadID, event.messageID);
+};
 
     // --- 1. HELP / MENU ---
     if (!subCommand) {
