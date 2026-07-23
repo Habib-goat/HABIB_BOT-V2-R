@@ -20,19 +20,43 @@ class StoreAPI {
     if (cached) return cached;
 
     try {
-      const response = await withRetry(() => 
-        this.client.get("/api/store/list", { params: { page, limit, category } }),
-        { retries: 2, timeout: 8000 }
-      );
-      const data = response.data || { commands: [], total: 0, totalPages: 1 };
-      StoreCache.set(cacheKey, data, 180000);
-      return data;
-    } catch (err) {
-      StoreLogger.error("Failed to list commands from Store API", err);
-      return { commands: [], total: 0, totalPages: 1, error: err.message };
-    }
-  }
+  console.log("BASE URL:", this.client.defaults.baseURL);
 
+  const url = "/api/store/list";
+  console.log("FULL URL:", this.client.defaults.baseURL + url);
+
+  const response = await withRetry(() =>
+    this.client.get(url, {
+      params: { page, limit, category }
+    }),
+    { retries: 2, timeout: 8000 }
+  );
+
+  console.log("STORE RESPONSE:", JSON.stringify(response.data, null, 2));
+
+  const data = response.data || {
+    commands: [],
+    total: 0,
+    totalPages: 1
+  };
+
+  StoreCache.set(cacheKey, data, 180000);
+  return data;
+
+} catch (err) {
+  console.error("STORE ERROR:", err.response?.status, err.response?.data);
+
+  StoreLogger.error("Failed to list commands from Store API", err);
+
+  return {
+    commands: [],
+    total: 0,
+    totalPages: 1,
+    error: err.message
+  };
+}
+  }
+  
   async searchCommands(query) {
     if (!query) return { commands: [], total: 0 };
     const cacheKey = `search_${query.toLowerCase().trim()}`;
@@ -105,7 +129,7 @@ class StoreAPI {
     if (cached) return cached;
 
     try {
-      const response = await withRetry(() => this.client.get("/store/featured"), { retries: 2, timeout: 8000 });
+      const response = await withRetry(() => this.client.get("/api/store/featured"), { retries: 2, timeout: 8000 });
       const data = response.data || [];
       StoreCache.set(cacheKey, data, 600000);
       return data;
