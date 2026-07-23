@@ -65,7 +65,7 @@ module.exports = {
     // --- 1. HELP / MENU ---
     if (!subCommand) {
       const menu = (
-         `╔══〔🛍️ 𝗥𝗜𝗬𝗔𝗗-𝗦𝗧𝗢𝗥𝗘 🛍️ 〕══╗\n` +
+         `〔🛍️ 𝗥𝗜𝗬𝗔𝗗-𝗦𝗧𝗢𝗥𝗘 🛍️ 〕\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `• /rs list [page]      : Paginated command list\n` +
         `• /rs search <query>  : Fast search (ID / Name)\n` +
