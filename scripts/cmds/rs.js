@@ -88,14 +88,14 @@ module.exports = {
       try {
         const data = await StoreAPI.listCommands(page, limit);
 
-const commands = data.data || [];
+const commands = data.commands || [];
 
 if (commands.length === 0) {
   return await send("❌ No commands found on Riyad Store.");
 }
 
-const totalPages = data.meta?.totalPages || 1;
-const total = data.meta?.total || commands.length;
+const totalPages = data.totalPages || 1;
+const total = data.total || commands.length;
 
 const card = ProgressUI.renderPaginatedList(
   commands,
@@ -105,6 +105,7 @@ const card = ProgressUI.renderPaginatedList(
 );
 
 return await send(card);
+
       } catch (err) {
         return await send(`❌ Failed to fetch list: ${err.message}`);
       }
