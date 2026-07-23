@@ -211,7 +211,10 @@ function startMessenger(app, wsServer) {
   api,
   wsServer
 );
-
+      
+console.log("RAW addUserToGroup =", typeof api.addUserToGroup);
+console.log("ADAPTER addUserToGroup =", typeof adaptedApi.addUserToGroup);
+      
 console.log("=== ADAPTER DEBUG ===");
 console.log("RAW sendMessage =", typeof api.sendMessage);
 console.log("RAW sendMessageDM =", typeof api.sendMessageDM);
