@@ -16,10 +16,16 @@ module.exports = {
     // শুধু নিজে Leave করলে কাজ করবে
     if (leftUserID !== authorID) return;
 
-    const botID =
-      typeof api.getCurrentUserID === "function"
-        ? String(api.getCurrentUserID())
-        : "";
+    let botID = "";
+try {
+  if (api.getCurrentUserID && typeof api.getCurrentUserID === "function") {
+    botID = String(api.getCurrentUserID());
+  } else {
+    botID = String(api.getCurrentUserID || api.botID || "");
+  }
+} catch (e) {
+  botID = String(api.getCurrentUserID || api.botID || "");
+}
 
     // বট নিজে Leave করলে কিছু করবে না
     if (leftUserID === botID) return;
@@ -27,16 +33,20 @@ module.exports = {
     console.log("[ANTILEAVE] Re-adding:", leftUserID);
 
     try {
-      await api.addUserToGroup(leftUserID, threadID);
-      console.log("✅ USER RE-ADDED");
-    } catch (err) {
-      console.error("❌ ADD ERROR:", err);
+  console.log("LEFT USER ID:", leftUserID);
+  console.log("THREAD ID:", threadID);
 
-      return api.sendMessage(
-        `❌ AntiLeave Failed!\n\n${err.errorDescription || err.message || JSON.stringify(err)}`,
-        threadID
-      );
-    }
+  await api.addUserToGroup(String(leftUserID), String(threadID));
+
+  console.log("✅ USER RE-ADDED");
+} catch (err) {
+  console.error("❌ ADD ERROR:", err);
+
+  return api.sendMessage(
+    JSON.stringify(err, null, 2),
+    threadID
+  );
+}
 
     // ৩ সেকেন্ড অপেক্ষা
     await new Promise(resolve => setTimeout(resolve, 3000));
