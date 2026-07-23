@@ -21,7 +21,7 @@ class StoreAPI {
 
     try {
       const response = await withRetry(() => 
-        this.client.get("/store/list", { params: { page, limit, category } }),
+        this.client.get("/api/store/list", { params: { page, limit, category } }),
         { retries: 2, timeout: 8000 }
       );
       const data = response.data || { commands: [], total: 0, totalPages: 1 };
@@ -41,7 +41,7 @@ class StoreAPI {
 
     try {
       const response = await withRetry(() =>
-        this.client.get("/store/search", { params: { q: query } }),
+        this.client.get("/api/store/search", { params: { q: query } }),
         { retries: 2, timeout: 8000 }
       );
       const data = response.data || { commands: [] };
@@ -60,7 +60,7 @@ class StoreAPI {
 
     try {
       const response = await withRetry(() =>
-        this.client.get(`/store/info/${encodeURIComponent(id)}`),
+        this.client.get(`/api/store/info/${encodeURIComponent(id)}`),
         { retries: 2, timeout: 8000 }
       );
       const data = response.data;
@@ -75,7 +75,7 @@ class StoreAPI {
   async downloadCommandRaw(id) {
     try {
       const response = await withRetry(() =>
-        this.client.get(`/store/raw/${encodeURIComponent(id)}`, { responseType: "text" }),
+        this.client.get(`/api/store/raw/${encodeURIComponent(id)}`, { responseType: "text" }),
         { retries: 3, timeout: 10000 }
       );
       return response.data;
@@ -88,7 +88,7 @@ class StoreAPI {
   async uploadCommand(payload) {
     try {
       const response = await withRetry(() =>
-        this.client.post("/store/upload", payload),
+        this.client.post("/api/store/upload", payload),
         { retries: 2, timeout: 12000 }
       );
       StoreCache.clear();
