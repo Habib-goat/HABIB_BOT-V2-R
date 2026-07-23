@@ -1,35 +1,28 @@
 module.exports = {
   config: {
     name: "antileave",
-    version: "1.0.0",
+    version: "1.1.0",
     author: "Riyad Bot",
     eventType: ["log:unsubscribe"]
   },
 
-  onStart: async function ({ api, event, threadsData }) {
+  onStart: async function ({ api, event }) {
     if (event.logMessageType !== "log:unsubscribe") return;
 
     const threadID = String(event.threadID);
     const leftUserID = String(event.logMessageData.leftParticipantFbId);
+    const authorID = String(event.author || "");
+
+    // শুধু নিজে Leave করলে কাজ করবে
+    if (leftUserID !== authorID) return;
 
     const botID =
       typeof api.getCurrentUserID === "function"
         ? String(api.getCurrentUserID())
         : "";
 
+    // বট নিজে Leave করলে কিছু করবে না
     if (leftUserID === botID) return;
-
-    const thread = await threadsData.getThread(threadID);
-
-    if (
-      !thread ||
-      !(
-        thread.antileave === true ||
-        (thread.data && thread.data.antileave === true)
-      )
-    ) {
-      return;
-    }
 
     console.log("[ANTILEAVE] Re-adding:", leftUserID);
 
@@ -40,11 +33,12 @@ module.exports = {
       console.error("❌ ADD ERROR:", err);
 
       return api.sendMessage(
-        `❌ Re-add Failed:\n${err.errorDescription || err.message || JSON.stringify(err)}`,
+        `❌ AntiLeave Failed!\n\n${err.errorDescription || err.message || JSON.stringify(err)}`,
         threadID
       );
     }
 
+    // ৩ সেকেন্ড অপেক্ষা
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     let userName = "Member";
@@ -60,10 +54,12 @@ module.exports = {
       if (info && info[leftUserID]) {
         userName = info[leftUserID].name;
       }
-    } catch {}
+    } catch (e) {}
 
-    await api.sendMessage({
-      body: `╔═══════════════════╗
+    await api.sendMessage(
+      {
+        body:
+`╔═══════════════════╗
 ║ 🔥𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 𝐒𝐄𝐂𝐔𝐑𝐈𝐓𝐘⚡║
 ╠═══════════════════╣
 ║
@@ -82,13 +78,15 @@ module.exports = {
 ╠════════════════════╣
 ║ ⚡ 𝐁𝐎𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐄 ⚡  ║
 ╚════════════════════╝`,
-      mentions: [
-        {
-          tag: userName,
-          id: leftUserID
-        }
-      ]
-    }, threadID);
+        mentions: [
+          {
+            tag: userName,
+            id: leftUserID
+          }
+        ]
+      },
+      threadID
+    );
 
     console.log("✅ SECURITY MESSAGE SENT");
   }
