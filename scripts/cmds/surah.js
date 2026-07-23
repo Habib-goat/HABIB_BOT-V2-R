@@ -125,12 +125,82 @@ surah.verses.forEach(v => {
 return sendLongMessage(api, responseMessage, threadID, messageID);
   },
 
-  onReply: async function({ api, event }) {
-  return api.sendMessage(
-    `✅ Reply Works!\n\nYou wrote: ${event.body}`,
-    event.threadID,
-    event.messageID
-  );
+  onReply: async function({ api, event, Reply, replyManager }) {
+
+  replyManager.delete(Reply.messageID);
+
+  const { threadID, messageID } = event;
+  let surahs = [];
+
+  try {
+    const files = [
+      "surah_001_020.json",
+      "surah_021_040.json",
+      "surah_041_060.json",
+      "surah_061_080.json",
+      "surah_081_100.json",
+      "surah_101_114.json"
+    ];
+
+    for (const file of files) {
+  let filePath = path.join(__dirname, file);
+
+  if (!fs.existsSync(filePath)) {
+    filePath = path.join(__dirname, "..", file);
+  }
+
+  if (!fs.existsSync(filePath)) {
+    return api.sendMessage(
+      `❌ Database file not found:\n${file}`,
+      threadID,
+      messageID
+    );
+  }
+
+  const json = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  surahs.push(...json);
+}
+  } catch (err) {
+    return api.sendMessage(
+      "❌ Failed to load Quran database.",
+      threadID,
+      messageID
+    );
+  }
+
+  const surahInput = parseInt(event.body.trim(), 10);
+
+  if (isNaN(surahInput) || surahInput < 1 || surahInput > surahs.length) {
+    return api.sendMessage(
+      `❌ Invalid Surah Number.\nPlease enter a number between 1 and ${surahs.length}.`,
+      threadID,
+      messageID
+    );
+  }
+
+  const surah = surahs.find(s => s.id === surahInput);
+
+  if (!surah) {
+    return api.sendMessage(
+      "❌ Surah not found.",
+      threadID,
+      messageID
+    );
+  }
+
+  let responseMessage = `📖 ${surah.name}\n`;
+  responseMessage += `🔤 ${surah.transliteration}\n`;
+  responseMessage += `📚 ${surah.translation}\n`;
+  responseMessage += `📌 Total Ayah: ${surah.total_verses}\n`;
+  responseMessage += `📍 Revealed: ${surah.type}\n\n`;
+
+  surah.verses.forEach(v => {
+    responseMessage += `(${v.id}) ${v.text}\n`;
+    responseMessage += `${v.pronunciation}\n`;
+    responseMessage += `${v.translation}\n\n`;
+  });
+
+  return sendLongMessage(api, responseMessage, threadID, messageID);
 }
 
 };
