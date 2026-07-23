@@ -6,32 +6,54 @@ module.exports = {
     author: "Riyad Bot"
   },
 
-  onStart: async function({ api, event, threadsData }) {
-    if (event.logMessageType === "log:subscribe") {
-      const { threadID } = event;
-      if (!threadID) return;
+  onStart: async function ({ api, event, threadsData }) {
+    if (event.logMessageType !== "log:subscribe") return;
 
-      const addedParticipants = event.logMessageData && event.logMessageData.addedParticipants;
-      if (!Array.isArray(addedParticipants)) return;
+    const { threadID } = event;
+    if (!threadID) return;
 
-      // Get the bot's own user ID to make sure we don't welcome ourselves as a normal member
-      const botID = typeof api.getCurrentUserID === 'function' ? api.getCurrentUserID() : null;
+    const addedParticipants = event.logMessageData?.addedParticipants;
+    if (!Array.isArray(addedParticipants)) return;
 
-      // Fetch the group name, default to "Group Chat"
-      const threadInfo = threadsData.getThread(threadID);
-      const groupName = (threadInfo && threadInfo.name) ? threadInfo.name : "Group Chat";
+    const botID =
+      typeof api.getCurrentUserID === "function"
+        ? String(api.getCurrentUserID())
+        : "";
 
-      for (const participant of addedParticipants) {
-        // Skip if the participant is the bot itself
-        if (botID && String(participant.userFbId) === String(botID)) {
-          continue;
-        }
+    let groupName = "Group Chat";
 
-        const memberName = participant.fullName || "New Member";
+    try {
+      if (typeof api.getThreadInfo === "function") {
+        const info = await new Promise((resolve, reject) => {
+          api.getThreadInfo(threadID, (err, data) => {
+            if (err) return reject(err);
+            resolve(data);
+          });
+        });
 
-        // Construct the exact welcome message requested
-        const welcomeMessage = 
-`✨▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬✨
+        groupName =
+          info?.threadName ||
+          info?.name ||
+          "Group Chat";
+      } else {
+        const threadInfo = await threadsData.getThread(threadID);
+        groupName = threadInfo?.name || "Group Chat";
+      }
+    } catch {
+      try {
+        const threadInfo = await threadsData.getThread(threadID);
+        groupName = threadInfo?.name || "Group Chat";
+      } catch {}
+    }
+
+    for (const participant of addedParticipants) {
+      if (botID && String(participant.userFbId) === botID)
+        continue;
+
+      const memberName =
+        participant.fullName || "New Member";
+
+      const welcomeMessage = `✨▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬✨
 
 ꧁༒☬ ${groupName} ☬༒꧂
 
@@ -47,7 +69,7 @@ module.exports = {
 
 ▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬
 
-⚡\u0158\u014a\u024e\u0100\u0110_\u0181\u019f\u01ac\ud83d\udd25
+⚡ŘŊɎĀĐ_ƁƟƬ🔥
 
 ━━━━━━━━━━━
 🎉 আপনাদের সবাইকে অভিনন্দন 🎉
@@ -55,29 +77,28 @@ module.exports = {
 
 ✨═══❁═══✨
 
-⭐ \ud83c\udf44 ${memberName} \ud83c\udf44⭐
+   ⭐ 🍄 ${memberName} 🍄⭐
 
 ✨═══❁═══✨
 
 ┊┊┊┊┊❤️
 
-┊┊┊┊\ud83e\udde1
+┊┊┊┊🧡
 
-┊┊┊\ud83d\udc9b
+┊┊┊💛
 
-┊┊\ud83d\udc9a
+┊┊💚
 
-┊\ud83d\udc99
+┊💙
 
-\ud83d\udc9c
+💜
 
 ✨▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬✨`;
 
-        try {
-          await api.sendMessage(welcomeMessage, threadID);
-        } catch (err) {
-          // Silent catch in case of any delivery issues to run completely in the background
-        }
+      try {
+        await api.sendMessage(welcomeMessage, threadID);
+      } catch (err) {
+        console.error("[WELCOME ERROR]", err);
       }
     }
   }
