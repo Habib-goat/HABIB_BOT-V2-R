@@ -1,7 +1,7 @@
 module.exports = {
   config: {
     name: "antileave",
-    version: "1.1.0",
+    version: "1.2.0",
     author: "Riyad Bot",
     eventType: ["log:unsubscribe"]
   },
@@ -17,86 +17,60 @@ module.exports = {
     if (leftUserID !== authorID) return;
 
     let botID = "";
-try {
-  if (api.getCurrentUserID && typeof api.getCurrentUserID === "function") {
-    botID = String(api.getCurrentUserID());
-  } else {
-    botID = String(api.getCurrentUserID || api.botID || "");
-  }
-} catch (e) {
-  botID = String(api.getCurrentUserID || api.botID || "");
-}
+    try {
+      if (typeof api.getCurrentUserID === "function")
+        botID = String(api.getCurrentUserID());
+      else
+        botID = String(api.getCurrentUserID || api.botID || "");
+    } catch {
+      botID = String(api.botID || "");
+    }
 
     // বট নিজে Leave করলে কিছু করবে না
     if (leftUserID === botID) return;
 
     console.log("[ANTILEAVE] Re-adding:", leftUserID);
 
-    try {
-  console.log("LEFT USER ID:", leftUserID);
-  console.log("THREAD ID:", threadID);
+    api.addUserToGroup(leftUserID, threadID, async (err) => {
+      if (err) {
+        console.error("ADD ERROR:", err);
 
-  await new Promise((resolve, reject) => {
-  api.addUserToGroup(String(leftUserID), String(threadID), (err) => {
-    if (err) {
-      console.error("ADD CALLBACK ERROR:", err);
-      return reject(err);
-    }
-
-    console.log("✅ USER RE-ADDED");
-    resolve();
-  });
-});
-
-  console.log("✅ USER RE-ADDED");
-} catch (err) {
-  console.error("❌ ADD ERROR:", err);
-
-  return api.sendMessage(
-    JSON.stringify(err, null, 2),
-    threadID
-  );
-}
-
-    // ৩ সেকেন্ড অপেক্ষা
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    let userName = "Member";
-
-    try {
-      const info = await new Promise(resolve => {
-        api.getUserInfo(leftUserID, (err, data) => {
-          if (err) return resolve(null);
-          resolve(data);
-        });
-      });
-
-      if (info && info[leftUserID]) {
-        userName = info[leftUserID].name;
+        return api.sendMessage(
+          `❌ AntiLeave Failed\n\n${err.errorDescription || err.message || JSON.stringify(err)}`,
+          threadID
+        );
       }
-    } catch (e) {}
 
-    await api.sendMessage(
-      {
+      console.log("✅ USER RE-ADDED");
+
+      let userName = "Member";
+
+      try {
+        const info = await new Promise(resolve => {
+          api.getUserInfo(leftUserID, (e, data) => {
+            if (e) return resolve(null);
+            resolve(data);
+          });
+        });
+
+        if (info && info[leftUserID])
+          userName = info[leftUserID].name;
+      } catch {}
+
+      api.sendMessage({
         body:
-`╔═══════════════════╗
-║ 🔥𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 𝐒𝐄𝐂𝐔𝐑𝐈𝐓𝐘⚡║
-╠═══════════════════╣
-║
-║ 👋 ${userName}
-║
-║ ⚠️ আপনি গ্রুপ থেকে বের হওয়ার
-║ চেষ্টা করেছিলেন! 🚫
-║
-║ ⚡ Riyad Bot-এর অনুমতি ব্যতীত
-║ এই গ্রুপ ত্যাগ করা অসম্ভব। 🔒
-║
-║ ✅ আপনাকে পুনরায় গ্রুপে
-║ সংযুক্ত করা হয়েছে। 🔄
-║
-║ ❤️💎 🚀 ⚛️
+`╔════════════════════╗
+║ 🔥 RIYAD BOT 🔥
 ╠════════════════════╣
-║ ⚡ 𝐁𝐎𝐓 𝐒𝐘𝐒𝐓𝐄𝐌 𝐀𝐂𝐓𝐈𝐕𝐄 ⚡  ║
+
+👋 ${userName}
+
+⚠️ আপনি গ্রুপ থেকে বের হয়েছিলেন।
+
+✅ আপনাকে আবার গ্রুপে যুক্ত করা হয়েছে।
+
+🛡️ AntiLeave Active
+
 ╚════════════════════╝`,
         mentions: [
           {
@@ -104,10 +78,7 @@ try {
             id: leftUserID
           }
         ]
-      },
-      threadID
-    );
-
-    console.log("✅ SECURITY MESSAGE SENT");
+      }, threadID);
+    });
   }
 };
