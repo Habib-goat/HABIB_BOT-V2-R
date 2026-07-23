@@ -65,8 +65,8 @@ module.exports = {
     // --- 1. HELP / MENU ---
     if (!subCommand) {
       const menu = (
-        `🛍️ [ RIYAD STORE SYSTEM ]\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+         `╔══〔🛍️ 𝗥𝗜𝗬𝗔𝗗-𝗦𝗧𝗢𝗥𝗘 🛍️ 〕══╗\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
         `• /rs list [page]      : Paginated command list\n` +
         `• /rs search <query>  : Fast search (ID / Name)\n` +
         `• /rs info <id|name>   : Command details card\n` +
@@ -74,7 +74,7 @@ module.exports = {
         `• /rs update <id>      : Safe update with backup\n` +
         `• /rs featured         : Top trending commands\n` +
         `• /rs sync             : Sync local files with store\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
         `🌐 Base API: https://riyad-store-api.onrender.com`
       );
       return await send(menu);
