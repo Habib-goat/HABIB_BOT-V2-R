@@ -328,7 +328,7 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  if (!query) return;
 
  const res = await axios.get(`${simsim}?text=${encodeURIComponent(query)}&senderID=${event.senderID}&font=1`);
- const replies = Array.isArray(res.data.response) ? res.data.response : [res.data.response];
+ const replies = [res.data.reply];
 
  for (const rep of replies) {
  await new Promise(resolve => {
