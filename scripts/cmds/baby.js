@@ -44,12 +44,12 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  const parts = rawQuery.replace(/^(remove|rm)\s*/i, "").split(" - ");
  if (parts.length < 2) return api.sendMessage("Use: remove [Question] - [Reply]", event.threadID, event.messageID);
  const [ask, ans] = parts.map(p => p.trim());
- const res = await axios.get(`${simsim}/delete?ask=${encodeURIComponent(ask)}&ans=${encodeURIComponent(ans)}`);
+ const res = await axios.get(`${simsim}?remove=${encodeURIComponent(ask)}&senderID=${uid}`);
  return api.sendMessage(res.data.message, event.threadID, event.messageID);
  }
 
  if (command === "list") {
- const res = await axios.get(`${simsim}/list`);
+ const res = await axios.get(`${simsim}?list=all`);
  if (res.data.code === 200) {
  return api.sendMessage(
  `♾ Total Questions Learned: ${res.data.totalQuestions}\n★ Total Replies Stored: ${res.data.totalReplies}\nDeveloper: ${res.data.author}`,
@@ -62,7 +62,7 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  const parts = rawQuery.replace(/^edit\s*/i, "").split(" - ");
  if (parts.length < 3) return api.sendMessage("Use: edit [Q] - [Old] - [New]", event.threadID, event.messageID);
  const [ask, oldReply, newReply] = parts.map(p => p.trim());
- const res = await axios.get(`${simsim}/edit?ask=${encodeURIComponent(ask)}&old=${encodeURIComponent(oldReply)}&new=${encodeURIComponent(newReply)}`);
+ const res = await axios.get(`${simsim}?edit=${encodeURIComponent(ask)}&replace=${encodeURIComponent(newReply)}&senderID=${uid}`);
  return api.sendMessage(res.data.message, event.threadID, event.messageID);
  }
 
@@ -84,13 +84,13 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  }
  } catch {}
 
- let teachUrl = `${simsim}/teach?ask=${encodeURIComponent(ask)}&ans=${encodeURIComponent(ans)}&senderID=${uid}&senderName=${encodeURIComponent(senderName)}&groupID=${encodeURIComponent(groupID)}`;
+ let teachUrl = `${simsim}?teach=${encodeURIComponent(ask)}&reply=${encodeURIComponent(ans)}&senderID=${uid}&threadID=${event.threadID}`;
  if (groupName) teachUrl += `&groupName=${encodeURIComponent(groupName)}`;
  const res = await axios.get(teachUrl);
  return api.sendMessage(res.data.message, event.threadID, event.messageID);
  }
 
- const res = await axios.get(`${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`);
+ const res = await axios.get(`${simsim}?text=${encodeURIComponent(query)}&senderID=${uid}&font=1`);
  const replies = Array.isArray(res.data.response) ? res.data.response : [res.data.response];
 
  for (const rep of replies) {
@@ -120,8 +120,8 @@ module.exports.onReply = async function ({ api, event, handleReply, usersData, t
  const replyText = event.body ? event.body.toLowerCase() : "";
  if (!replyText) return;
  const simsim = await baseApiUrl();
- const res = await axios.get(`${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`);
- const replies = Array.isArray(res.data.response) ? res.data.response : [res.data.response];
+ const res = await axios.get(`${simsim}?text=${encodeURIComponent(replyText)}&senderID=${event.senderID}&font=1`);
+ const replies = [res.data.reply];
 
  for (const rep of replies) {
  await new Promise(resolve => {
@@ -327,7 +327,7 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  const query = raw.replace(/^baby\s+|^bot\s+|^bby\s+|^jan\s+|^xan\s+|^জান\s+|^বট\s+|^বেবি\s+/i, "").trim();
  if (!query) return;
 
- const res = await axios.get(`${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`);
+ const res = await axios.get(`${simsim}?text=${encodeURIComponent(query)}&senderID=${event.senderID}&font=1`);
  const replies = Array.isArray(res.data.response) ? res.data.response : [res.data.response];
 
  for (const rep of replies) {
