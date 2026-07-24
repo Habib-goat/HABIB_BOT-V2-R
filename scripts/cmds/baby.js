@@ -95,18 +95,23 @@ const replies = [res.data.reply];
 
  for (const rep of replies) {
  await new Promise(resolve => {
- api.sendMessage(rep, event.threadID, (err, info) => {
- if (!err) {
- replyManager.register(info.messageID, {
-  name: module.exports.config.name,
-  commandName: "baby",
-  authorID: event.senderID,
-  type: "simsimi"
+  api.sendMessage(
+    { body: String(rep) },
+    event.threadID,
+    (err, info) => {
+      if (!err) {
+        replyManager.register(info.messageID, {
+          name: module.exports.config.name,
+          commandName: "baby",
+          authorID: event.senderID,
+          type: "simsimi"
+        });
+      }
+      resolve();
+    },
+    event.messageID
+  );
 });
- }
- resolve();
- }, event.messageID);
- });
  }
 
  } catch (err) {
@@ -115,6 +120,10 @@ const replies = [res.data.reply];
 };
 
 module.exports.onReply = async function ({ api, event, handleReply, usersData, threadsData, replyManager }) {
+ 
+ if (!handleReply) return;
+if (handleReply.authorID !== event.senderID) return;
+ 
  try {
  const senderName = event.senderName || "User";
  const replyText = event.body ? event.body.toLowerCase() : "";
@@ -125,18 +134,23 @@ module.exports.onReply = async function ({ api, event, handleReply, usersData, t
 
  for (const rep of replies) {
  await new Promise(resolve => {
- api.sendMessage(rep, event.threadID, (err, info) => {
- if (!err) {
- replyManager.register(info.messageID, {
-  name: module.exports.config.name,
-  commandName: "baby",
-  authorID: event.senderID,
-  type: "simsimi"
+  api.sendMessage(
+    { body: String(rep) },
+    event.threadID,
+    (err, info) => {
+      if (!err) {
+        replyManager.register(info.messageID, {
+          name: module.exports.config.name,
+          commandName: "baby",
+          authorID: event.senderID,
+          type: "simsimi"
+        });
+      }
+      resolve();
+    },
+    event.messageID
+  );
 });
- }
- resolve();
- }, event.messageID);
- });
  }
 
  } catch (err) {
@@ -307,16 +321,21 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  raw === "বট" || raw === "বেবি"
  ) {
  const randomReply = greetings[Math.floor(Math.random() * greetings.length)];
- return api.sendMessage(randomReply, event.threadID, (err, info) => {
- if (!err) {
- replyManager.register(info.messageID, {
-  name: module.exports.config.name,
-  commandName: "baby",
-  authorID: event.senderID,
-  type: "simsimi"
-});
- }
- }, event.messageID);
+ return api.sendMessage(
+  { body: String(randomReply) },
+  event.threadID,
+  (err, info) => {
+    if (!err) {
+      replyManager.register(info.messageID, {
+        name: module.exports.config.name,
+        commandName: "baby",
+        authorID: event.senderID,
+        type: "simsimi"
+      });
+    }
+  },
+  event.messageID
+);
  }
 
  if (
@@ -332,18 +351,23 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
 
  for (const rep of replies) {
  await new Promise(resolve => {
- api.sendMessage(rep, event.threadID, (err, info) => {
- if (!err) {
- replyManager.register(info.messageID, {
-  name: module.exports.config.name,
-  commandName: "baby",
-  authorID: event.senderID,
-  type: "simsimi"
+  api.sendMessage(
+    { body: String(rep) },
+    event.threadID,
+    (err, info) => {
+      if (!err) {
+        replyManager.register(info.messageID, {
+          name: module.exports.config.name,
+          commandName: "baby",
+          authorID: event.senderID,
+          type: "simsimi"
+        });
+      }
+      resolve();
+    },
+    event.messageID
+  );
 });
- }
- resolve();
- }, event.messageID);
- });
  }
  }
 
