@@ -91,7 +91,7 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  }
 
  const res = await axios.get(`${simsim}?text=${encodeURIComponent(query)}&senderID=${uid}&font=1`);
- const replies = Array.isArray(res.data.response) ? res.data.response : [res.data.response];
+const replies = [res.data.reply];
 
  for (const rep of replies) {
  await new Promise(resolve => {
