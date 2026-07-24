@@ -1,7 +1,6 @@
 const axios = require("axios");
 
-const apiList = "https://gitlab.com/shahadat-sahu/sahu-api/-/raw/main/API.json";
-const getMainAPI = async () => (await axios.get(apiList)).data.simsimi;
+const baseApiUrl = async () => "https://noobs-api.top/dipto/baby";
 
 module.exports.config = {
  name: "baby",
@@ -22,7 +21,7 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  const senderName = event.senderName || "User";
  const rawQuery = args.join(" ");
  const query = rawQuery.toLowerCase();
- const simsim = await getMainAPI();
+ const simsim = await baseApiUrl();
 
  if (!query) {
  const ran = ["Bolo baby", "hum"];
@@ -120,7 +119,7 @@ module.exports.onReply = async function ({ api, event, handleReply, usersData, t
  const senderName = event.senderName || "User";
  const replyText = event.body ? event.body.toLowerCase() : "";
  if (!replyText) return;
- const simsim = await getMainAPI();
+ const simsim = await baseApiUrl();
  const res = await axios.get(`${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`);
  const replies = Array.isArray(res.data.response) ? res.data.response : [res.data.response];
 
@@ -153,7 +152,7 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  const senderName = event.senderName || "User";
  const senderID = event.senderID;
 
- const simsim = await getMainAPI();
+ const simsim = await baseApiUrl();
 
  const greetings = [
       "𝗕𝗮𝗯𝘆, 𝗮𝗺𝗶 𝘁𝗼𝗺𝗮𝗿 𝗼𝗽𝗲𝗸𝗵𝘆𝗮𝘆 𝗰𝗵𝗶𝗹𝗮𝗺 💖",
