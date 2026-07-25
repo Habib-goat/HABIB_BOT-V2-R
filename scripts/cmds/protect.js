@@ -3,7 +3,7 @@ module.exports = {
     name: "protect",
     version: "1.2",
     author: "MOHAMMAD AKASH",
-    role: 1,
+    role: 2,
     shortDescription: "Lock group name, nickname, theme, emoji",
     category: "group",
     guide: "{pn} on/off"
