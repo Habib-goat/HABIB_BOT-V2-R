@@ -265,6 +265,8 @@ const isCommand =
 }
 
     console.log("[DEBUG] COMMAND:", commandName);
+    console.log("COMMAND EXISTS:", commandLoader.commands.has(commandName));
+console.log("ALIAS EXISTS:", commandLoader.aliases.has(commandName));
 
 console.log("HAS AUTOSEEN:", commandLoader.commands.has("autoseen"));
 
