@@ -235,23 +235,21 @@ console.log("[3] Download finished.");
       const fileSizeFormatted = formatBytes(stats.size);
 
       // 6. Progress Notification - Uploading
+console.log("A");
+
 if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
   try {
     await api.unsendMessage(progressMsg.messageID);
-  } catch (e) {}
+  } catch (e) {
+    console.log("unsend error:", e);
+  }
 }
 
-progressMsg = await new Promise((resolve) => {
-  api.sendMessage(
-    "📤 Uploading to Pixeldrain...\n⏳ Please wait...",
-    threadID,
-    (err, info) => resolve(info || null),
-    messageID
-  );
-});
+console.log("B");
 
-      // 7. Upload to Pixeldrain
+api.sendMessage("📤 Uploading...", threadID);
 
+console.log("C");
 console.log("[4] Upload starting...");
 
 const result = await uploadToPixeldrain(
