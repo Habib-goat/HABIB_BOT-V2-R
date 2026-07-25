@@ -4,8 +4,9 @@ module.exports = {
   config: {
     name: "prefix",
     version: "1.0.0",
-    author: "Riyad + ChatGPT",
-    role: 1,
+    author: "Riyad",
+    role: 0,
+    permission: "0",
     category: "System",
     shortDescription: "Manage Prefix Mode",
     longDescription: "Enable/Disable No Prefix Mode and show prefix information.",
@@ -59,10 +60,15 @@ module.exports = {
     args,
     threadsData
   }) {
-    const thread = await threadsData.getThread(event.threadID);
-    const settings = thread.settings || {};
+    const isOwner = config.ownerIDs.includes(event.senderID);
+const isBotAdmin = config.adminIDs.includes(event.senderID) || isOwner;
 
-    const option = (args[0] || "").toLowerCase();
+if ((option === "on" || option === "off") && !isBotAdmin) {
+  return api.sendMessage(
+    "❌ Only Bot Admin or Owner can change Prefix Mode.",
+    event.threadID
+  );
+}
 
     if (!["on", "off", "status"].includes(option)) {
       return api.sendMessage(
