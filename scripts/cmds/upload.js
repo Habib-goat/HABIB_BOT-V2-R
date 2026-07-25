@@ -275,6 +275,9 @@ console.log("RESULT.DATA =", result.data);
       // 8. Construct Success Message
       const fileLink = `https://pixeldrain.com/u/${result.id}`;
 
+      console.log("FILE LINK =", fileLink);
+console.log("BEFORE SEND");
+
 const successText = `✅ Upload Successful
 
 ━━━━━━━━━━━━━━
