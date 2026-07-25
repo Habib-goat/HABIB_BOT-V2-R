@@ -311,6 +311,15 @@ try {
 
   await dispatchSystemEvent(adaptedApi, event);
 
+  await botEngine.processMessage(
+    event,
+    commandLoader,
+    eventLoader,
+    wsServer,
+    null,
+    adaptedApi
+  );
+
 }
 
 } catch (procErr) {
