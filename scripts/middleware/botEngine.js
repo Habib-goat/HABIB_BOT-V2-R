@@ -243,18 +243,26 @@ if (config.autoReply.enabled) {
 }
 // 6. Command Execution and Parsing
 const prefix = threadData.prefix || config.prefix;
-    const isCommand = body.startsWith(prefix);
+const noPrefix = threadData.settings?.noPrefix === true;
+
+const isCommand =
+  body.startsWith(prefix) ||
+  (noPrefix && body.trim().length > 0);
     
     // Command variables
     let commandName = '';
     let args = [];
 
-    if (isCommand) {
-      const content = body.slice(prefix.length).trim();
-      const parts = content.split(/\s+/);
-      commandName = parts[0].toLowerCase();
-      args = parts.slice(1);
-    }
+    if (body.startsWith(prefix)) {
+  const content = body.slice(prefix.length).trim();
+  const parts = content.split(/\s+/);
+  commandName = parts[0].toLowerCase();
+  args = parts.slice(1);
+} else if (noPrefix) {
+  const parts = body.trim().split(/\s+/);
+  commandName = parts[0].toLowerCase();
+  args = parts.slice(1);
+}
 
     console.log("[DEBUG] COMMAND:", commandName);
 
