@@ -24,7 +24,8 @@ module.exports = {
     
     if (args[0] === "on") {
       const info = await api.getThreadInfo(threadID);
-
+console.log("THREAD INFO:");
+  console.log(JSON.stringify(info, null, 2));
       const protectData = {
   enable: true,
   name: info.threadName || "",
