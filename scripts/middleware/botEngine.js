@@ -349,10 +349,19 @@ for (const [name, cmd] of commandLoader.commands.entries()) {
 
     console.log("[DEBUG] Command found:", cmd.config.name);
 
+    console.log("SenderID:", senderID);
+console.log("AdminIDs:", config.adminIDs);
+console.log("OwnerIDs:", config.ownerIDs);
+
+const isOwner = config.ownerIDs.includes(String(senderID));
+const isBotAdmin = config.adminIDs.includes(String(senderID)) || isOwner;
+
+console.log("isOwner:", isOwner);
+console.log("isBotAdmin:", isBotAdmin);
+console.log("Role:", cmd.config.role);
+
     // 7. Role-based Permission Controls
     // role: 0 = everyone, 1 = group admin, 2 = bot admin, 3 = owner
-    const isOwner = config.ownerIDs.includes(senderID);
-    const isBotAdmin = config.adminIDs.includes(senderID) || isOwner;
     const isGroupAdmin = event.isGroupAdmin || isBotAdmin; // If bot admin, they inherit group admin
 
     const cmdRole = cmd.config.role || 0;
