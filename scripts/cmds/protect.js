@@ -39,11 +39,11 @@ module.exports = {
         protectData.nickname[u.userID] = u.nickname || "";
       });
 
-      const thread = await threadsData.getThread(threadID);
+      const thread = await threadsData.getThread(threadID) || {};
 
 await threadsData.updateThread(threadID, {
   settings: {
-    ...thread.settings,
+    ...(thread.settings || {}),
     protect: protectData
   }
 });
@@ -78,11 +78,13 @@ await threadsData.updateThread(threadID, {
 
     const { threadID, author, logMessageType, logMessageData } = event;
     const thread = await threadsData.getThread(threadID);
-    const protectData = thread.settings?.protect || {};
 
-    if (!protectData?.enable) return;
+if (!thread) return;
 
-    const info = await api.getThreadInfo(threadID);
+const protectData = thread.settings?.protect;
+
+if (!protectData || !protectData.enable) return;
+    
     const isBot = api.getCurrentUserID() === author;
 
     if (!isBot) {
