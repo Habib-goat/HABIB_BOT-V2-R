@@ -29,7 +29,7 @@ module.exports = {
         "61574930690578" // এখানে তোমার Bot Owner UID দাও
       ];
 
-      if (ownerIDs.includes(joinUserID)) return;
+      //if (ownerIDs.includes(joinUserID)) return;
 
       // ===== User Name =====
       let userName = "Unknown User";
