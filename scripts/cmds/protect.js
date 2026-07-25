@@ -10,12 +10,18 @@ module.exports = {
   },
 
   onStart: async ({ api, event, message, threadsData, args }) => {
-    const { threadID } = event;
+  console.log("ARGS =", args);
+  console.log("BODY =", event.body);
 
-    return api.sendMessage(
-  "⚠️ Usage: /protect on | /protect off",
-  threadID
-);
+  const { threadID } = event;
+
+    if (!args[0]) {
+  return api.sendMessage(
+    "⚠️ Usage: /protect on | /protect off",
+    threadID
+  );
+}
+    
     if (args[0] === "on") {
       const info = await api.getThreadInfo(threadID);
 
