@@ -62,7 +62,13 @@ await threadsData.updateThread(threadID, {
   }
 });
 
-      return api.sendMessage(
+const check = await threadsData.getThread(threadID);
+console.log(
+  "CHECK PROTECT:",
+  JSON.stringify(check.settings?.protect, null, 2)
+);
+
+return api.sendMessage(
   "🛡 𝗣𝗥𝗢𝗧𝗘𝗖𝗧 𝗘𝗡𝗔𝗕𝗟𝗘𝗗\n✨ Name, Nickname, Theme & Emoji are now LOCKED!",
   threadID
 );
