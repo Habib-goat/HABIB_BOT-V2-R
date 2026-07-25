@@ -26,6 +26,13 @@ module.exports = {
       const info = await api.getThreadInfo(threadID);
 console.log("THREAD INFO:");
   console.log(JSON.stringify(info, null, 2));
+      console.log("IMAGE FIELDS:", {
+  imageSrc: info.imageSrc,
+  imageID: info.imageID,
+  image: info.image,
+  threadPicture: info.threadPicture,
+  groupPhoto: info.groupPhoto
+});
       const protectData = {
   enable: true,
   name: info.threadName || "",
