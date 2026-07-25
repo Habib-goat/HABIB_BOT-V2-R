@@ -59,6 +59,11 @@ await cmd.onReply({
   api,
   event,
 
+  handleReply: {
+  ...replyData,
+  messageID: targetMessageID
+},
+  
   Reply: {
     ...replyData,
     messageID: targetMessageID
