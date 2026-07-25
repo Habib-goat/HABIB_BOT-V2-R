@@ -40,6 +40,17 @@ class BaseMessengerAdapter {
   async changeNickname(nickname, threadID, userID) {
     throw new Error("Method 'changeNickname' must be implemented by the adapter subclass.");
   }
+  async setTitle(title, threadID) {
+  throw new Error("Method 'setTitle' must be implemented.");
+}
+
+async changeThreadEmoji(emoji, threadID) {
+  throw new Error("Method 'changeThreadEmoji' must be implemented.");
+}
+
+async changeThreadColor(color, threadID) {
+  throw new Error("Method 'changeThreadColor' must be implemented.");
+}
   async markAsRead(threadID) {
   throw new Error("Method 'markAsRead' must be implemented by the adapter subclass.");
 }
@@ -214,7 +225,41 @@ resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
     });
   });
 }
-      
+async setTitle(title, threadID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.setTitle !== "function")
+      return reject(new Error("setTitle not supported"));
+
+    this.api.setTitle(title, threadID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
+
+async changeThreadEmoji(emoji, threadID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.changeThreadEmoji !== "function")
+      return reject(new Error("changeThreadEmoji not supported"));
+
+    this.api.changeThreadEmoji(emoji, threadID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
+
+async changeThreadColor(color, threadID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.changeThreadColor !== "function")
+      return reject(new Error("changeThreadColor not supported"));
+
+    this.api.changeThreadColor(color, threadID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}      
 async removeUserFromGroup(userID, threadID) {
   return new Promise((resolve, reject) => {
     if (typeof this.api.removeUserFromGroup !== "function") {
@@ -287,22 +332,27 @@ async addUserToGroup(userID, threadID) {
   });
 }
   getUserInfo(userID, callback) {
-    if (typeof this.api.getUserInfo === 'function') {
-      return this.api.getUserInfo(userID, callback);
-    } else {
-      logger.warn("[FcaAdapter] getUserInfo is not supported on this provider.");
-      if (typeof callback === 'function') callback(new Error("getUserInfo not supported"), null);
-    }
+  if (typeof this.api.getUserInfo === "function") {
+    return this.api.getUserInfo(userID, callback);
+  } else {
+    logger.warn("[FcaAdapter] getUserInfo is not supported.");
+    if (typeof callback === "function")
+      callback(new Error("getUserInfo not supported"), null);
   }
+}
 
-  getThreadInfo(threadID, callback) {
-    if (typeof this.api.getThreadInfo === 'function') {
-      return this.api.getThreadInfo(threadID, callback);
-    } else {
-      logger.warn("[FcaAdapter] getThreadInfo is not supported on this provider.");
-      if (typeof callback === 'function') callback(new Error("getThreadInfo not supported"), null);
+async getThreadInfo(threadID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.getThreadInfo !== "function") {
+      return reject(new Error("getThreadInfo not supported"));
     }
-  }
+
+    this.api.getThreadInfo(threadID, (err, info) => {
+      if (err) return reject(err);
+      resolve(info);
+    });
+  });
+}
 async editMessage(messageID, text) {
   return new Promise((resolve, reject) => {
     if (typeof this.api.editMessage !== "function") {
