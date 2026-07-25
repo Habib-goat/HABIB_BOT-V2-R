@@ -45,6 +45,33 @@ const threadSchema = new mongoose.Schema(
   default: false
 },
 
+      protect: {
+  enable: {
+    type: Boolean,
+    default: false
+  },
+
+  name: {
+    type: String,
+    default: ""
+  },
+
+  emoji: {
+    type: String,
+    default: ""
+  },
+
+  color: {
+    type: String,
+    default: ""
+  },
+
+  nickname: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  }
+},
+      
       welcomeMessage: {
         type: String,
         default: "Welcome {name} to our group!"
