@@ -280,9 +280,9 @@ ${fileLink}
 
       return api.sendMessage(successText, threadID, messageID);
 
-    } catch (error) {
+    } catch (err) {
 
-      console.log("Status:", err.response?.status);
+  console.log("Status:", err.response?.status);
   console.log("Response:", err.response?.data);
   console.log("Message:", err.message);
       
