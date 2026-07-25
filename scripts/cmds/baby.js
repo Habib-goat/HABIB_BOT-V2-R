@@ -90,9 +90,14 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  return api.sendMessage(res.data.message, event.threadID, event.messageID);
  }
 
- const res = await axios.get(
+ console.log("REQUEST URL:");
+console.log(`${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`);
+
+const res = await axios.get(
   `${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`
 );
+
+console.log("SIMSIMI RESPONSE:", res.data);
 const replies = [res.data.message || res.data.reply];
 
  for (const rep of replies) {
@@ -131,6 +136,8 @@ if (handleReply.authorID !== event.senderID) return;
  const replyText = event.body ? event.body.toLowerCase() : "";
  if (!replyText) return;
  const simsim = await simsimi();
+  console.log("REQUEST URL:");
+console.log(`${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`);
  const res = await axios.get(
   `${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`
 );
