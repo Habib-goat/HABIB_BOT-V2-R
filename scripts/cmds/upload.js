@@ -148,7 +148,7 @@ module.exports = {
 
 console.log("messageReply =", JSON.stringify(event.messageReply, null, 2));
 
-let attachment =
+attachment =
   event.messageReply?.attachments?.[0] ||
   event.messageReply?.message?.attachments?.[0] ||
   event.attachments?.[0] ||
