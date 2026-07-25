@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const baseApiUrl = async () => "https://simsimi-api-tjb1.onrender.com";
+const simsimi = async () => "https://simsimi-api-tjb1.onrender.com";
 
 module.exports.config = {
  name: "baby",
@@ -21,7 +21,7 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  const senderName = event.senderName || "User";
  const rawQuery = args.join(" ");
  const query = rawQuery.toLowerCase();
- const simsim = await baseApiUrl();
+ const simsim = await simsimi();
 
  if (!query) {
  const ran = ["Bolo baby", "hum"];
@@ -90,8 +90,10 @@ module.exports.onStart = async function ({ api, event, args, usersData, threadsD
  return api.sendMessage(res.data.message, event.threadID, event.messageID);
  }
 
- const res = await axios.get(`${simsim}?text=${encodeURIComponent(query)}&senderID=${uid}&font=1`);
-const replies = [res.data.reply];
+ const res = await axios.get(
+  `${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`
+);
+const replies = [res.data.message || res.data.reply];
 
  for (const rep of replies) {
  await new Promise(resolve => {
@@ -128,9 +130,11 @@ if (handleReply.authorID !== event.senderID) return;
  const senderName = event.senderName || "User";
  const replyText = event.body ? event.body.toLowerCase() : "";
  if (!replyText) return;
- const simsim = await baseApiUrl();
- const res = await axios.get(`${simsim}?text=${encodeURIComponent(replyText)}&senderID=${event.senderID}&font=1`);
- const replies = [res.data.reply];
+ const simsim = await simsimi();
+ const res = await axios.get(
+  `${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`
+);
+ const replies = [res.data.message || res.data.reply];
 
  for (const rep of replies) {
  await new Promise(resolve => {
@@ -166,7 +170,7 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  const senderName = event.senderName || "User";
  const senderID = event.senderID;
 
- const simsim = await baseApiUrl();
+ const simsim = await simsimi();
 
  const greetings = [
       "𝗕𝗮𝗯𝘆, 𝗮𝗺𝗶 𝘁𝗼𝗺𝗮𝗿 𝗼𝗽𝗲𝗸𝗵𝘆𝗮𝘆 𝗰𝗵𝗶𝗹𝗮𝗺 💖",
@@ -346,8 +350,10 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  const query = raw.replace(/^baby\s+|^bot\s+|^bby\s+|^jan\s+|^xan\s+|^জান\s+|^বট\s+|^বেবি\s+/i, "").trim();
  if (!query) return;
 
- const res = await axios.get(`${simsim}?text=${encodeURIComponent(query)}&senderID=${event.senderID}&font=1`);
- const replies = [res.data.reply];
+ const res = await axios.get(
+  `${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`
+);
+ const replies = [res.data.message || res.data.reply];
 
  for (const rep of replies) {
  await new Promise(resolve => {
