@@ -237,13 +237,13 @@ console.log("[3] Download finished.");
       // 6. Progress Notification - Uploading
 console.log("A");
 
-if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
-  try {
-    await api.unsendMessage(progressMsg.messageID);
-  } catch (e) {
-    console.log("unsend error:", e);
-  }
-}
+//if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
+  //try {
+   // await api.unsendMessage(progressMsg.messageID);
+//  } catch (e) {
+   // console.log("unsend error:", e);
+ // }
+//}
 
 console.log("B");
 
