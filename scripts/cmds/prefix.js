@@ -28,12 +28,12 @@ module.exports = {
     if (body === prefix) {
       return api.sendMessage(
 `╭━━━━━━━━━━━━━━━━━━╮
-      ⚡ 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 ⚡
+           ⚡ 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 ⚡
 ╰━━━━━━━━━━━━━━━━━━╯
 
 ✨ I'm Alive & Ready!
 
-📚 Type: ${prefix}help
+📚 Type: ${prefix}help to
 🚀 View all available commands.`,
         event.threadID
       );
