@@ -294,12 +294,11 @@ ${fileLink}
 
       return api.sendMessage(successText, threadID, messageID);
 
-    } catch (error) {
+} catch (error) {
   console.log("Status:", error.response?.status);
   console.log("Response:", error.response?.data);
   console.log("Message:", error.message);
 
-  // Clean up progress message
   if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
     try {
       await api.unsendMessage(progressMsg.messageID);
@@ -310,26 +309,26 @@ ${fileLink}
     ? JSON.stringify(error.response.data, null, 2)
     : (error.message || "Unknown error occurred.");
 
-  const failureText = `❌ Upload Failed
+  return api.sendMessage(
+    `❌ Upload Failed
 
 Reason:
 ${error.message}
 
 Server Response:
-${serverResponse}`;
+${serverResponse}`,
+    threadID,
+    messageID
+  );
 
-  return api.sendMessage(failureText, threadID, messageID);
-}
-
-    } finally {
-      // 9. Clean up temporary cache file
-      if (fs.existsSync(tempFilePath)) {
-        try {
-          fs.unlinkSync(tempFilePath);
-        } catch (e) {
-          console.error("Failed to delete temp file:", e);
-        }
-      }
+} finally {
+  if (fs.existsSync(tempFilePath)) {
+    try {
+      fs.unlinkSync(tempFilePath);
+    } catch (e) {
+      console.error("Failed to delete temp file:", e);
     }
+  }
+}
   }
 };
