@@ -27,25 +27,20 @@ module.exports = {
       // ===== User Name =====
       let userName = "Unknown User";
 
-      try {
-        const user =
-          await usersData.get(joinUserID) ||
-          await usersData.getUser(joinUserID);
-
-        if (user)
-          userName =
-            user.name ||
-            user.fullName ||
-            user.username ||
-            userName;
-      } catch {}
+try {
+  const info = await api.getUserInfo(joinUserID);
+  userName = info?.[joinUserID]?.name || "Unknown User";
+} catch (e) {
+  console.error("getUserInfo:", e);
+}
 
       // ===== Group Name =====
       let groupName = "Unknown Group";
 
       try {
-        const thread = await threadsData.getThread(threadID);
-
+        const thread = await api.getThreadInfo(threadID);
+const groupName = thread.threadName || "Unknown Group";
+        
         if (thread)
           groupName =
             thread.threadName ||
