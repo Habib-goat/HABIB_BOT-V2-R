@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const baseApiUrl = async () => "https://noobs-api.top/dipto/baby";
+const baseApiUrl = async () => "https://simsimi-api-tjb1.onrender.com";
 
 module.exports.config = {
  name: "baby",
