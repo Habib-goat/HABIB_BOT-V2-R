@@ -122,18 +122,23 @@ async function dispatchSystemEvent(api, event) {
 
   logger.info(`[System Event] Received system event: '${logMessageType}' in thread ${threadID}`);
 
+  // Run system event modules
   for (const [name, eventModule] of eventLoader.events.entries()) {
     if (eventModule.config && Array.isArray(eventModule.config.eventType)) {
       if (eventModule.config.eventType.includes(logMessageType)) {
-        if (typeof eventModule.onStart === 'function') {
+        if (typeof eventModule.onStart === "function") {
           try {
-            logger.info(`[Event Handler] Running event handler '${name}' for system event type '${logMessageType}'`);
+            logger.info(
+              `[Event Handler] Running event handler '${name}' for system event type '${logMessageType}'`
+            );
+
             await eventModule.onStart({
               api,
               event,
               usersData: database,
               threadsData: database
             });
+
           } catch (err) {
             logger.error(`Error executing event handler '${name}':`, err);
           }
@@ -141,8 +146,26 @@ async function dispatchSystemEvent(api, event) {
       }
     }
   }
-}
 
+  // ✅ Run command onEvent handlers
+  for (const command of commandLoader.commands.values()) {
+    if (typeof command.onEvent === "function") {
+      try {
+        await command.onEvent({
+          api,
+          event,
+          usersData: database,
+          threadsData: database
+        });
+      } catch (err) {
+        logger.error(
+          `Command '${command.config?.name}' onEvent failed:`,
+          err
+        );
+      }
+    }
+  }
+} // ← Function এখানেই শেষ হবে
 // Adapter delegation is handled via MessengerAdapterFactory
 
 function startMessenger(app, wsServer) {
