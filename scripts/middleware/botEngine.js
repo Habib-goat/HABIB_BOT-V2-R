@@ -134,7 +134,7 @@ if (event.logMessageType) {
           reactionManager
         });
       } catch (err) {
-        logger.error(`Error in onEvent for '${name}':`, err);
+        console.error(`Error in onEvent for '${name}':`, err);
       }
     }
   }
