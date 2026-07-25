@@ -127,7 +127,9 @@ const replies = [res.data.message || res.data.reply];
 };
 
 module.exports.onReply = async function ({ api, event, handleReply, usersData, threadsData, replyManager }) {
- 
+ console.log("===== ONREPLY =====");
+console.log(handleReply);
+console.log(event.body);
  if (!handleReply) return;
 if (handleReply.authorID !== event.senderID) return;
  
@@ -142,27 +144,26 @@ console.log(`${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=
   `${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`
 );
   console.log("SIMSIMI RESPONSE:", res.data);
- const replies = [res.data.message || res.data.reply];
+ const reply =
+  res.data?.message ||
+  res.data?.reply ||
+  "😔 কোনো উত্তর পাওয়া যায়নি।";
 
- for (const rep of replies) {
- await new Promise(resolve => {
-  api.sendMessage(
-    { body: String(rep) },
-    event.threadID,
-    (err, info) => {
-      if (!err) {
-        replyManager.register(info.messageID, {
-          name: module.exports.config.name,
-          commandName: "baby",
-          authorID: event.senderID,
-          type: "simsimi"
-        });
-      }
-      resolve();
-    },
-    event.messageID
-  );
-});
+api.sendMessage(
+  reply,
+  event.threadID,
+  (err, info) => {
+    if (!err) {
+      replyManager.register(info.messageID, {
+        name: module.exports.config.name,
+        commandName: "baby",
+        authorID: event.senderID,
+        type: "simsimi"
+      });
+    }
+  },
+  event.messageID
+);
  }
 
  } catch (err) {
