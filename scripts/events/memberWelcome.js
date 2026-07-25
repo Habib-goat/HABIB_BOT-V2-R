@@ -23,30 +23,41 @@ module.exports = {
     let groupName = "Group Chat";
 
     try {
-      if (typeof api.getThreadInfo === "function") {
-        const info = await new Promise((resolve, reject) => {
-          api.getThreadInfo(threadID, (err, data) => {
-            if (err) return reject(err);
-            resolve(data);
-          });
-        });
+  console.log("[WELCOME] START");
 
-        groupName =
-          info?.threadName ||
-          info?.name ||
-          "Group Chat";
-      } else {
-        const threadInfo = await threadsData.getThread(threadID);
-        groupName = threadInfo?.name || "Group Chat";
-      }
-    } catch {
-      try {
-        const threadInfo = await threadsData.getThread(threadID);
-        groupName = threadInfo?.name || "Group Chat";
-      } catch {}
-    }
+  if (typeof api.getThreadInfo === "function") {
+    console.log("[WELCOME] Before getThreadInfo");
+
+    const info = await api.getThreadInfo(threadID);
+
+    console.log("[WELCOME] After getThreadInfo:", info);
+
+    groupName =
+      info?.threadName ||
+      info?.name ||
+      "Group Chat";
+  } else {
+    console.log("[WELCOME] Using threadsData");
+
+    const threadInfo = await threadsData.getThread(threadID);
+
+    console.log("[WELCOME] ThreadData:", threadInfo);
+
+    groupName = threadInfo?.name || "Group Chat";
+  }
+} catch (err) {
+  console.error("[WELCOME] getThreadInfo ERROR:", err?.stack || err);
+
+  try {
+    const threadInfo = await threadsData.getThread(threadID);
+    groupName = threadInfo?.name || "Group Chat";
+  } catch (err2) {
+    console.error("[WELCOME] threadsData ERROR:", err2?.stack || err2);
+  }
+}
 
     for (const participant of addedParticipants) {
+      console.log("[WELCOME] Member:", participant.fullName);
       if (botID && String(participant.userFbId) === botID)
         continue;
 
