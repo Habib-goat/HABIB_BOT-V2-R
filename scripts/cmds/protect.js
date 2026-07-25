@@ -26,12 +26,13 @@ module.exports = {
       const info = await api.getThreadInfo(threadID);
 
       const protectData = {
-        enable: true,
-        name: info.threadName || "",
-        emoji: info.emoji || "",
-        color: info.color || "",
-        nickname: {}
-      };
+  enable: true,
+  name: info.threadName || "",
+  emoji: info.emoji || "",
+  color: info.color || "",
+  imageID: info.imageSrc || info.imageID || null,
+  nickname: {}
+};
 
       // Safely handle members
       const members = info.members || [];
@@ -99,7 +100,14 @@ if (!protectData || !protectData.enable) return;
       if (logMessageType === "log:thread-color") {
         await api.changeThreadColor(protectData.color, threadID);
       }
-
+if (logMessageType === "log:thread-image") {
+  if (protectData.imageID) {
+    await api.changeGroupImage(
+      protectData.imageID,
+      threadID
+    );
+  }
+}
       if (logMessageType === "log:user-nickname") {
         const { participant_id } = logMessageData;
         await api.changeNickname(
