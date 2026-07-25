@@ -103,54 +103,45 @@ if (!thread) return;
 
 const protectData = thread.settings?.protect;
 
-if (!protectData || !protectData.enable) return;
-    
-    const isBot = api.getCurrentUserID() === author;
+if (!protectData?.enable) return;
 
-    if (!isBot) {
-      if (logMessageType === "log:thread-name") {
-        await api.setTitle(protectData.name, threadID);
-      }
-
-      if (logMessageType === "log:thread-icon") {
-        await api.changeThreadEmoji(protectData.emoji, threadID);
-      }
-
-      if (logMessageType === "log:thread-color") {
-        await api.changeThreadColor(protectData.color, threadID);
-      }
 if (logMessageType === "log:thread-image") {
   console.log("Stored imageSrc:", protectData.imageSrc);
+
   if (protectData.imageSrc) {
-    try {
-      const filePath = path.join(__dirname, `protect_${threadID}.jpg`);
+    const filePath = path.join(__dirname, `protect_${threadID}.jpg`);
 
-      const response = await axios({
-        url: protectData.imageSrc,
-        method: "GET",
-        responseType: "stream"
-      });
+    console.log("Downloading image...");
 
-      const writer = fs.createWriteStream(filePath);
+    const response = await axios({
+      url: protectData.imageSrc,
+      method: "GET",
+      responseType: "stream"
+    });
 
-      await new Promise((resolve, reject) => {
-        response.data.pipe(writer);
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-      });
+    const writer = fs.createWriteStream(filePath);
 
-      await api.changeGroupImage(
-        fs.createReadStream(filePath),
-        threadID
-      );
+    await new Promise((resolve, reject) => {
+      response.data.pipe(writer);
+      writer.on("finish", resolve);
+      writer.on("error", reject);
+    });
 
-      fs.unlinkSync(filePath);
-    } catch (err) {
-      console.error("Protect Image Error:", err);
-    }
+    console.log("Downloaded.");
+    console.log("Calling changeGroupImage...");
+
+    await api.changeGroupImage(
+      fs.createReadStream(filePath),
+      threadID
+    );
+
+    console.log("changeGroupImage success!");
+
+    fs.unlinkSync(filePath);
   }
 }
-      if (logMessageType === "log:user-nickname") {
+
+            if (logMessageType === "log:user-nickname") {
         const { participant_id } = logMessageData;
         await api.changeNickname(
           protectData.nickname[participant_id] || "",
@@ -158,9 +149,10 @@ if (logMessageType === "log:thread-image") {
           participant_id
         );
       }
-    }
+
   } catch (err) {
     console.error("PROTECT ERROR:", err);
+    console.error(err.stack);
   }
 }
 };
