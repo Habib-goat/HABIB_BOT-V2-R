@@ -3,32 +3,81 @@ module.exports = {
     name: "callWelcome",
     version: "1.0.0",
     author: "Riyad",
-    eventType: ["event", "presence", "message", "typ"]
+    eventType: ["log:thread-call"]
   },
 
-  onStart: async function ({ api, event }) {
+  onStart: async function ({ api, event, threadsData, usersData }) {
     try {
-      console.log("========== CALL DEBUG ==========");
-      console.log("TYPE:", event.type);
-      console.log("LOG:", event.logMessageType);
-      console.log(JSON.stringify(event, null, 2));
-      console.log("===============================");
+      if (event.logMessageType !== "log:thread-call") return;
 
-      // টেস্ট: যদি call সম্পর্কিত event পাওয়া যায়
-      const logType = String(event.logMessageType || "").toLowerCase();
+      const threadID = event.threadID;
+      const joinUserID =
+        event.logMessageData?.joining_user ||
+        event.author;
 
-      if (
-        logType.includes("call") ||
-        event.type === "call"
-      ) {
-        api.sendMessage(
-          "📞 Call Event Detected!\n\nCheck Railway/Console Log.",
-          event.threadID
-        );
-      }
+      if (!joinUserID) return;
+
+      // ===== Bot Owner Ignore =====
+      const ownerIDs = [
+        "61574930690578" // এখানে তোমার Bot Owner UID দাও
+      ];
+
+      if (ownerIDs.includes(joinUserID)) return;
+
+      // ===== User Name =====
+      let userName = "Unknown User";
+
+      try {
+        const user =
+          await usersData.get(joinUserID) ||
+          await usersData.getUser(joinUserID);
+
+        if (user)
+          userName =
+            user.name ||
+            user.fullName ||
+            user.username ||
+            userName;
+      } catch {}
+
+      // ===== Group Name =====
+      let groupName = "Unknown Group";
+
+      try {
+        const thread = await threadsData.getThread(threadID);
+
+        if (thread)
+          groupName =
+            thread.threadName ||
+            thread.name ||
+            groupName;
+      } catch {}
+
+      const msg =
+`📞 𝗖𝗔𝗟𝗟 𝗪𝗘𝗟𝗖𝗢𝗠𝗘
+
+👋 Welcome ${userName}
+
+💖 Thanks for joining the group call.
+
+👥 Group
+${groupName}
+
+✨ Enjoy your conversation!`;
+
+      api.sendMessage(
+        {
+          body: msg,
+          mentions: [{
+            tag: userName,
+            id: joinUserID
+          }]
+        },
+        threadID
+      );
 
     } catch (err) {
-      console.error("[CALLWELCOME]", err);
+      console.error("[CALLWELCOME ERROR]", err);
     }
   }
 };
