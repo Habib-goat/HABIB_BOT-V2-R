@@ -264,7 +264,10 @@ const isCommand =
   args = parts.slice(1);
 }
 
-    console.log("[DEBUG] COMMAND:", commandName);
+    console.log("PREFIX =", prefix);
+console.log("NOPREFIX =", noPrefix);
+console.log("BODY =", JSON.stringify(body));
+console.log("COMMAND =", commandName);
     console.log("COMMAND EXISTS:", commandLoader.commands.has(commandName));
 console.log("ALIAS EXISTS:", commandLoader.aliases.has(commandName));
 
