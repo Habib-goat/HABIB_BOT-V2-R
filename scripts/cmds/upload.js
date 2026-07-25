@@ -209,7 +209,9 @@ if (!attachment.url) {
     }
 
     const tempFilePath = path.join(cacheDir, `${Date.now()}_${safeFilename}`);
-    let progressMsg = null;
+
+let progressMsg = null;
+let uploadMsg = null;
 
     try {
       // 4. Progress Notification - Downloading
@@ -247,7 +249,14 @@ console.log("A");
 
 console.log("B");
 
-api.sendMessage("📤 Uploading...", threadID);
+api.sendMessage(
+  "📤 Uploading...",
+  threadID,
+  (err, info) => {
+    uploadMsg = info;
+  },
+  messageID
+);
 
 console.log("C");
 console.log("[4] Upload starting...");
@@ -263,17 +272,16 @@ console.log("[5] Upload finished:", result);
 console.log("RESULT =", result);
 console.log("RESULT.DATA =", result.data);
 
-      // Delete progress message if possible
-    //  if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
-      //  try {
-      //    await api.unsendMessage(progressMsg.messageID);
-     //   } catch (_) {
-          // Ignore unsendMessage error
-     //   }
-   //   }
 
-      // 8. Construct Success Message
-      const fileLink = `https://pixeldrain.com/u/${result.id}`;
+if (progressMsg?.messageID && typeof api.unsendMessage === "function") {
+  api.unsendMessage(progressMsg.messageID, () => {});
+}
+
+if (uploadMsg?.messageID && typeof api.unsendMessage === "function") {
+  api.unsendMessage(uploadMsg.messageID, () => {});
+}
+
+const fileLink = `https://pixeldrain.com/u/${result.id}`;
 
       console.log("FILE LINK =", fileLink);
 console.log("BEFORE SEND");
@@ -311,11 +319,13 @@ return api.sendMessage(
   console.log("Response:", error.response?.data);
   console.log("Message:", error.message);
 
-  if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
-    try {
-      await api.unsendMessage(progressMsg.messageID);
-    } catch (_) {}
-  }
+  if (progressMsg?.messageID && typeof api.unsendMessage === "function") {
+  api.unsendMessage(progressMsg.messageID, () => {});
+}
+
+if (uploadMsg?.messageID && typeof api.unsendMessage === "function") {
+  api.unsendMessage(uploadMsg.messageID, () => {});
+}
 
   const serverResponse = error.response?.data
     ? JSON.stringify(error.response.data, null, 2)
