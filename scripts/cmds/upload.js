@@ -220,7 +220,12 @@ if (!attachment.url) {
       });
 
       // 5. Download Attachment
-      await downloadAttachment(attachment.url, tempFilePath);
+
+console.log("[1] Attachment URL:", attachment.url);
+
+console.log("[2] Download starting...");
+await downloadAttachment(attachment.url, tempFilePath);
+console.log("[3] Download finished.");
 
       // Verify file size
       const stats = fs.statSync(tempFilePath);
@@ -246,7 +251,16 @@ progressMsg = await new Promise((resolve) => {
 });
 
       // 7. Upload to Pixeldrain
-      const result = await uploadToPixeldrain(tempFilePath, safeFilename, PIXELDRAIN_API_KEY);
+
+console.log("[4] Upload starting...");
+
+const result = await uploadToPixeldrain(
+  tempFilePath,
+  safeFilename,
+  PIXELDRAIN_API_KEY
+);
+
+console.log("[5] Upload finished:", result);
 
       // Delete progress message if possible
       if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
@@ -280,11 +294,11 @@ ${fileLink}
 
       return api.sendMessage(successText, threadID, messageID);
 
-    } catch (err) {
-
-  console.log("Status:", err.response?.status);
-  console.log("Response:", err.response?.data);
-  console.log("Message:", err.message);
+    } catch (error) {
+  console.log("Status:", error.response?.status);
+  console.log("Response:", error.response?.data);
+  console.log("Message:", error.message);
+}
       
       // Clean up progress message if an error occurred
       if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
