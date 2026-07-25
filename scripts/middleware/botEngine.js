@@ -91,6 +91,10 @@ const senderID = event.senderID;
 const threadID = event.threadID;
 const messageID = event.messageID;
 const body = event.body ? event.body.trim() : '';
+    // Handle Messenger log events (no message body)
+if (!event.body && event.logMessageType) {
+  event.body = "";
+}
 if (event.type === "message_reply") {
   logger.info("[BOTENGINE] Reply event received");
 }
@@ -116,7 +120,26 @@ if (!senderID || !threadID) return;
       const handledReply = await replyManager.handle(api, event, commandLoader);
       if (handledReply) return;
     }
-
+// Handle log events (group name, emoji, theme, nickname, etc.)
+if (event.logMessageType) {
+  for (const [name, cmd] of commandLoader.commands.entries()) {
+    if (typeof cmd.onEvent === "function") {
+      try {
+        await cmd.onEvent({
+          api,
+          event,
+          usersData: database,
+          threadsData: database,
+          replyManager,
+          reactionManager
+        });
+      } catch (err) {
+        logger.error(`Error in onEvent for '${name}':`, err);
+      }
+    }
+  }
+  return;
+}
     // 1. Anti-Spam Mitigation
     if (config.antiSpam.enabled) {
       const now = Date.now();
@@ -292,7 +315,24 @@ for (const [name, cmd] of commandLoader.commands.entries()) {
     }
   }
 }
-
+// Run onEvent hooks for all commands
+for (const [name, cmd] of commandLoader.commands.entries()) {
+  if (typeof cmd.onEvent === "function") {
+    try {
+      await cmd.onEvent({
+        api,
+        event,
+        message: api,
+        usersData: database,
+        threadsData: database,
+        replyManager,
+        reactionManager
+      });
+    } catch (err) {
+      logger.error(`Error in onEvent hook for command '${name}':`, err);
+    }
+  }
+}
     if (!isCommand || !commandName) return;
 
     // Find Command by Name or Alias
