@@ -164,7 +164,6 @@ api.sendMessage(
   },
   event.messageID
 );
- }
 
  } catch (err) {
   console.log(err.response?.data || err.message);
