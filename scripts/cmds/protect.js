@@ -73,9 +73,12 @@ await threadsData.updateThread(threadID, {
   },
 
   onEvent: async ({ api, event, threadsData }) => {
+  try {
+    console.log("PROTECT EVENT:", event.logMessageType);
+
     const { threadID, author, logMessageType, logMessageData } = event;
     const thread = await threadsData.getThread(threadID);
-const protectData = thread.settings?.protect || {};
+    const protectData = thread.settings?.protect || {};
 
     if (!protectData?.enable) return;
 
@@ -83,30 +86,28 @@ const protectData = thread.settings?.protect || {};
     const isBot = api.getCurrentUserID() === author;
 
     if (!isBot) {
-      // NAME
       if (logMessageType === "log:thread-name") {
         await api.setTitle(protectData.name, threadID);
       }
 
-      // EMOJI
       if (logMessageType === "log:thread-icon") {
         await api.changeThreadEmoji(protectData.emoji, threadID);
       }
 
-      // COLOR/THEME
       if (logMessageType === "log:thread-color") {
         await api.changeThreadColor(protectData.color, threadID);
       }
 
-      // NICKNAME
       if (logMessageType === "log:user-nickname") {
         const { participant_id } = logMessageData;
         await api.changeNickname(
-  protectData.nickname[participant_id] || "",
-  threadID,
-  participant_id
-);
+          protectData.nickname[participant_id] || "",
+          threadID,
+          participant_id
+        );
       }
     }
+  } catch (err) {
+    console.error("PROTECT ERROR:", err);
   }
-};
+}
