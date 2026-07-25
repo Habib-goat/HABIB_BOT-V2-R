@@ -28,6 +28,7 @@ module.exports = {
     
     if (args[0] === "on") {
       const info = await api.getThreadInfo(threadID);
+      console.log("Saved imageSrc:", info.imageSrc);
 console.log("THREAD INFO:");
   console.log(JSON.stringify(info, null, 2));
       console.log("IMAGE FIELDS:", {
@@ -113,6 +114,7 @@ if (!protectData || !protectData.enable) return;
         await api.changeThreadColor(protectData.color, threadID);
       }
 if (logMessageType === "log:thread-image") {
+  console.log("Stored imageSrc:", protectData.imageSrc);
   if (protectData.imageSrc) {
     try {
       const filePath = path.join(__dirname, `protect_${threadID}.jpg`);
