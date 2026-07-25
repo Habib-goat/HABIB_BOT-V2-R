@@ -69,13 +69,18 @@ const threadSchema = new mongoose.Schema(
   nickname: {
     type: mongoose.Schema.Types.Mixed,
     default: {}
+  },
+
+  imageSrc: {
+    type: String,
+    default: ""
   }
 },
-      
-      welcomeMessage: {
-        type: String,
-        default: "Welcome {name} to our group!"
-      },
+
+welcomeMessage: {
+  type: String,
+  default: "Welcome {name} to our group!"
+},
 
       goodbyeMessage: {
         type: String,
