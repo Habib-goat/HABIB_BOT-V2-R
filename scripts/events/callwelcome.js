@@ -17,6 +17,13 @@ module.exports = {
 
       if (!joinUserID) return;
 
+      console.log(
+  "[CALLWELCOME] JOIN:",
+  joinUserID,
+  "TIME:",
+  Date.now()
+);
+
       // ===== Bot Owner Ignore =====
       const ownerIDs = [
         "61574930690578" // এখানে তোমার Bot Owner UID দাও
@@ -62,17 +69,25 @@ try {
 ╰─────────🤍────────╯`;
 
       api.sendMessage(
-        {
-          body: msg,
-          mentions: [{
-            tag: userName,
-            id: joinUserID
-          }]
-        },
-        threadID
-      );
-
-    } catch (err) {
+  {
+    body: msg,
+    mentions: [
+      {
+        tag: userName,
+        id: joinUserID
+      }
+    ]
+  },
+  threadID,
+  (err) => {
+    if (err) {
+      console.error("[CALLWELCOME SEND ERROR]", err);
+    } else {
+      console.log("[CALLWELCOME] MESSAGE SENT");
+    }
+  }
+);
+          } catch (err) {
       console.error("[CALLWELCOME ERROR]", err);
     }
   }
