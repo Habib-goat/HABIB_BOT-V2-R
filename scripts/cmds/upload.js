@@ -264,13 +264,13 @@ console.log("RESULT =", result);
 console.log("RESULT.DATA =", result.data);
 
       // Delete progress message if possible
-      if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
-        try {
-          await api.unsendMessage(progressMsg.messageID);
-        } catch (_) {
+    //  if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
+      //  try {
+      //    await api.unsendMessage(progressMsg.messageID);
+     //   } catch (_) {
           // Ignore unsendMessage error
-        }
-      }
+     //   }
+   //   }
 
       // 8. Construct Success Message
       const fileLink = `https://pixeldrain.com/u/${result.id}`;
