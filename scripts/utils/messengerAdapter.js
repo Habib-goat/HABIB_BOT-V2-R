@@ -51,6 +51,9 @@ async changeThreadEmoji(emoji, threadID) {
 async changeThreadColor(color, threadID) {
   throw new Error("Method 'changeThreadColor' must be implemented.");
 }
+  async changeGroupImage(image, threadID) {
+  throw new Error("Method 'changeGroupImage' must be implemented.");
+}
   async markAsRead(threadID) {
   throw new Error("Method 'markAsRead' must be implemented by the adapter subclass.");
 }
@@ -260,6 +263,18 @@ async changeThreadColor(color, threadID) {
     });
   });
 }      
+  async changeGroupImage(image, threadID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.changeGroupImage !== "function") {
+      return reject(new Error("changeGroupImage not supported"));
+    }
+
+    this.api.changeGroupImage(image, threadID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
 async removeUserFromGroup(userID, threadID) {
   return new Promise((resolve, reject) => {
     if (typeof this.api.removeUserFromGroup !== "function") {
