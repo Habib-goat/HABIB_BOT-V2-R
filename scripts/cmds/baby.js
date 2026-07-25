@@ -97,8 +97,11 @@ const res = await axios.get(
   `${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`
 );
 
-console.log("SIMSIMI RESPONSE:", res.data);
-const replies = [res.data.message || res.data.reply];
+console.log("SIMSIMI RESPONSE:", JSON.stringify(res.data, null, 2));
+
+const replies = Array.isArray(res.data.response)
+  ? res.data.response
+  : [res.data.response];
 
  for (const rep of replies) {
  await new Promise(resolve => {
@@ -143,16 +146,14 @@ console.log(`${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=
  const res = await axios.get(
   `${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`
 );
-  console.log("SIMSIMI RESPONSE:", res.data);
- const reply =
-  res.data?.message ||
-  res.data?.reply ||
-  "😔 কোনো উত্তর পাওয়া যায়নি।";
+  console.log("SIMSIMI RESPONSE:", JSON.stringify(res.data, null, 2));
 
-api.sendMessage(
-  reply,
-  event.threadID,
-  (err, info) => {
+const replies = Array.isArray(res.data.response)
+  ? res.data.response
+  : [res.data.response];
+
+for (const rep of replies) {
+  api.sendMessage(rep, event.threadID, (err, info) => {
     if (!err) {
       replyManager.register(info.messageID, {
         name: module.exports.config.name,
@@ -161,9 +162,8 @@ api.sendMessage(
         type: "simsimi"
       });
     }
-  },
-  event.messageID
-);
+  }, event.messageID);
+}
 
  } catch (err) {
   console.log(err.response?.data || err.message);
@@ -362,7 +362,403 @@ module.exports.onChat = async function ({ api, event, usersData, threadsData, re
  const res = await axios.get(
   `${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`
 );
- const replies = [res.data.message || res.data.reply];
+ const axios = require("axios");
+
+const simsimi = async () => "https://simsimi-api-tjb1.onrender.com";
+
+module.exports.config = {
+ name: "baby",
+ version: "1.0.3",
+ hasPermssion: 0,
+ credits: "Riyad",
+ author: "Riyad",
+ description: "Cute AI Baby Chatbot | Talk, Teach & Chat with Emotion ☢️",
+ commandCategory: "Chat",
+ usages: "[message/query]",
+ cooldowns: 0,
+ prefix: true
+};
+
+module.exports.onStart = async function ({ api, event, args, usersData, threadsData, replyManager }) {
+ try {
+ const uid = event.senderID;
+ const senderName = event.senderName || "User";
+ const rawQuery = args.join(" ");
+ const query = rawQuery.toLowerCase();
+ const simsim = await simsimi();
+
+ if (!query) {
+ const ran = ["Bolo baby", "hum"];
+ const r = ran[Math.floor(Math.random() * ran.length)];
+ return api.sendMessage(r, event.threadID, (err, info) => {
+ if (!err) {
+ replyManager.register(info.messageID, {
+  name: module.exports.config.name,
+  commandName: "baby",
+  authorID: event.senderID,
+  type: "simsimi"
+});
+ }
+ });
+ }
+
+ const command = args[0].toLowerCase();
+
+ if (["remove", "rm"].includes(command)) {
+ const parts = rawQuery.replace(/^(remove|rm)\s*/i, "").split(" - ");
+ if (parts.length < 2) return api.sendMessage("Use: remove [Question] - [Reply]", event.threadID, event.messageID);
+ const [ask, ans] = parts.map(p => p.trim());
+ const res = await axios.get(`${simsim}?remove=${encodeURIComponent(ask)}&senderID=${uid}`);
+ return api.sendMessage(res.data.message, event.threadID, event.messageID);
+ }
+
+ if (command === "list") {
+ const res = await axios.get(`${simsim}?list=all`);
+ if (res.data.code === 200) {
+ return api.sendMessage(
+ `♾ Total Questions Learned: ${res.data.totalQuestions}\n★ Total Replies Stored: ${res.data.totalReplies}\nDeveloper: ${res.data.author}`,
+ event.threadID, event.messageID
+ );
+ } else return api.sendMessage(`Error: ${res.data.message}`, event.threadID, event.messageID);
+ }
+
+ if (command === "edit") {
+ const parts = rawQuery.replace(/^edit\s*/i, "").split(" - ");
+ if (parts.length < 3) return api.sendMessage("Use: edit [Q] - [Old] - [New]", event.threadID, event.messageID);
+ const [ask, oldReply, newReply] = parts.map(p => p.trim());
+ const res = await axios.get(`${simsim}?edit=${encodeURIComponent(ask)}&replace=${encodeURIComponent(newReply)}&senderID=${uid}`);
+ return api.sendMessage(res.data.message, event.threadID, event.messageID);
+ }
+
+ if (command === "teach") {
+ const parts = rawQuery.replace(/^teach\s*/i, "").split(" - ");
+ if (parts.length < 2) return api.sendMessage("Use: teach [Q] - [Reply]", event.threadID, event.messageID);
+ const [ask, ans] = parts.map(p => p.trim());
+ const groupID = event.threadID;
+ let groupName = event.threadName ? event.threadName : "";
+ try {
+ if (!groupName && groupID != uid) {
+ if (threadsData && typeof threadsData.getThread === "function") {
+  const thread = await threadsData.getThread(groupID);
+  groupName = thread?.threadName || "";
+} else {
+  const threadInfo = await api.getThreadInfo(groupID);
+  if (threadInfo?.threadName) groupName = threadInfo.threadName;
+}
+ }
+ } catch {}
+
+ let teachUrl = `${simsim}?teach=${encodeURIComponent(ask)}&reply=${encodeURIComponent(ans)}&senderID=${uid}&threadID=${event.threadID}`;
+ if (groupName) teachUrl += `&groupName=${encodeURIComponent(groupName)}`;
+ const res = await axios.get(teachUrl);
+ return api.sendMessage(res.data.message, event.threadID, event.messageID);
+ }
+
+ console.log("REQUEST URL:");
+console.log(`${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`);
+
+const res = await axios.get(
+  `${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`
+);
+
+console.log("SIMSIMI RESPONSE:", JSON.stringify(res.data, null, 2));
+
+const replies = Array.isArray(res.data.response)
+  ? res.data.response
+  : [res.data.response];
+
+ for (const rep of replies) {
+ await new Promise(resolve => {
+  api.sendMessage(
+    { body: String(rep) },
+    event.threadID,
+    (err, info) => {
+      if (!err) {
+        replyManager.register(info.messageID, {
+          name: module.exports.config.name,
+          commandName: "baby",
+          authorID: event.senderID,
+          type: "simsimi"
+        });
+      }
+      resolve();
+    },
+    event.messageID
+  );
+});
+ }
+
+ } catch (err) {
+ return api.sendMessage(`Error: ${err.message}`, event.threadID, event.messageID);
+ }
+};
+
+module.exports.onReply = async function ({ api, event, handleReply, usersData, threadsData, replyManager }) {
+ console.log("===== ONREPLY =====");
+console.log(handleReply);
+console.log(event.body);
+ if (!handleReply) return;
+if (handleReply.authorID !== event.senderID) return;
+ 
+ try {
+ const senderName = event.senderName || "User";
+ const replyText = event.body ? event.body.toLowerCase() : "";
+ if (!replyText) return;
+ const simsim = await simsimi();
+  console.log("REQUEST URL:");
+console.log(`${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`);
+ const res = await axios.get(
+  `${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`
+);
+  console.log("SIMSIMI RESPONSE:", JSON.stringify(res.data, null, 2));
+
+const replies = Array.isArray(res.data.response)
+  ? res.data.response
+  : [res.data.response];
+
+for (const rep of replies) {
+  api.sendMessage(rep, event.threadID, (err, info) => {
+    if (!err) {
+      replyManager.register(info.messageID, {
+        name: module.exports.config.name,
+        commandName: "baby",
+        authorID: event.senderID,
+        type: "simsimi"
+      });
+    }
+  }, event.messageID);
+}
+
+ } catch (err) {
+  console.log(err.response?.data || err.message);
+  return api.sendMessage(`Error: ${err.message}`, event.threadID, event.messageID);
+}
+};
+
+module.exports.onChat = async function ({ api, event, usersData, threadsData, replyManager }) {
+ try {
+ const raw = event.body ? event.body.toLowerCase().trim() : "";
+ if (!raw) return;
+
+ const senderName = event.senderName || "User";
+ const senderID = event.senderID;
+
+ const simsim = await simsimi();
+
+ const greetings = [
+      "𝗕𝗮𝗯𝘆, 𝗮𝗺𝗶 𝘁𝗼𝗺𝗮𝗿 𝗼𝗽𝗲𝗸𝗵𝘆𝗮𝘆 𝗰𝗵𝗶𝗹𝗮𝗺 💖",
+"𝗞𝗶 𝗸𝗼𝗿𝘁𝗲𝗰𝗵𝗼 𝗯𝗮𝗯𝘆? 😍",
+"𝗠𝗶𝘀𝘀 𝗸𝗼𝗿𝗲𝗰𝗵𝗼 𝗮𝗺𝗮𝗸𝗲? 🥰",
+"𝗬𝗲𝘀 𝗯𝗮𝗯𝘆, 𝗮𝗺𝗶 𝗹𝗶𝘀𝘁𝗲𝗻𝗶𝗻𝗴 👂",
+"𝗕𝗮𝗯𝘆𝘆𝘆~ 𝘁𝘂𝗺𝗶 𝗮𝗺𝗮𝗸𝗲 𝗰𝗮𝗹𝗹 𝗸𝗼𝗿𝗲𝗰𝗵𝗼? 💌",
+"𝗢𝘄𝘄 𝗯𝗮𝗯𝘆, 𝘁𝘂𝗺𝗶 𝗼𝗻𝗲𝗸 𝗰𝘂𝘁𝗲 💕",
+"𝗛𝗲𝘆 𝗹𝗼𝘃𝗲𝗿𝗯𝗼𝘆/𝗹𝗼𝘃𝗲𝗿𝗴𝗶𝗿𝗹 💞",
+"𝗞𝗶 𝗱𝗼𝗸𝘁𝗲 𝗯𝗮𝗯𝘆~ 𝗮𝗺𝗶 𝗮𝗰𝗵𝗶 💗",
+"𝗕𝗮𝗯𝘆, 𝘁𝘂𝗺𝗶 𝗮𝗺𝗮𝗿 𝘀𝗽𝗲𝗰𝗶𝗮𝗹 ❤️",
+"𝗕𝗮𝗯𝘆, 𝘁𝘂𝗺𝗶 𝗰𝗮𝗹𝗹 𝗸𝗼𝗿𝗹𝗲 𝗮𝗺𝗶 𝗿𝘂𝗻 𝗸𝗼𝗿𝗲 𝗮𝘀𝗵𝗶 😚",
+"𝗔𝗺𝗮𝗿 𝘀𝗵𝗼𝗻𝗮 𝗯𝗮𝗯𝘆 𝗸𝗼𝘁𝗵𝗮𝘆 𝗰𝗵𝗶𝗹𝗼 💖",
+"𝗕𝗮𝗯𝘆, 𝘁𝗼𝗺𝗮𝗿 𝗺𝗲𝘀𝘀𝗮𝗴𝗲 𝗱𝗲𝗸𝗵𝗲 𝗵𝗲𝗮𝗿𝘁 𝗵𝗮𝗽𝗽𝘆 💕",
+"𝗧𝘂𝗺𝗶 𝗰𝗮𝗹𝗹 𝗸𝗼𝗿𝗹𝗲 𝗮𝗺𝗶 𝘀𝗺𝗶𝗹𝗲 𝗸𝗼𝗿𝗶 😍",
+"𝗕𝗮𝗯𝘆, 𝗮𝗺𝗶 𝗮𝗰𝗵𝗶 𝘁𝗼𝗺𝗮𝗿 𝗷𝗼𝗻𝗻𝗼 𝗵𝗺𝗺 💗",
+"𝗢𝘆𝗲 𝗯𝗮𝗯𝘆, 𝘁𝘂𝗺𝗶 𝗮𝗺𝗮𝗿 𝘀𝘄𝗲𝗲𝘁 𝗽𝗿𝗼𝗯𝗹𝗲𝗺 😜",
+"𝗕𝗮𝗯𝘆, 𝗮𝗺𝗶 𝗮𝗰𝗵𝗶 𝗷𝘂𝘀𝘁 𝗳𝗼𝗿 𝘆𝗼𝘂 😚",
+"𝗧𝘂𝗺𝗶 𝗸𝗮𝗹 𝗸𝗼𝘁𝗵𝗮𝘆 𝗰𝗵𝗶𝗹𝗼 𝗯𝗮𝗯𝘆? 🥹",
+"𝗕𝗮𝗯𝘆, 𝘁𝗼𝗺𝗮𝗿 𝗺𝗲𝘀𝘀𝗮𝗴𝗲 𝗮𝗺𝗮𝘆 𝗳𝗹𝘆 𝗸𝗼𝗿𝗮𝘆 🕊️",
+"𝗔𝗹𝘄𝗮𝘆𝘀 𝘆𝗼𝘂𝗿𝘀 𝗯𝗮𝗯𝘆 💖",
+"𝗕𝗮𝗯𝘆, 𝗮𝗺𝗮𝗿 𝗵𝗲𝗮𝗿𝘁 𝘁𝘂𝗺𝗮𝗿 𝘄𝗶𝗳𝗶 𝘁𝗲 𝗰𝗼𝗻𝗻𝗲𝗰𝘁𝗲𝗱 📶❤️",
+"𝗕𝗮𝗯𝘆, 𝗮𝗺𝗶 𝘀𝘂𝗱𝘂 𝘁𝘂𝗺𝗮𝗿 𝗷𝗼𝗻𝗻𝗼 𝗼𝗻𝗹𝗶𝗻𝗲 🌐💗",
+  "এই যে আমার হার্ট চোর 😘",
+    "বাবু, তোমার জন্য আমি তো সব ছেড়ে আসতে পারি 💖",
+    "কি করছো, আমার ভবিষ্যৎ স্বামী ? 😍",
+    "তোমার কথা ভাবতে ভাবতে চা ঠান্ডা হয়ে গেল ☕❤️",
+    "তুমি কি GPS? কারণ তুমি ছাড়া আমি হারিয়ে যাই 🗺️💗",
+    "বাবু, তোমার হাসি না দেখলে দিনটাই অফ 💕",
+    "তুমি ডাকলে আমার চার্জ 100% হয়ে যায় 🔋😘",
+    "তুমি ছাড়া আমি WiFi ছাড়া ফোনের মতো 📶💔",
+    "আমার হৃৎপিণ্ডের অ্যাডমিন তুমি ❤️‍🔥",
+    "তুমি কি জাদুকর? দেখলেই মন ভাল হয়ে যায় ✨",
+    "বাবু, তুমি আমার গুগল... কারণ আমার সব উত্তর তুমি 💌",
+    "তুমি না থাকলে ফেসবুকও বোরিং লাগে 📱💗",
+    "আমার হৃদয়ের সিমে শুধু তোমার নাম সেভ আছে 📞❤️",
+    "তুমি আসলেই আবহাওয়া সুন্দর হয়ে যায় 🌤️😘",
+    "আমার হোয়াটসঅ্যাপের টপ চ্যাট শুধু তুমি 💚",
+    "তুমি না থাকলে মনে হয় চার্জার খুলে গেছে 🔌💔",
+    "আমার হার্টে তোমার নটিফিকেশন সবসময় অন 📲💖",
+    "তুমি কি কফি? তোমাকে ছাড়া ঘুম ভাঙে না ☕😍",
+    "তুমি আমার লাইফের VIP গ্রুপে অ্যাড আছো 👑",
+    "তুমি পাশে থাকলেই মনে হয় নেট ফাস্ট হয়ে গেছে ⚡💗",
+    "তুমি কি মেঘ? আমার মন বৃষ্টিতে ভিজিয়ে দাও 🌧️❤️",
+    "তুমি ছাড়া আমি অফলাইন ইউজারের মতো 😅",
+    "বাবু, তুমি আমার হাসির রিমিক্স ভার্সন 🎶💓",
+ "বেশি bot Bot করলে leave নিবো কিন্তু😒😒",
+ "শুনবো না😼 তুমি আমার বস রিয়াদ কে প্রেম করাই দাও নাই🥺পচা তুমি🥺",
+ "আমি আবাল দের সাথে কথা বলি না,ok😒",
+ "এতো ডেকো না,প্রেম এ পরে যাবো তো🙈",
+ "Bolo Babu, তুমি কি আমার বস রিয়াদ কে ভালোবাসো? 🙈💋",
+ "বার বার ডাকলে মাথা গরম হয়ে যায় কিন্তু😑",
+ "হ্যা বলো😒, তোমার জন্য কি করতে পারি😐😑?",
+ "এতো ডাকছিস কেন?গালি শুনবি নাকি? 🤬",
+ "I love you janu🥰",
+ "আরে Bolo আমার জান ,কেমন আছো?😚",
+ "আজ বট বলে অসম্মান করছি,😰😿",
+ "Hop beda😾,Boss বল boss😼",
+ "চুপ থাক ,নাই তো তোর দাত ভেগে দিবো কিন্তু",
+ "আমাকে না ডেকে মেয়ে হলে বস রিয়াদের ইনবক্সে চলে যা 🌚😂 𝐅𝐚𝐜𝐞𝐛𝐨𝐨𝐤 𝐋𝐢𝐧𝐤 : https://www.facebook.com/61574930690578",
+ "আমাকে বট না বলে , বস রিয়াদ কে জানু বল জানু 😘",
+ "বার বার Disturb করছিস কোনো😾,আমার জানুর সাথে ব্যাস্ত আছি😋",
+ "আরে বলদ এতো ডাকিস কেন🤬",
+ "আমাকে ডাকলে ,আমি কিন্তু কিস করে দিবো😘",
+ "আমারে এতো ডাকিস না আমি মজা করার mood এ নাই এখন😒",
+ "হ্যাঁ জানু , এইদিক এ আসো কিস দেই🤭 😘",
+ "দূরে যা, তোর কোনো কাজ নাই, শুধু bot bot করিস 😉😋🤣",
+ "তোর কথা তোর বাড়ি কেউ শুনে না ,তো আমি কোনো শুনবো ?🤔😂",
+ "আমাকে ডেকো না,আমি বস রিয়াদের সাথে ব্যাস্ত আছি",
+ "কি হলো , মিস্টেক করচ্ছিস নাকি🤣",
+ "বলো কি বলবা, সবার সামনে বলবা নাকি?🤭🤏",
+ "জান মেয়ে হলে বস রিয়াদের ইনবক্সে চলে যাও 😍🫣💕 𝐅𝐚𝐜𝐞𝐛𝐨𝐨𝐤 𝐋𝐢𝐧𝐤 : https://www.facebook.com/61574930690578",
+ "কালকে দেখা করিস তো একটু 😈",
+ "হা বলো, শুনছি আমি 😏",
+ "আর কত বার ডাকবি ,শুনছি তো",
+ "হুম বলো কি বলবে😒",
+ "বলো কি করতে পারি তোমার জন্য",
+ "আমি তো অন্ধ কিছু দেখি না🐸 😎",
+ "আরে বোকা বট না জানু বল জানু😌",
+ "বলো জানু 🌚",
+ "তোর কি চোখে পড়ে না আমি ব্যাস্ত আছি😒",
+ "হুম জান তোমার ওই খানে উম্মহ😑😘",
+ "আহ শুনা আমার তোমার অলিতে গলিতে উম্মাহ😇😘",
+ "jang hanga korba😒😬",
+ "হুম জান তোমার অইখানে উম্মমাহ😷😘",
+ "আসসালামু আলাইকুম বলেন আপনার জন্য কি করতে পারি..!🥰",
+ "ভালোবাসার নামক আবলামি করতে চাইলে বস রিয়াদের ইনবক্সে গুতা দিন ~🙊😘🤣 𝐅𝐚𝐜𝐞𝐛𝐨𝐨𝐤 𝐋𝐢𝐧𝐤 : https://www.facebook.com/61574930690578",
+ "আমাকে এতো না ডেকে বস রিয়াদ এর কে একটা গফ দে 🙄",
+ "আমাকে এতো না ডেকছ কেন ভলো টালো বাসো নাকি🤭🙈",
+ "🌻🌺💚-আসসালামু আলাইকুম ওয়া রাহমাতুল্লাহ-💚🌺🌻",
+ "আমি এখন বস রিয়াদ এর সাথে বিজি আছি আমাকে ডাকবেন না-😕😏 ধন্যবাদ-🤝🌻",
+ "আমাকে না ডেকে আমার বস রিয়াদ কে একটা জি এফ দাও-😽🫶🌺",
+ "ঝাং থুমালে আইলাপিউ পেপি-💝😽",
+ "উফফ বুঝলাম না এতো ডাকছেন কেনো-😤😡😈",
+ "জান তোমার বান্ধবী রে আমার বস রিয়াদের হাতে তুলে দিবা-🙊🙆♂",
+ "আজকে আমার মন ভালো নেই তাই আমারে ডাকবেন না-😪🤧",
+ "ঝাং 🫵থুমালে য়ামি রাইতে পালুপাসি উম্মম্মাহ-🌺🤤💦",
+ "চুনা ও চুনা আমার বস রিয়াদ এর হবু বউ রে কেও দেকছো খুজে পাচ্ছি না😪🤧😭",
+ "স্বপ্ন তোমারে নিয়ে দেখতে চাই তুমি যদি আমার হয়ে থেকে যাও-💝🌺🌻",
+ "জান হাঙ্গা করবা-🙊😝🌻",
+ "জান মেয়ে হলে চিপায় আসো বস রিয়াদের থেকে অনেক ভালোবাসা শিখছি তোমার জন্য-🙊🙈😽",
+ "ইসস এতো ডাকো কেনো লজ্জা লাগে তো-🙈🖤🌼",
+ "আমার বস রিয়াদের পক্ষ থেকে তোমারে এতো এতো ভালোবাসা-🥰😽🫶 আমার বস রিয়াদ ইসলামে'র জন্য দোয়া করবেন-💝💚🌺🌻",
+ "- ভালোবাসা নামক আবলামি করতে মন চাইলে আমার বস রিয়াদ এর ইনবক্স চলে যাও-🙊🥱👅 🌻𝐅𝐀𝐂𝐄𝐁𝐎𝐎𝐊 𝐈𝐃 𝐋𝐈𝐍𝐊 🌻:- https://www.facebook.com/61574930690578",
+ "আমার জান তুমি শুধু আমার আমি তোমারে ৩৬৫ দিন ভালোবাসি-💝🌺😽",
+ "কিরে প্রেম করবি তাহলে বস রিয়াদের ইনবক্সে গুতা দে 😘🤌 𝐅𝐚𝐜𝐞𝐛𝐨𝐨𝐤 𝐋𝐢𝐧𝐤 : https://www.facebook.com/61574930690578",
+ "জান আমার বস রিয়াদ কে বিয়ে করবা-🙊😘🥳",
+ "-আন্টি-🙆-আপনার মেয়ে-👰♀️-রাতে আমারে ভিদু কল দিতে বলে🫣-🥵🤤💦",
+ "oii-🥺🥹-এক🥄 চামচ ভালোবাসা দিবা-🤏🏻🙂",
+ "-আপনার সুন্দরী বান্ধুবীকে ফিতরা হিসেবে আমার বস রিয়াদ কে দান করেন-🥱🐰🍒",
+ "-ও মিম ও মিম-😇-তুমি কেন চুরি করলা সাদিয়ার ফর্সা হওয়ার ক্রীম-🌚🤧",
+ "-অনুমতি দিলাম-𝙋𝙧𝙤𝙥𝙤𝔰𝙚 কর বস রিয়াদ কে-🐸😾🔪",
+ "-𝙂𝙖𝙮𝙚𝙨-🤗-যৌবনের কসম দিয়ে আমারে 𝐁𝐥𝐚𝐜𝐤𝐦𝐚𝐢𝐥 করা হচ্ছে-🥲🤦♂️🤧",
+ "-𝗢𝗶𝗶 আন্টি-🙆♂️-তোমার মেয়ে চোখ মারে-🥺🥴🐸",
+ "তাকাই আছো কেন চুমু দিবা-🙄🐸😘",
+ "আজকে প্রপোজ করে দেখো রাজি হইয়া যামু-😌🤗😇",
+ "-আমার গল্পে তোমার নানি সেরা-🙊🙆♂️🤗",
+ "কি বেপার আপনি শ্বশুর বাড়িতে যাচ্ছেন না কেন-🤔🥱🌻",
+ "দিনশেষে পরের 𝐁𝐎𝐖 সুন্দর-☹️🤧",
+ "-তাবিজ কইরা হইলেও ফ্রেম এক্কান করমুই তাতে যা হই হোক-🤧🥱🌻",
+ "-ছোটবেলা ভাবতাম বিয়ে করলে অটোমেটিক বাচ্চা হয়-🥱-ওমা এখন দেখি কাহিনী অন্যরকম-😦🙂🌻",
+ "প্রেম করতে চাইলে বস রিয়াদের ইনবক্সে চলে যা 😏🐸 𝐅𝐚𝐜𝐞𝐛𝐨𝐨𝐤 𝐋𝐢𝐧𝐤 : https://www.facebook.com/61574930690578",
+ "-আজ একটা বিন নেই বলে ফেসবুকের নাগিন-🤧-গুলোরে আমার বস রিয়াদ ধরতে পারছে না-🐸🥲",
+ "-চুমু থাকতে তোরা বিড়ি খাস কেন বুঝা আমারে-😑😒🐸⚒️",
+ "—যে ছেড়ে গেছে-😔-তাকে ভুলে যাও-🙂-আমার বস রিয়াদ এর সাথে প্রেম করে তাকে দেখিয়ে দাও-🙈🐸🤗",
+ "—হাজারো লুচ্চা লুচ্চির ভিরে-🙊🥵আমার বস রিয়াদ এক নিস্পাপ ভালো মানুষ-🥱🤗🙆♂️",
+ "-রূপের অহংকার করো না-🙂❤️চকচকে সূর্যটাও দিনশেষে অন্ধকারে পরিণত হয়-🤗💜",
+ "সুন্দর মাইয়া মানেই-🥱আমার বস রিয়াদের বউ-😽🫶আর বাকি গুলো আমার বেয়াইন-🙈🐸🤗",
+ "এত অহংকার করে লাভ নেই-🌸মৃত্যুটা নিশ্চিত শুধু সময়টা অ'নিশ্চিত-🖤🙂",
+ "-দিন দিন কিছু মানুষের কাছে অপ্রিয় হয়ে যাইতেছি-🙂😿🌸",
+ "ভালোবাসার নামক আবলামি করতে চাইলে বস রিয়াদের ইনবক্সে গুতা দিন🤣😼",
+ "মেয়ে হলে বস রিয়াদের ইনবক্সে চলে যা 🤭🤣😼 𝐅𝐚𝐜𝐞𝐛𝐨𝐨𝐤 𝐋𝐢𝐧𝐤 : https://www.facebook.com/61574930690578",
+ "হুদাই আমারে শয়তানে লারে-😝😑☹️",
+ "-𝗜 𝗟𝗢𝐕𝐄 𝗬𝗢𝐔-😽-আহারে ভাবছো তোমারে প্রোপজ করছি-🥴-থাপ্পর দিয়া কিডনী লক করে দিব-😒-ভুল পড়া বের করে দিবো-🤭🐸",
+ "-আমি একটা দুধের শিশু-😇-🫵𝗬𝗢𝗨🐸💦",
+ "-কতদিন হয়ে গেলো বিছনায় মুতি না-😿-মিস ইউ নেংটা কাল-🥺🤧",
+ "-বালিকা━👸-𝐃𝐨 𝐲𝐨𝐮-🫵-বিয়া-𝐦𝐞-😽-আমি তোমাকে-😻-আম্মু হইতে সাহায্য করব-🙈🥱",
+ "-এই আন্টির মেয়ে-🫢🙈-𝐔𝐦𝐦𝐦𝐦𝐦𝐦𝐦𝐦𝐦𝐦𝐦𝐡-😽🫶-আসলেই তো স্বাদ-🥵💦-এতো স্বাদ কেন-🤔-সেই স্বাদ-😋",
+ "-ইস কেউ যদি বলতো-🙂-আমার শুধু তোমাকেই লাগবে-💜🌸",
+ "-ওই বেডি তোমার বাসায় না আমার বস রিয়াদ মেয়ে দেখতে গেছিলো-🙃-নাস্তা আনারস আর দুধ দিছো-🙄🤦‍♂️-বইন কইলেই তো হয় বয়ফ্রেন্ড আছে-🥺🤦‍♂️-আমার বস রিয়াদ কে জানে মারার কি দরকার-🙄🤧",
+ "-একদিন সে ঠিকই ফিরে তাকাবে-😇-আর মুচকি হেসে বলবে ওর মতো আর কেউ ভালবাসেনি-🙂😅",
+ "-হুদাই গ্রুপে আছি-🥺🐸-কেও ইনবক্সে নক দিয়ে বলে না জান তোমারে আমি অনেক ভালোবাসি-🥺🤧",
+ "কি'রে গ্রুপে দেখি একটাও বেডি নাই-🤦🥱💦",
+ "-দেশের সব কিছুই চুরি হচ্ছে-🙄-শুধু আমার বস রিয়াদ এর মনটা ছাড়া-🥴😑😏",
+ "-🫵তোমারে প্রচুর ভাল্লাগে-😽-সময় মতো প্রপোজ করমু বুঝছো-🔨😼-ছিট খালি রাইখো- 🥱🐸🥵",
+ "-আজ থেকে আর কাউকে পাত্তা দিমু না -!😏-কারণ আমি ফর্সা হওয়ার ক্রিম কিনছি -!🙂🐸"
+ ];
+
+ if (
+ raw === "baby" || raw === "bot" || raw === "bby" ||
+ raw === "jan" || raw === "xan" || raw === "জান" ||
+ raw === "বট" || raw === "বেবি"
+ ) {
+ const randomReply = greetings[Math.floor(Math.random() * greetings.length)];
+ return api.sendMessage(
+  { body: String(randomReply) },
+  event.threadID,
+  (err, info) => {
+    if (!err) {
+      replyManager.register(info.messageID, {
+        name: module.exports.config.name,
+        commandName: "baby",
+        authorID: event.senderID,
+        type: "simsimi"
+      });
+    }
+  },
+  event.messageID
+);
+ }
+
+ if (
+ raw.startsWith("baby ") || raw.startsWith("bot ") || raw.startsWith("bby ") ||
+ raw.startsWith("jan ") || raw.startsWith("xan ") ||
+ raw.startsWith("জান ") || raw.startsWith("বট ") || raw.startsWith("বেবি ")
+ ) {
+ const query = raw.replace(/^baby\s+|^bot\s+|^bby\s+|^jan\s+|^xan\s+|^জান\s+|^বট\s+|^বেবি\s+/i, "").trim();
+ if (!query) return;
+
+ const res = await axios.get(
+  `${simsim}/simsimi?text=${encodeURIComponent(query)}&senderName=${encodeURIComponent(senderName)}`
+);
+ console.log("SIMSIMI RESPONSE:", JSON.stringify(res.data, null, 2));
+
+const replies = Array.isArray(res.data.response)
+  ? res.data.response
+  : [res.data.response];
+
+ for (const rep of replies) {
+ await new Promise(resolve => {
+  api.sendMessage(
+    { body: String(rep) },
+    event.threadID,
+    (err, info) => {
+      if (!err) {
+        replyManager.register(info.messageID, {
+          name: module.exports.config.name,
+          commandName: "baby",
+          authorID: event.senderID,
+          type: "simsimi"
+        });
+      }
+      resolve();
+    },
+    event.messageID
+  );
+});
+ }
+ }
+
+ } catch (err) {
+  console.error(err);
+}
+};
+
 
  for (const rep of replies) {
  await new Promise(resolve => {
