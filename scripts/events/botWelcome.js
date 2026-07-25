@@ -31,15 +31,22 @@ module.exports = {
         const threadInfo = threadsData.getThread(threadID);
         const groupName = (threadInfo && threadInfo.name) ? threadInfo.name : "this group";
 
-        const welcomeMessage = 
-          `👋 **Hello Everyone!**\n\n` +
-          `Thank you so much for adding me to **${groupName}**! ❤️\n\n` +
-          `🤖 **Bot Name:** ${botName}\n` +
-          `⚡ **Prefix:** \`${prefix}\`\n\n` +
-          `📖 **Quick Start Guide:**\n` +
-          `To see a list of my available commands, type: \`${prefix}help\`\n` +
-          `For info on any command, type: \`${prefix}help [command]\`\n\n` +
-          `✨ *I am fully ready to assist, entertain, and manage this chat. Let's have some fun!*`;
+        const welcomeMessage =
+`╔═❰ ⚡ SYSTEM ONLINE ⚡ ❱═╗
+
+◈ Connected Successfully
+💙 Thanks for adding me!
+
+⌬ Added By ➤ ${adderName}
+⌬ Group    ➤ ${groupName}
+⌬ Bot      ➤ ${botName}
+⌬ Prefix   ➤ ${prefix}
+
+❯ ${prefix}help
+❯ ${prefix}help [command]
+
+✦ AI Assistant Activated
+╚═══════════════════════╝`;
 
         try {
           await api.sendMessage(welcomeMessage, threadID);
