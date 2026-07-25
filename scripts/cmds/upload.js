@@ -260,6 +260,24 @@ const result = await uploadToPixeldrain(
 
 console.log("[5] Upload finished:", result);
 
+console.log("RESULT =", result);
+console.log("RESULT.DATA =", result.data);
+
+const fileLink = `https://pixeldrain.com/u/${result.id}`;
+
+console.log("FILE LINK =", fileLink);
+
+api.sendMessage(
+  `✅ Upload Successful\n\n${fileLink}`,
+  threadID,
+  (err, info) => {
+    console.log("SEND ERROR =", err);
+    console.log("SEND INFO =", info);
+  },
+  messageID
+);
+
+return;
       // Delete progress message if possible
       if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
         try {
