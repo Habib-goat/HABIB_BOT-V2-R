@@ -85,7 +85,26 @@ async function updateThread(threadId, data) {
 
   const thread = await getThread(threadId);
 
-  Object.assign(thread, data);
+  if (data.name !== undefined) {
+    thread.name = data.name;
+  }
+
+  if (data.prefix !== undefined) {
+    thread.prefix = data.prefix;
+  }
+
+  if (data.members !== undefined) {
+    thread.members = data.members;
+  }
+
+  if (data.settings) {
+    thread.settings = {
+      ...(thread.settings || {}),
+      ...data.settings
+    };
+
+    thread.markModified("settings");
+  }
 
   await thread.save();
 
