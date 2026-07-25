@@ -226,7 +226,6 @@ if (!attachment.url) {
       const fileSizeFormatted = formatBytes(stats.size);
 
       // 6. Progress Notification - Uploading
-      // 6. Progress Notification - Uploading
 if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
   try {
     await api.unsendMessage(progressMsg.messageID);
@@ -278,6 +277,10 @@ ${fileLink}
       return api.sendMessage(successText, threadID, messageID);
 
     } catch (error) {
+
+      console.log(error.response?.status);
+console.log(error.response?.data);
+      
       // Clean up progress message if an error occurred
       if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
         try {
