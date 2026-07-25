@@ -278,8 +278,9 @@ ${fileLink}
 
     } catch (error) {
 
-      console.log(error.response?.status);
-console.log(error.response?.data);
+      console.log("Status:", err.response?.status);
+  console.log("Response:", err.response?.data);
+  console.log("Message:", err.message);
       
       // Clean up progress message if an error occurred
       if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
