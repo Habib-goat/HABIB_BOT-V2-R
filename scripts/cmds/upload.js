@@ -146,11 +146,13 @@ module.exports = {
     // 1. Detect Attachment from Reply or Current Event
     let attachment = null;
 
-if (event.messageReply?.attachments?.length) {
-  attachment = event.messageReply.attachments[0];
-} else if (event.attachments?.length) {
-  attachment = event.attachments[0];
-}
+console.log("messageReply =", JSON.stringify(event.messageReply, null, 2));
+
+let attachment =
+  event.messageReply?.attachments?.[0] ||
+  event.messageReply?.message?.attachments?.[0] ||
+  event.attachments?.[0] ||
+  null;
 
 if (!attachment) {
   return api.sendMessage(
