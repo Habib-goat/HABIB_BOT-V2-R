@@ -298,29 +298,28 @@ ${fileLink}
   console.log("Status:", error.response?.status);
   console.log("Response:", error.response?.data);
   console.log("Message:", error.message);
-}
-      
-      // Clean up progress message if an error occurred
-      if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
-        try {
-          await api.unsendMessage(progressMsg.messageID);
-        } catch (_) {}
-      }
 
-      const serverResponse = error.response && error.response.data
-        ? JSON.stringify(error.response.data, null, 2)
-        : (error.message || "Unknown error occurred.");
+  // Clean up progress message
+  if (progressMsg && progressMsg.messageID && typeof api.unsendMessage === "function") {
+    try {
+      await api.unsendMessage(progressMsg.messageID);
+    } catch (_) {}
+  }
 
-      const failureText = 
-`❌ Upload Failed
+  const serverResponse = error.response?.data
+    ? JSON.stringify(error.response.data, null, 2)
+    : (error.message || "Unknown error occurred.");
+
+  const failureText = `❌ Upload Failed
 
 Reason:
-${error.message || "Upload process encountered an error."}
+${error.message}
 
 Server Response:
 ${serverResponse}`;
 
-      return api.sendMessage(failureText, threadID, messageID);
+  return api.sendMessage(failureText, threadID, messageID);
+}
 
     } finally {
       // 9. Clean up temporary cache file
