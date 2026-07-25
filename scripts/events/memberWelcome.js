@@ -96,10 +96,16 @@ module.exports = {
 ✨▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬✨`;
 
       try {
-        await api.sendMessage(welcomeMessage, threadID);
-      } catch (err) {
-        console.error("[WELCOME ERROR]", err);
-      }
+  console.log("[WELCOME] Sending...");
+
+  await Promise.resolve(
+    api.sendMessage(welcomeMessage, threadID)
+  );
+
+  console.log("[WELCOME] Sent successfully");
+} catch (err) {
+  console.error("[WELCOME ERROR]", err?.stack || err);
+}
     }
   }
 };
