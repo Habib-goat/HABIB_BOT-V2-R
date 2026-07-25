@@ -142,6 +142,10 @@ module.exports = {
   onStart: async function({ api, event, args, usersData, threadsData }) {
     const threadID = event.threadID;
     const messageID = event.messageID;
+    
+    console.log("=== UPLOAD START ===");
+console.log(JSON.stringify(event, null, 2));
+console.log("====================");
 
     // 1. Detect Attachment from Reply or Current Event
     let attachment = null;
