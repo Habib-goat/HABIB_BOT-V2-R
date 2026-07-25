@@ -117,33 +117,27 @@ async function ensureThreadData(api, threadID) {
 
 // System events dispatcher
 async function dispatchSystemEvent(api, event) {
-  const { logMessageType, threadID } = event;
-  if (!logMessageType) return;
+  const { logMessageType } = event;
 
-  logger.info(`[System Event] Received system event: '${logMessageType}' in thread ${threadID}`);
+  logger.info(`[DEBUG] System Event: ${logMessageType}`);
 
-  // Run system event modules
   for (const [name, eventModule] of eventLoader.events.entries()) {
-    if (eventModule.config && Array.isArray(eventModule.config.eventType)) {
-      if (eventModule.config.eventType.includes(logMessageType)) {
-        if (typeof eventModule.onStart === "function") {
-          try {
-            logger.info(
-              `[Event Handler] Running event handler '${name}' for system event type '${logMessageType}'`
-            );
+    if (!eventModule.config?.eventType?.includes(logMessageType))
+      continue;
 
-            await eventModule.onStart({
-              api,
-              event,
-              usersData: database,
-              threadsData: database
-            });
+    logger.info(`[DEBUG] Running: ${name}`);
 
-          } catch (err) {
-            logger.error(`Error executing event handler '${name}':`, err);
-          }
-        }
-      }
+    try {
+      await eventModule.onStart({
+        api,
+        event,
+        usersData: database,
+        threadsData: database
+      });
+
+      logger.info(`[DEBUG] Finished: ${name}`);
+    } catch (err) {
+      logger.error(`[DEBUG] ${name} ERROR:`, err);
     }
   }
 
