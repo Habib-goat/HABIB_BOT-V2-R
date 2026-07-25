@@ -40,6 +40,11 @@ const threadSchema = new mongoose.Schema(
         default: true
       },
 
+      noPrefix: {
+  type: Boolean,
+  default: false
+},
+
       welcomeMessage: {
         type: String,
         default: "Welcome {name} to our group!"
