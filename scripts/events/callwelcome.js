@@ -26,39 +26,40 @@ module.exports = {
 
       // ===== User Name =====
       let userName = "Unknown User";
+let groupName = "Unknown Group";
 
 try {
   const info = await api.getUserInfo(joinUserID);
-  userName = info?.[joinUserID]?.name || "Unknown User";
-} catch (e) {
-  console.error("getUserInfo:", e);
+  if (info?.[joinUserID]?.name)
+    userName = info[joinUserID].name;
+} catch {}
+
+try {
+  const thread = await api.getThreadInfo(threadID);
+  if (thread?.threadName)
+    groupName = thread.threadName;
+} catch {
+  try {
+    const thread = await threadsData.getThread(threadID);
+    if (thread)
+      groupName = thread.threadName || thread.name || "Unknown Group";
+  } catch {}
 }
 
-      // ===== Group Name =====
-      let groupName = "Unknown Group";
+      const msg = `╭───❖ 💞 𝑪𝒂𝒍𝒍 𝑾𝒆𝒍𝒄𝒐𝒎𝒆 ❖───╮
 
-      try {
-        const thread = await api.getThreadInfo(threadID);
-const groupName = thread.threadName || "Unknown Group";
-        
-        if (thread)
-          groupName =
-            thread.threadName ||
-            thread.name ||
-            groupName;
-      } catch {}
+🌸 𝐀𝐬𝐬𝐚𝐥𝐚𝐦𝐮 𝐀𝐥𝐚𝐢𝐤𝐮𝐦
+✨ ${userName}
 
-      const msg =
-`📞 𝗖𝗔𝗟𝗟 𝗪𝗘𝗟𝗖𝗢𝗠𝗘
+💖 আমাদের ছোট্ট পরিবারে কলে
+যুক্ত হওয়ার জন্য আন্তরিক ধন্যবাদ।❤️
 
-👋 Welcome ${userName}
+🏡 ${groupName}
 
-💖 Thanks for joining the group call.
+🌷 আশা করি সবার সাথে 
+😍সুন্দর কিছু মুহূর্ত কাটবে।🌺
 
-👥 Group
-${groupName}
-
-✨ Enjoy your conversation!`;
+╰─────────🤍────────╯`;
 
       api.sendMessage(
         {
