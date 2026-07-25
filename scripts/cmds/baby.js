@@ -134,6 +134,7 @@ if (handleReply.authorID !== event.senderID) return;
  const res = await axios.get(
   `${simsim}/simsimi?text=${encodeURIComponent(replyText)}&senderName=${encodeURIComponent(senderName)}`
 );
+  console.log("SIMSIMI RESPONSE:", res.data);
  const replies = [res.data.message || res.data.reply];
 
  for (const rep of replies) {
@@ -158,8 +159,9 @@ if (handleReply.authorID !== event.senderID) return;
  }
 
  } catch (err) {
- return api.sendMessage(`Error: ${err.message}`, event.threadID, event.messageID);
- }
+  console.log(err.response?.data || err.message);
+  return api.sendMessage(`Error: ${err.message}`, event.threadID, event.messageID);
+}
 };
 
 module.exports.onChat = async function ({ api, event, usersData, threadsData, replyManager }) {
