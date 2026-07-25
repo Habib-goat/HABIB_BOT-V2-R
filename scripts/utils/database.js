@@ -70,6 +70,7 @@ async function getThread(threadId) {
         antiLink: false,
         antiBadword: false,
         autoReply: true,
+        noPrefix: false,
         welcomeMessage: "Welcome {name} to our group!",
         goodbyeMessage: "{name} has left the group."
       },
