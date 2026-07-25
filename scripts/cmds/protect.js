@@ -1,3 +1,7 @@
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+
 module.exports = {
   config: {
     name: "protect",
@@ -38,7 +42,7 @@ console.log("THREAD INFO:");
   name: info.threadName || "",
   emoji: info.emoji || "",
   color: info.color || "",
-  imageID: info.imageSrc || info.imageID || null,
+  imageSrc: info.imageSrc || "",
   nickname: {}
 };
 
@@ -109,11 +113,33 @@ if (!protectData || !protectData.enable) return;
         await api.changeThreadColor(protectData.color, threadID);
       }
 if (logMessageType === "log:thread-image") {
-  if (protectData.imageID) {
-    await api.changeGroupImage(
-      protectData.imageID,
-      threadID
-    );
+  if (protectData.imageSrc) {
+    try {
+      const filePath = path.join(__dirname, `protect_${threadID}.jpg`);
+
+      const response = await axios({
+        url: protectData.imageSrc,
+        method: "GET",
+        responseType: "stream"
+      });
+
+      const writer = fs.createWriteStream(filePath);
+
+      await new Promise((resolve, reject) => {
+        response.data.pipe(writer);
+        writer.on("finish", resolve);
+        writer.on("error", reject);
+      });
+
+      await api.changeGroupImage(
+        fs.createReadStream(filePath),
+        threadID
+      );
+
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      console.error("Protect Image Error:", err);
+    }
   }
 }
       if (logMessageType === "log:user-nickname") {
