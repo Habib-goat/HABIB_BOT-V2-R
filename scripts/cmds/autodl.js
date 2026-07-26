@@ -345,17 +345,14 @@ filePath = path.join(cacheDir, `autodl_${Date.now()}.${fileInfo.ext}`);
       const speed = ((Date.now() - startTime) / 1000).toFixed(2);
 
       // Build Beautiful Premium Messenger Message Layout
-      const formattedMsg = `╭━━━〔 ✅ RIYAD BOT AUTO DOWNLOAD 〕━━━╮
-┃ 📌 Title      : ${info.title}
-┃ 🌍 Platform   : ${platform}
-┃ 👤 Author     : ${info.author}
-┃ 📂 File Type  : ${fileInfo.typeLabel}
-┃ 📦 Size       : ${formatSize(sizeInBytes)}
-┃ ⚡ Speed      : ${speed}s
-╰━━━━━━━━━━━━━━━━━━━━━━━━╯
-
-✨ Download Completed Successfully
-🤖 Powered By RIYAD BOT`;
+      const formattedMsg = `✦❰━━『 𝗥𝗜𝗬𝗔𝗗⚡𝗕𝗢𝗧 』━━❱✦
+🎵 𝗧𝗶𝘁𝗹𝗲   › ${info.title}
+🌍 𝗦𝗼𝘂𝗿𝗰𝗲  › ${platform}
+👤 𝗔𝘂𝘁𝗵𝗼𝗿  › ${info.author}
+📂 𝗧𝘆𝗽𝗲    › ${fileInfo.typeLabel}
+📦 𝗦𝗶𝘇𝗲    › ${formatSize(sizeInBytes)}
+⚡ 𝗦𝗽𝗲𝗲𝗱   › ${speed}s
+❰✦✅𝗗𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗖𝗼𝗺𝗽𝗹𝗲𝘁𝗲✅✦❱`;
 
       // Send the completed message with the attachment
       let isCleanedUp = false;
