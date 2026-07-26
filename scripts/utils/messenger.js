@@ -278,12 +278,13 @@ stopListener = api.listenMqtt(async (listenErr, event) => {
   event.threadID = String(event.threadID || "");
   event.messageID = String(event.messageID || "");
 
-  console.log("================");
-console.log(JSON.stringify(event, null, 2));
-console.log("================");
-
-console.log("EVENT TYPE:", event.type);
-console.log("LOG TYPE:", event.logMessageType);
+  console.log("========== EVENT ==========");
+console.log("TYPE:", event.type);
+console.log("BODY:", event.body);
+console.log("THREAD:", event.threadID);
+console.log("SENDER:", event.senderID);
+console.log("RAW:", JSON.stringify(event, null, 2));
+console.log("===========================");
         // Background resolve of display names
         ensureUserData(adaptedApi, event.senderID);
 
@@ -291,6 +292,13 @@ if (
   event.type === "message" ||
   event.type === "message_reply"
 ) {
+  console.log(">>> botEngine.processMessage()");
+console.log({
+  type: event.type,
+  body: event.body,
+  threadID: event.threadID,
+  senderID: event.senderID
+});
   ensureThreadData(adaptedApi, event.threadID);
 }
 
