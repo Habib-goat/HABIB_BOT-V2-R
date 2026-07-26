@@ -139,8 +139,20 @@ async react(emoji, messageID) {
         return reject(new Error(errorMsg));
       }
 
+      const maxRetries = 2;
+      const isTransientSendError = (sendErr) => {
+        const msg = (sendErr && (sendErr.message || sendErr.errorDescription || String(sendErr))) || "";
+        return (sendErr && sendErr.transientError === 1)
+          || /getDeviceList timeout|temporary error|1545012|ciphertext version was too old/i.test(msg);
+      };
+
+      const attemptSend = (retriesLeft) => {
       this.api.sendMessage(message, threadID, (err, messageInfo) => {
         if (err) {
+          if (retriesLeft > 0 && isTransientSendError(err)) {
+            logger.warn(`[FcaAdapter] Transient send error to thread ${threadID}, retrying in 2s (${retriesLeft} left)...`);
+            return setTimeout(() => attemptSend(retriesLeft - 1), 2000);
+          }
           logger.error(`[FcaAdapter] Error sending message to thread ${threadID}:`, err);
           return reject(err);
         }
@@ -183,6 +195,8 @@ if (messageInfo && messageInfo.messageID) {
 
 resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
       }, replyMessageID);
+      };
+      attemptSend(maxRetries);
     });
   }
 
