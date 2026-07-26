@@ -12,6 +12,7 @@ class FileWatcher {
       fs.watch(dir, (evt, fn) => {
         if (fn && fn.endsWith(".js")) StoreSync.syncAll().catch(() => {});
       });
+      this.isWatching = true;
     } catch (_) {}
   }
 }
