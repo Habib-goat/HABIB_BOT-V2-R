@@ -4,7 +4,7 @@ module.exports = {
     aliases: ["leave", "bye", "out"],
     version: "1.0.0",
     author: "Riyad",
-    role: 0,
+    role: 2,
     shortDescription: "Bot leaves the group"
   },
 
