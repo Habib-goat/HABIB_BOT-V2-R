@@ -13,7 +13,7 @@ const reactionManager = require("../reactions/reactionManager");
 
 // Shared helper: sends one page of the store list and registers
 // reaction (❤️/💝 = next page) + reply (number = jump to page) listeners
-async function sendListPage(api, threadID, page, limit) {
+async function sendListPage(api, threadID, page, limit, previousMessageID = null) {
   const send = (msg) => api.sendMessage(msg, threadID);
 
   const data = await StoreAPI.listCommands(page, limit);
@@ -36,6 +36,17 @@ async function sendListPage(api, threadID, page, limit) {
     const regData = { commandName: "rs", type: "list_pagination", page, limit, totalPages };
     reactionManager.register(msgID, regData);
     replyManager.register(msgID, regData);
+  }
+
+  // Auto-unsend the previous page's message once the new page is up
+  if (previousMessageID && typeof api.unsendMessage === "function") {
+    try {
+      await api.unsendMessage(previousMessageID);
+    } catch (err) {
+      logger.error("Failed to unsend previous page message:", err);
+    }
+    reactionManager.delete(previousMessageID);
+    replyManager.delete(previousMessageID);
   }
 
   return sentMsg;
@@ -448,7 +459,7 @@ if (res.failedFiles && res.failedFiles.length > 0) {
     if (reaction !== "❤️" && reaction !== "💝") return;
 
     const nextPage = (reactionData.page || 1) + 1;
-    await sendListPage(api, event.threadID, nextPage, reactionData.limit || 5);
+    await sendListPage(api, event.threadID, nextPage, reactionData.limit || 5, event.messageID);
   },
 
   async onReply({ api, event, replyData }) {
@@ -459,6 +470,6 @@ if (res.failedFiles && res.failedFiles.length > 0) {
       return await api.sendMessage("⚠️ Please reply with a valid page number.", event.threadID, event.messageID);
     }
 
-    await sendListPage(api, event.threadID, requestedPage, replyData.limit || 5);
+    await sendListPage(api, event.threadID, requestedPage, replyData.limit || 5, event.messageID);
   }
 };
