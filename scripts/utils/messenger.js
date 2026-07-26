@@ -217,7 +217,7 @@ function startMessenger(app, wsServer) {
       // Set options
       api.setOptions({
         listenEvents: true,
-        selfListen: false,
+        selfListen: true,
         forceLogin: true,
         autoMarkRead: true
       });
