@@ -60,7 +60,7 @@ class ProgressUI {
   }
 
   static renderPaginatedList(items, page, totalPages, totalCount) {
-    let msg = `🛍️ [ RIYAD STORE - COMMANDS ]\nPage ${page}/${totalPages} (Total: ${totalCount})\n━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    let msg = `🛍️ [ RIYAD STORE - COMMANDS ]\nPage ${page}/${totalPages} (Total: ${totalCount})\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     (items || []).forEach((cmd, idx) => {
       msg += `╭─‣ #${cmd.id || idx + 1} | ${cmd.name.toUpperCase()}\n├‣ Author   : ${cmd.author || "Unknown"}\n├‣ Category : ${cmd.category || "General"}\n╰─────────────◊\n\n`;
     });
