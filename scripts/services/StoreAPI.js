@@ -14,8 +14,8 @@ class StoreAPI {
     });
   }
 
-  async listCommands(page = 1, limit = 10, category = "all") {
-    const cacheKey = `list_${page}_${limit}_${category}`;
+  async listCommands(page = 1, limit = 10, category = null) {
+    const cacheKey = `list_${page}_${limit}_${category || "all"}`;
     const cached = StoreCache.get(cacheKey);
     if (cached) return cached;
 
@@ -25,9 +25,14 @@ class StoreAPI {
   const url = "/api/store/list";
   console.log("FULL URL:", this.client.defaults.baseURL + url);
 
+  const params = { page, limit };
+  if (category && category !== "all") {
+    params.category = category;
+  }
+
   const response = await withRetry(() =>
     this.client.get(url, {
-      params: { page, limit, category }
+      params
     }),
     { retries: 2, timeout: 8000 }
   );
