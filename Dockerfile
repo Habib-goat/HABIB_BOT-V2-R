@@ -1,10 +1,16 @@
-FROM node:20
+FROM node:22
 
-RUN apt-get update && apt-get install -y ffmpeg python3 make g++
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    python3 \
+    make \
+    g++ \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package*.json ./
+
 RUN npm install
 
 COPY . .
