@@ -257,7 +257,7 @@ autoTimerService.setApi(adaptedApi);
       // Listen to incoming messages and events
       logger.info("Messenger live message broker successfully engaged. Listening for events...");
 
-stopListener = (typeof api.listenE2EE === "function" ? api.listenE2EE : api.listenMqtt)(async (listenErr, event) => {
+stopListener = api.listenMqtt(async (listenErr, event) => {
   if (listenErr) {
     logger.error("Broker connection encountered error:", listenErr);
     isConnected = false;
