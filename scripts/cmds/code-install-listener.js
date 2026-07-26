@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const axios = require("axios");
 const StoreValidator = require("../services/StoreValidator");
 const StoreUploader = require("../services/StoreUploader");
 const StoreLoader = require("../services/StoreLoader");
@@ -12,18 +13,38 @@ function sanitizeName(name) {
   return name.trim().toLowerCase().replace(/[^a-z0-9_-]/gi, "_");
 }
 
+function extractUrl(text) {
+  const match = text.match(/https?:\/\/\S+/i);
+  return match ? match[0] : null;
+}
+
+async function resolveCodeContent(repliedBody) {
+  const url = extractUrl(repliedBody.trim());
+  if (!url) {
+    // Not a link — treat the whole message as raw pasted code
+    return repliedBody;
+  }
+
+  // It's a link — fetch the actual code from it
+  const res = await axios.get(url, { timeout: 15000, responseType: "text" });
+  if (typeof res.data !== "string") {
+    throw new Error("Link did not return plain code text.");
+  }
+  return res.data;
+}
+
 module.exports = {
   config: {
     name: "codeinstalllistener",
     version: "1.0.0",
     author: "Riyad",
-    role: 2,
+    role: 0,
     category: "system",
-    shortDescription: "Listens for reply-based install/upload of pasted code"
+    shortDescription: "Listens for reply-based install/upload of pasted code or store links"
   },
 
   async onStart() {
-    // No direct command, this only works via onChat below
+    // No direct command — this only works via onChat below
   },
 
   async onChat({ api, event }) {
@@ -37,12 +58,19 @@ module.exports = {
 
     const send = (msg) => api.sendMessage(msg, event.threadID, event.messageID);
 
-    const val = StoreValidator.validate(repliedBody);
+    let codeContent;
+    try {
+      codeContent = await resolveCodeContent(repliedBody);
+    } catch (err) {
+      return send(`❌ Could not fetch code from the link: ${err.message}`);
+    }
+
+    const val = StoreValidator.validate(codeContent);
     if (!val.valid) {
       return send(`❌ Cannot process code: ${val.error}`);
     }
 
-    const meta = parseCommandMetadata(repliedBody);
+    const meta = parseCommandMetadata(codeContent);
     if (!meta || !meta.name) {
       return send("❌ Could not find a valid command name (config.name) in the code.");
     }
@@ -58,12 +86,13 @@ module.exports = {
       }
 
       try {
-        await atomicWriteFile(targetPath, repliedBody);
+        await atomicWriteFile(targetPath, codeContent);
         const loadRes = await StoreLoader.loadOrReload(targetPath, commandLoader);
 
         return send(
-          `✅ [ COMMAND INSTALLED FROM PASTE ]\n` +
+          `✅ [ COMMAND INSTALLED ]\n` +
           `├‣ Command : ${commandName}\n` +
+          `├‣ Source  : ${extractUrl(repliedBody) ? "Store link" : "Pasted code"}\n` +
           `├‣ Location: scripts/cmds/${targetFileName}\n` +
           `╰‣ Load    : ${loadRes.success ? "Loaded and live!" : `Notice: ${loadRes.error}`}`
         );
@@ -74,7 +103,7 @@ module.exports = {
 
     if (action === "upload") {
       try {
-        const res = await StoreUploader.upload(repliedBody, `${commandName}.js`);
+        const res = await StoreUploader.upload(codeContent, `${commandName}.js`);
         if (!res.success) {
           return send(`❌ Upload Failed: ${res.error}`);
         }
