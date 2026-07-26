@@ -213,6 +213,12 @@ function startMessenger(app, wsServer) {
   logger.success("✅ Connected successfully to Facebook Messenger API!");
 
   isConnected = true;
+
+      // Official recommendation: protects appstate from corruption/silent logout,
+      // auto-saves session periodically
+      if (typeof api.sessionGuard === "function") {
+        api.sessionGuard(appStatePath);
+      }
       
       // Set options
       api.setOptions({
@@ -251,7 +257,7 @@ autoTimerService.setApi(adaptedApi);
       // Listen to incoming messages and events
       logger.info("Messenger live message broker successfully engaged. Listening for events...");
 
-stopListener = api.listenMqtt(async (listenErr, event) => {
+stopListener = (typeof api.listenE2EE === "function" ? api.listenE2EE : api.listenMqtt)(async (listenErr, event) => {
   if (listenErr) {
     logger.error("Broker connection encountered error:", listenErr);
     isConnected = false;
