@@ -181,6 +181,41 @@ console.log("LOADED COMMAND:", cmdName);
 
   throw err;
 }
+  },
+
+  unloadCommand: (commandName) => {
+    const cmdName = commandName.toLowerCase();
+    let targetCmd = commands.get(cmdName);
+
+    if (!targetCmd && aliases.has(cmdName)) {
+      const actualName = aliases.get(cmdName);
+      targetCmd = commands.get(actualName);
+    }
+
+    if (!targetCmd) {
+      return false;
+    }
+
+    const filePath = targetCmd.filePath;
+
+    for (const [name, existingCmd] of commands.entries()) {
+      if (existingCmd.filePath === filePath) {
+        commands.delete(name);
+      }
+    }
+
+    for (const [alias, mappedName] of aliases.entries()) {
+      if (!commands.has(mappedName)) {
+        aliases.delete(alias);
+      }
+    }
+
+    if (require.cache[require.resolve(filePath)]) {
+      delete require.cache[require.resolve(filePath)];
+    }
+
+    logger.info(`Unloaded command: ${commandName}`);
+    return true;
   }
 };
 
