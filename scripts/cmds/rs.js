@@ -8,6 +8,38 @@ const StoreSync = require("../services/StoreSync");
 const FileWatcher = require("../services/FileWatcher");
 const { atomicWriteFile } = require("../utils/atomicWrite");
 const { parseCommandMetadata } = require("../utils/parser");
+const replyManager = require("../replies/replyManager");
+const reactionManager = require("../reactions/reactionManager");
+
+// Shared helper: sends one page of the store list and registers
+// reaction (❤️/💝 = next page) + reply (number = jump to page) listeners
+async function sendListPage(api, threadID, page, limit) {
+  const send = (msg) => api.sendMessage(msg, threadID);
+
+  const data = await StoreAPI.listCommands(page, limit);
+  const commands = data.commands || [];
+
+  if (commands.length === 0) {
+    return await send(page > 1 ? "❌ No more pages." : "❌ No commands found on Riyad Store.");
+  }
+
+  const totalPages = data.totalPages || 1;
+  const total = data.total || commands.length;
+
+  const card = ProgressUI.renderPaginatedList(commands, page, totalPages, total);
+  const footer = "\n\n❤️ React ❤️ or 💝 on this message for the next page\n💬 Or reply with a page number to jump there";
+
+  const sentMsg = await send(card + footer);
+  const msgID = sentMsg?.messageID || sentMsg;
+
+  if (msgID) {
+    const regData = { commandName: "rs", type: "list_pagination", page, limit, totalPages };
+    reactionManager.register(msgID, regData);
+    replyManager.register(msgID, regData);
+  }
+
+  return sentMsg;
+}
 
 // Ensure FileWatcher is initialized as a singleton
 if (!FileWatcher.isWatching) {
@@ -86,26 +118,7 @@ module.exports = {
       const limit = 5;
 
       try {
-        const data = await StoreAPI.listCommands(page, limit);
-
-const commands = data.commands || [];
-
-if (commands.length === 0) {
-  return await send("❌ No commands found on Riyad Store.");
-}
-
-const totalPages = data.totalPages || 1;
-const total = data.total || commands.length;
-
-const card = ProgressUI.renderPaginatedList(
-  commands,
-  page,
-  totalPages,
-  total
-);
-
-return await send(card);
-
+        return await sendListPage(api, threadID, page, limit);
       } catch (err) {
         return await send(`❌ Failed to fetch list: ${err.message}`);
       }
@@ -426,5 +439,26 @@ if (res.failedFiles && res.failedFiles.length > 0) {
     } catch (_) {}
 
     return await send("⚠️ Unknown subcommand or command not found. Type `/rs` for menu.");
+  },
+
+  async onReaction({ api, event, reactionData }) {
+    if (!reactionData || reactionData.type !== "list_pagination") return;
+
+    const reaction = event.reaction;
+    if (reaction !== "❤️" && reaction !== "💝") return;
+
+    const nextPage = (reactionData.page || 1) + 1;
+    await sendListPage(api, event.threadID, nextPage, reactionData.limit || 5);
+  },
+
+  async onReply({ api, event, replyData }) {
+    if (!replyData || replyData.type !== "list_pagination") return;
+
+    const requestedPage = parseInt((event.body || "").trim(), 10);
+    if (!requestedPage || requestedPage < 1) {
+      return await api.sendMessage("⚠️ Please reply with a valid page number.", event.threadID, event.messageID);
+    }
+
+    await sendListPage(api, event.threadID, requestedPage, replyData.limit || 5);
   }
 };
