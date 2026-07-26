@@ -39,10 +39,15 @@ class StoreAPI {
 
   console.log("STORE RESPONSE:", JSON.stringify(response.data, null, 2));
 
-  const data = response.data || {
-    commands: [],
-    total: 0,
-    totalPages: 1
+  const body = response.data || {};
+  const items = body.data || [];
+  const meta = body.meta || {};
+
+  const data = {
+    commands: items,
+    total: meta.total || items.length,
+    totalPages: meta.totalPages || 1,
+    page: meta.page || page
   };
 
   StoreCache.set(cacheKey, data, 180000);
@@ -73,7 +78,12 @@ class StoreAPI {
         this.client.get("/api/store/search", { params: { q: query } }),
         { retries: 2, timeout: 8000 }
       );
-      const data = response.data || { commands: [] };
+      const body = response.data || {};
+      const items = body.data || [];
+      const data = {
+        commands: items,
+        total: (body.meta && body.meta.total) || items.length
+      };
       StoreCache.set(cacheKey, data, 120000);
       return data;
     } catch (err) {
@@ -92,9 +102,10 @@ class StoreAPI {
         this.client.get(`/api/store/info/${encodeURIComponent(id)}`),
         { retries: 2, timeout: 8000 }
       );
-      const data = response.data;
-      if (data) StoreCache.set(cacheKey, data, 300000);
-      return data;
+      const body = response.data;
+      const item = body && body.data ? body.data : null;
+      if (item) StoreCache.set(cacheKey, item, 300000);
+      return item;
     } catch (err) {
       StoreLogger.error(`Failed to fetch command details for ID: ${id}`, err);
       return null;
@@ -135,9 +146,10 @@ class StoreAPI {
 
     try {
       const response = await withRetry(() => this.client.get("/api/store/featured"), { retries: 2, timeout: 8000 });
-      const data = response.data || [];
-      StoreCache.set(cacheKey, data, 600000);
-      return data;
+      const body = response.data;
+      const items = (body && body.data) || [];
+      StoreCache.set(cacheKey, items, 600000);
+      return items;
     } catch (err) {
       StoreLogger.error("Failed to fetch featured commands", err);
       return [];
