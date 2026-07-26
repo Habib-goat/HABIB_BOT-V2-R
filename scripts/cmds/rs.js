@@ -282,7 +282,9 @@ return await send(card);
       }
 
       try {
-        commandLoader.unloadCommand(commandName);
+        if (commandLoader?.unloadCommand) {
+  commandLoader.unloadCommand(commandName);
+}
         fs.unlinkSync(targetPath);
 
         return await send(
