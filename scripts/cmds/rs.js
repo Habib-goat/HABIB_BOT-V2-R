@@ -383,21 +383,32 @@ return await send(card);
 
     // --- 8. MANUAL SYNC ---
     if (subCommand === "sync") {
-      const syncMsg = await send("🔄 [ RIYAD STORE ] Syncing local commands with Store API...");
+      const syncMsg = await send(
+`📦 Syncing with Riyad Store...
+
+🔄 Checking...
+📤 Uploading...`
+);
       try {
         const res = await StoreSync.syncAll();
-        const msg = (
-          `✅ [ STORE AUTO-SYNC COMPLETE ]\n` +
-          `╭─────────────◊\n` +
-          `├‣ Auto-Uploaded : ${res.syncedCount} new file(s)\n` +
-          `├‣ Already Synced: ${res.skippedCount} file(s)\n` +
-          `╰─────────────◊\n` +
-          `💡 Local command hashes verified.`
-          if (res.failedFiles && res.failedFiles.length > 0) {
-          const failList = res.failedFiles.map(f => `• ${f.file}: ${f.reason}`).join("\n");
-          await send(`⚠️ [ SYNC WARNINGS - ${res.failedFiles.length} file(s) skipped ]\n${failList}`);
-        }
-        );
+        const msg =
+  `✅ [ STORE AUTO-SYNC COMPLETE ]\n` +
+  `╭─────────────◊\n` +
+  `├‣ Auto-Uploaded : ${res.syncedCount} new file(s)\n` +
+  `├‣ Already Synced: ${res.skippedCount} file(s)\n` +
+  `╰─────────────◊\n` +
+  `💡 Local command hashes verified.`;
+
+if (res.failedFiles && res.failedFiles.length > 0) {
+  const failList = res.failedFiles
+    .map(f => `• ${f.file}: ${f.reason}`)
+    .join("\n");
+
+  await send(
+    `⚠️ [ SYNC WARNINGS - ${res.failedFiles.length} file(s) skipped ]\n${failList}`
+  );
+}
+
         return await edit(msg, syncMsg?.messageID || syncMsg);
       } catch (err) {
         return await edit(`❌ Sync Error: ${err.message}`, syncMsg?.messageID || syncMsg);
