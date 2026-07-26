@@ -5,7 +5,7 @@
 
 <div align="center">
 
-<img src="logo.png" alt="RIYAD BOT" width="150" height="150" style="border-radius:28px;border:4px solid #F5D2B3;"/>
+<img src="logo.png" alt="RIYAD BOT" width="220" height="220" style="border-radius:28px;border:4px solid #F5D2B3;"/>
 
 # 🌹 RIYAD BOT FRAMEWORK
 
