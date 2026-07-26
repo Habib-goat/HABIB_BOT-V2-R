@@ -108,18 +108,22 @@ module.exports = {
     // --- 1. HELP / MENU ---
     if (!subCommand) {
       const menu = (
-         `〔🛍️ 𝗥𝗜𝗬𝗔𝗗-𝗦𝗧𝗢𝗥𝗘 🛍️ 〕\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `• /rs list [page]      : Paginated command list\n` +
-        `• /rs search <query>  : Fast search (ID / Name)\n` +
-        `• /rs info <id|name>   : Command details card\n` +
-        `• /rs install <id>     : Install with animated progress\n` +
-        `• /rs update <id>      : Safe update with backup\n` +
-        `• /rs featured         : Top trending commands\n` +
-        `• /rs sync             : Sync local files with store\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🌐 Base API: https://riyad-store-api.onrender.com`
-      );
+  `✦━━『 🛍️𝗥𝗜𝗬𝗔𝗗-𝗦𝗧𝗢𝗥𝗘 』━━✦\n` +
+  `\n` +
+  `╭─【📦 𝗖𝗢𝗠𝗠𝗔𝗡𝗗】\n` +
+  `├❖ /rs list [page]\n` +
+  `├❖ /rs search <query>\n` +
+  `├❖ /rs info <id|name>\n` +
+  `├❖ /rs install <id>\n` +
+  `├❖ /rs update <id>\n` +
+  `├❖ /rs featured\n` +
+  `├❖ /rs sync\n` +
+  `╰───────────────\n` +
+  `\n` +
+  `╭─【 🌐 𝗕𝗔𝗦𝗘 𝗔𝗣𝗜 】\n` +
+  `├❖ https://riyad-store-api.onrender.com\n` +
+  `╰───────────────`
+);
       return await send(menu);
     }
 
