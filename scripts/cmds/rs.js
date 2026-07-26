@@ -118,6 +118,16 @@ return await send(card);
         return await send("⚠️ Please provide a keyword or ID to search. Example: /rs search music");
       }
 
+      if (query.toLowerCase() === "list") {
+        const data = await StoreAPI.listCommands(1, 20);
+        const commands = data.commands || [];
+        if (commands.length === 0) {
+          return await send("❌ No commands found on Riyad Store.");
+        }
+        const card = ProgressUI.renderPaginatedList(commands, 1, data.totalPages || 1, data.total || commands.length);
+        return await send(card);
+      }
+
       try {
         const data = await StoreAPI.searchCommands(query);
         const results = data.commands || (Array.isArray(data) ? data : []);
@@ -383,6 +393,10 @@ return await send(card);
           `├‣ Already Synced: ${res.skippedCount} file(s)\n` +
           `╰─────────────◊\n` +
           `💡 Local command hashes verified.`
+          if (res.failedFiles && res.failedFiles.length > 0) {
+          const failList = res.failedFiles.map(f => `• ${f.file}: ${f.reason}`).join("\n");
+          await send(`⚠️ [ SYNC WARNINGS - ${res.failedFiles.length} file(s) skipped ]\n${failList}`);
+        }
         );
         return await edit(msg, syncMsg?.messageID || syncMsg);
       } catch (err) {
