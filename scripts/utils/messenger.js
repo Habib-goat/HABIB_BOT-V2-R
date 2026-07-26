@@ -197,7 +197,7 @@ function startMessenger(app, wsServer) {
       return;
     }
 
-    loginLib({ appState }, (err, api) => {
+    loginLib({ appState }, async (err, api) => {
   if (err) {
     logger.error("❌ Facebook Messenger authentication failed:", err.error || err.message || err);
     return;
@@ -256,6 +256,15 @@ autoTimerService.setApi(adaptedApi);
 
       // Listen to incoming messages and events
       logger.info("Messenger live message broker successfully engaged. Listening for events...");
+
+// Wait up to 8s for E2EE to finish connecting before starting the listener
+      if (typeof api.connectE2EE === "function") {
+        const e2eeStart = Date.now();
+        while (Date.now() - e2eeStart < 8000) {
+          if (api.e2ee && typeof api.e2ee.isConnected === "function" && api.e2ee.isConnected()) break;
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
 
 stopListener = (typeof api.listenE2EE === "function" ? api.listenE2EE : api.listenMqtt)(async (listenErr, event) => {
   if (listenErr) {
