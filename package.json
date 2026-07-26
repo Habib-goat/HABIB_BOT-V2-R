@@ -5,7 +5,7 @@
   "description": "Riyad Bot Framework - Facebook Messenger Bot",
   "main": "app.js",
   "engines": {
-    "node": "18.x",
+    "node": "22.x",
     "npm": ">=9.0.0"
   },
   "scripts": {
