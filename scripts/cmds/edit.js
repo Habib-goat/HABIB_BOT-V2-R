@@ -17,6 +17,7 @@ const FormData = require("form-data");
 const fs = require("fs-extra");
 const path = require("path");
 const { GoogleGenAI } = require("@google/genai");
+const commandLoader = require("../handlers/commandLoader");
 
 // ---------------------------------------------------------------------------
 // Config
@@ -30,6 +31,33 @@ const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY_2,
   process.env.GEMINI_API_KEY_3
 ].filter(Boolean);
+
+if (!DEAPI_KEY) {
+  console.error("[edit.js] WARNING: DEAPI_API_KEY is not set — image editing will fail.");
+}
+if (!GEMINI_KEYS.length) {
+  console.error("[edit.js] WARNING: no GEMINI_API_KEY set — prompts will be sent to deAPI untranslated.");
+}
+
+// Prefix characters this framework's commands can start with.
+const PREFIX_CHARS = ["/", "!", ".", "-", "#"];
+
+/**
+ * True if `rawBody` looks like an invocation of a DIFFERENT loaded command
+ * (e.g. "/pp", "!gptimage") rather than a plain-language edit instruction.
+ * Only messages that start with a prefix char AND match a real command name
+ * are excluded — plain sentences like "help me remove the background" are
+ * never mistaken for a command since "help" alone (no prefix) doesn't match.
+ */
+function looksLikeOtherCommand(rawBody) {
+  const firstWord = rawBody.trim().split(/\s+/)[0] || "";
+  if (!PREFIX_CHARS.includes(firstWord[0])) return false;
+
+  const withoutPrefix = firstWord.slice(1).toLowerCase();
+  if (!withoutPrefix) return false;
+
+  return commandLoader.commands.has(withoutPrefix) || commandLoader.aliases.has(withoutPrefix);
+}
 
 // Preferred img2img models, in priority order (matched against name or slug)
 const MODEL_PRIORITY = [
@@ -221,21 +249,26 @@ module.exports = {
   // Primary path: fires on every message. If it's a reply to a photo with
   // non-empty text, treat the whole message body as the edit instruction —
   // no "/edit" prefix required.
-  onChat: async function ({ api, event, args }) {
+  onChat: async function ({ api, event }) {
     const replied = event.messageReply;
     const attachment = replied?.attachments?.[0];
 
     if (!replied || !attachment || attachment.type !== "photo") return;
 
-    const prompt = (Array.isArray(args) ? args.join(" ") : event.body || "").trim();
-    if (!prompt) return;
+    const rawBody = (event.body || "").trim();
+    if (!rawBody) return;
 
-    // Avoid double-handling: if this message is the explicit "/edit ..." form,
-    // let onStart's dispatch handle it instead of running twice.
-    // (onChat still fires alongside onStart per the framework's design, so we
-    // just let both paths converge on the same handleEditRequest — it's
-    // idempotent per-invocation since each call submits its own job.)
-    await handleEditRequest({ api, event, prompt, imageUrl: attachment.url });
+    // Don't hijack other commands (e.g. "/pp", "!gptimage", or even our own
+    // "/edit" with no prompt) sent while replying to a photo — let the
+    // framework's normal dispatcher (and that command's own onStart) handle
+    // those. Only plain-language text falls through to the auto-edit flow.
+    if (looksLikeOtherCommand(rawBody)) {
+      console.log(`[edit.js] onChat: skipping, looks like another command -> "${rawBody}"`);
+      return;
+    }
+
+    console.log(`[edit.js] onChat: treating reply-to-image text as edit prompt -> "${rawBody}"`);
+    await handleEditRequest({ api, event, prompt: rawBody, imageUrl: attachment.url });
   }
 };
 
@@ -258,23 +291,37 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
   let outPath = null;
 
   try {
+    console.log("[edit.js] step: sending initial progress message");
     progressId = await new Promise((resolve) => {
-      api.sendMessage("🖼️ Image detected...", threadID, (err, info) => resolve(info?.messageID || null), messageID);
+      api.sendMessage("🖼️ Image detected...", threadID, (err, info) => {
+        if (err) console.error("[edit.js] sendMessage(initial) error:", err);
+        resolve(info?.messageID || null);
+      }, messageID);
     });
+    console.log("[edit.js] step: progressId =", progressId);
 
     await editMsg(api, progressId, "📥 Downloading your image...");
+    console.log("[edit.js] step: downloading source image");
     const imageBuffer = await downloadToBuffer(attachment.url);
+    console.log("[edit.js] step: image downloaded, bytes =", imageBuffer.length);
 
     await editMsg(api, progressId, "🌐 Translating prompt...");
+    console.log("[edit.js] step: translating prompt:", prompt);
     const englishPrompt = await translatePrompt(prompt);
+    console.log("[edit.js] step: translated prompt:", englishPrompt);
 
     await editMsg(api, progressId, `🤖 Processing with AI...\n📝 ${englishPrompt}`);
+    console.log("[edit.js] step: picking model");
     const model = await pickModel();
+    console.log("[edit.js] step: model selected:", model.slug);
 
+    console.log("[edit.js] step: submitting edit job to deAPI");
     const requestId = await submitEditJob({ imageBuffer, prompt: englishPrompt, model });
+    console.log("[edit.js] step: job submitted, request_id =", requestId);
 
     await editMsg(api, progressId, "⏳ Please wait, rendering your edit...");
     const result = await pollJob(requestId);
+    console.log("[edit.js] step: job done, result_url =", result.result_url);
 
     if (!result.result_url) {
       throw new Error("deAPI finished the job but returned no result file.");
@@ -282,6 +329,7 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
 
     await editMsg(api, progressId, "📥 Downloading result...");
     const resultBuffer = await downloadToBuffer(result.result_url);
+    console.log("[edit.js] step: result downloaded, bytes =", resultBuffer.length);
 
     await fs.ensureDir(CACHE_DIR);
     outPath = path.join(CACHE_DIR, `${Date.now()}_edited.jpg`);
@@ -295,12 +343,18 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
       }
     }
 
+    console.log("[edit.js] step: sending final edited image to Messenger");
     await api.sendMessage(
       { body: `✅ Image edited successfully.\n📝 ${englishPrompt}`, attachment: fs.createReadStream(outPath) },
       threadID,
-      messageID
+      messageID,
+      (err) => {
+        if (err) console.error("[edit.js] sendMessage(final) error:", err);
+        else console.log("[edit.js] step: final image sent successfully");
+      }
     );
   } catch (err) {
+    console.error("[edit.js] handleEditRequest failed:", err.response?.data || err.message || err);
     if (progressId) {
       try {
         await api.unsendMessage(progressId);
@@ -308,7 +362,9 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
         /* best-effort */
       }
     }
-    api.sendMessage(`❌ ${friendlyError(err)}`, threadID, messageID);
+    api.sendMessage(`❌ ${friendlyError(err)}`, threadID, messageID, (err2) => {
+      if (err2) console.error("[edit.js] sendMessage(error-notice) error:", err2);
+    });
   } finally {
     if (outPath && (await fs.pathExists(outPath))) {
       await fs.remove(outPath).catch(() => {});
