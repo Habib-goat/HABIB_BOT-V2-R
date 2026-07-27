@@ -27,6 +27,13 @@ async function resolveCodeContent(repliedBody) {
 
   // It's a link — fetch the actual code from it
   const res = await axios.get(url, { timeout: 15000, responseType: "text" });
+
+  const contentType = (res.headers["content-type"] || "").toLowerCase();
+  const blockedTypes = ["image/", "video/", "audio/", "application/pdf", "application/zip", "application/octet-stream"];
+  if (blockedTypes.some(t => contentType.includes(t))) {
+    throw new Error(`Link points to a ${contentType} file, not JS code. Only .js command code can be installed/uploaded.`);
+  }
+
   if (typeof res.data !== "string") {
     throw new Error("Link did not return plain code text.");
   }
