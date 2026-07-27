@@ -31,6 +31,7 @@ let isConnected = false;
 let stopListener = null;
 let reconnectTimer = null;
 let doConnectRef = null;
+let currentAdaptedApi = null;
 
 function stopCurrentListener() {
   if (!stopListener) return;
@@ -240,6 +241,7 @@ function startMessenger(app, wsServer) {
   api,
   wsServer
 );
+      currentAdaptedApi = adaptedApi;
       
 console.log("RAW addUserToGroup =", typeof api.addUserToGroup);
 console.log("ADAPTER addUserToGroup =", typeof adaptedApi.addUserToGroup);
@@ -376,5 +378,6 @@ function reconnectMessenger() {
 module.exports = {
   startMessenger,
   isConnected: () => isConnected,
-  reconnectMessenger
+  reconnectMessenger,
+  getApi: () => currentAdaptedApi
 };
