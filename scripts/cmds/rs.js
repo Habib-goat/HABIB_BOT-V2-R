@@ -328,6 +328,39 @@ module.exports = {
         return await send(`❌ Uninstall Failed: ${err.message}`);
       }
     }
+    // --- 6.5 UNINSTALL ---
+    if (subCommand === "uninstall" || subCommand === "remove") {
+      const target = (args[1] || "").trim();
+      if (!target) {
+        return await send("⚠️ Usage: /rs uninstall <command name>");
+      }
+
+      const commandName = sanitizeName(target);
+      const targetFileName = `${commandName}.js`;
+      const targetPath = path.join(process.cwd(), "scripts", "cmds", targetFileName);
+
+      if (!fs.existsSync(targetPath)) {
+        return await send(`❌ "${commandName}" is not installed locally (file not found).`);
+      }
+
+      try {
+        if (commandLoader && typeof commandLoader.unloadCommand === "function") {
+          commandLoader.unloadCommand(commandName);
+        }
+        fs.unlinkSync(targetPath);
+
+        return await send(
+          `✅ [ COMMAND UNINSTALLED ]\n` +
+          `╭─────────────◊\n` +
+          `├‣ Command  : ${commandName}\n` +
+          `├‣ Removed  : scripts/cmds/${targetFileName}\n` +
+          `╰─────────────◊\n` +
+          `🗑️ Unloaded from live memory and deleted from disk.`
+        );
+      } catch (err) {
+        return await send(`❌ Uninstall Failed: ${err.message}`);
+      }
+    }
     // --- 7. UPDATE ---
     if (subCommand === "update" || subCommand === "u") {
       const target = (args[1] || "").trim();
