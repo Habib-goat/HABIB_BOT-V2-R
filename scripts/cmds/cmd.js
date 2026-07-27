@@ -6,6 +6,7 @@
 // Command Manager ("cmd.js") for Riyad Bot
 // Professional, robust, and full-featured command manager.
 const replyManager = require("../replies/replyManager");
+const reactionManager = require("../reactions/reactionManager");
 const axios = require("axios");
 const { execSync } = require("child_process");
 const fs = require("fs-extra");
@@ -23,30 +24,14 @@ function sendMessage(api, threadID, text, messageID) {
   });
 }
 
-// Find all command & alias registries in the environment
+const commandLoaderReal = require("../handlers/commandLoader");
+
+// Uses the bot's real command registry (scripts/handlers/commandLoader.js)
 function findRegistries() {
-  const registries = [];
-  if (global.client) {
-    if (global.client.commands instanceof Map) {
-      registries.push({
-        commands: global.client.commands,
-        aliases: global.client.aliases || new Map()
-      });
-    }
-  }
-  if (global.commands instanceof Map) {
-    registries.push({
-      commands: global.commands,
-      aliases: global.aliases || new Map()
-    });
-  }
-  if (global.RiyadBot && global.RiyadBot.commands instanceof Map) {
-    registries.push({
-      commands: global.RiyadBot.commands,
-      aliases: global.RiyadBot.aliases || new Map()
-    });
-  }
-  return registries;
+  return [{
+    commands: commandLoaderReal.commands,
+    aliases: commandLoaderReal.aliases
+  }];
 }
 
 // Extract JS code from Markdown code block if present
@@ -91,41 +76,20 @@ function validateCommandSource(tempName, rawCode) {
   }
 }
 
-// Unload command from registry
+// Unload command from the real registry
 function unloadCommandFromRegistry(commandName) {
-  const registries = findRegistries();
-  for (const reg of registries) {
-    const cmd = reg.commands.get(commandName);
-    if (cmd && cmd.config && cmd.config.aliases) {
-      const aliases = Array.isArray(cmd.config.aliases) ? cmd.config.aliases : [cmd.config.aliases];
-      for (const alias of aliases) {
-        reg.aliases.delete(alias);
-      }
-    }
-    reg.commands.delete(commandName);
-  }
+  try {
+    commandLoaderReal.unloadCommand(commandName);
+  } catch (_) {}
 }
 
-// Load or hot-reload command file
+// Load or hot-reload command file using the real commandLoader
 function loadCommandIntoRegistry(filePath, commandName) {
   try {
-    delete require.cache[require.resolve(filePath)];
-    const command = require(filePath);
-    if (!command || !command.config || !command.config.name) return false;
-
-    const registries = findRegistries();
-    for (const reg of registries) {
-      // Remove old instances first
-      unloadCommandFromRegistry(command.config.name);
-      
-      // Load new instance
-      reg.commands.set(command.config.name, command);
-      if (command.config.aliases) {
-        const aliases = Array.isArray(command.config.aliases) ? command.config.aliases : [command.config.aliases];
-        for (const alias of aliases) {
-          reg.aliases.set(alias, command.config.name);
-        }
-      }
+    if (commandLoaderReal.commands.has(commandName)) {
+      commandLoaderReal.reloadCommand(commandName);
+    } else {
+      commandLoaderReal.loadCommand(filePath);
     }
     return true;
   } catch (error) {
