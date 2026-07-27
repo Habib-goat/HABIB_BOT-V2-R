@@ -182,10 +182,56 @@ onStart: async ({ api, event }) => {
 
       const editFrame = async (pct, label) => {
         frameIdx = (frameIdx + 1) % spinnerFrames.length;
+{
+    config: {
+      name: "restart",
+      aliases: ["reboot"],
+      version: "1.0.0",
+      author: "Riyad Bot",
+      countDown: 10,
+      role: 2,
+      category: "system",
+      guide: "{pn}",
+      description: "Safely restart the bot server-side process."
+    },
+    onStart: async ({ api, event }) => {
+      const threadID = event.threadID;
+      const spinnerFrames = ["◐", "◓", "◑", "◒"];
+      let frameIdx = 0;
+
+      const withTimeout = (promise, ms, label) => {
+        return Promise.race([
+          promise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Timed out during: ${label} (waited ${ms / 1000}s)`)), ms)
+          )
+        ]);
+      };
+
+      const renderFrame = (pct, label) => {
+        const filled = Math.round(pct / 10);
+        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+        return `♻️ Restarting Riyad Bot...\n\n${spinnerFrames[frameIdx]} [${bar}] ${pct}%\n${label}`;
+      };
+
+      let msgID = null;
+      try {
+        const sentMsg = await withTimeout(
+          new Promise((resolve) => {
+            api.sendMessage(renderFrame(0, "Preparing restart..."), threadID, (err, info) => resolve(info));
+          }),
+          8000,
+          "sending initial message"
+        );
+        msgID = sentMsg?.messageID;
+      } catch (e1) {}
+
+      const editFrame = async (pct, label) => {
+        frameIdx = (frameIdx + 1) % spinnerFrames.length;
         if (msgID && typeof api.editMessage === "function") {
           try {
             await withTimeout(api.editMessage(renderFrame(pct, label), msgID), 6000, `editing progress (${pct}%)`);
-          } catch (_) {}
+          } catch (e2) {}
         }
       };
 
@@ -198,36 +244,29 @@ onStart: async ({ api, event }) => {
 
         try {
           const eventLoaderReal = require("../handlers/eventLoader");
-          if (typeof eventLoaderReal.loadAll === "function") eventLoaderReal.loadAll();
-        } catch (_) {}
+          if (typeof eventLoaderReal.loadAll === "function") {
+            eventLoaderReal.loadAll();
+          }
+        } catch (e3) {}
 
         await editFrame(70, "Reconnecting to Facebook Messenger...");
         const messengerUtil = require("../utils/messenger");
         messengerUtil.reconnectMessenger();
 
-        // Give the new session time to fully establish
         await new Promise((r) => setTimeout(r, 6000));
 
-        // IMPORTANT: the old "api" is now a dead reference (old connection
-        // was torn down). Fetch the freshly reconnected api to finish up.
         const freshApi = messengerUtil.getApi() || api;
 
-        // Remove the progress message, then send a clean success message
         if (msgID && typeof freshApi.unsendMessage === "function") {
           try {
             await withTimeout(freshApi.unsendMessage(msgID), 6000, "removing progress message");
-          } catch (_) {}
+          } catch (e4) {}
         }
 
         await withTimeout(
           new Promise((resolve, reject) => {
             freshApi.sendMessage(
-              "✅ [ RESTART SUCCESSFUL ]\n" +
-              "╭─────────────◊\n" +
-              "├‣ Commands & events reloaded\n" +
-              "├‣ Messenger session refreshed\n" +
-              "╰─────────────◊\n" +
-              "🤖 Riyad Bot is back online — no downtime!",
+              "✅ [ RESTART SUCCESSFUL ]\n╭─────────────◊\n├‣ Commands & events reloaded\n├‣ Messenger session refreshed\n╰─────────────◊\n🤖 Riyad Bot is back online — no downtime!",
               threadID,
               (err, info) => (err ? reject(err) : resolve(info))
             );
@@ -238,11 +277,15 @@ onStart: async ({ api, event }) => {
       } catch (err) {
         logger.error("Hot-restart failed or timed out:", err);
         try {
-          const messengerUtil = require("../utils/messenger");
-          const fallbackApi = messengerUtil.getApi() || api;
+          const messengerUtil2 = require("../utils/messenger");
+          const fallbackApi = messengerUtil2.getApi() || api;
           await withTimeout(
             new Promise((resolve, reject) => {
-              fallbackApi.sendMessage(`❌ Restart failed or timed out: ${err.message}\n\nCheck server logs for more detail.`, threadID, (e2) => (e2 ? reject(e2) : resolve()));
+              fallbackApi.sendMessage(
+                `❌ Restart failed or timed out: ${err.message}`,
+                threadID,
+                (e2) => (e2 ? reject(e2) : resolve())
+              );
             }),
             6000,
             "sending failure message"
