@@ -33,7 +33,7 @@ class StoreSync {
   static async syncAll(onProgress = null) {
     if (!fs.existsSync(CMDS_DIR)) {
       try { fs.mkdirSync(CMDS_DIR, { recursive: true }); } catch (_) {}
-      return { syncedCount: 0, skippedCount: 0 };
+      return { syncedCount: 0, skippedCount: 0, failedFiles: [] };
     }
 
     const db = this.loadSyncDb();
@@ -45,7 +45,6 @@ class StoreSync {
     const failedFiles = [];
     let processedCount = 0;
 
-    for (const file of files) {
     const withFileTimeout = (promise, ms) => {
       return Promise.race([
         promise,
@@ -89,5 +88,10 @@ class StoreSync {
         failedFiles.push({ file, reason: timeoutErr.message });
       }
     }
+
+    if (syncedCount > 0) this.saveSyncDb(db);
+    return { syncedCount, skippedCount, failedFiles };
+  }
+}
 
 module.exports = StoreSync;
