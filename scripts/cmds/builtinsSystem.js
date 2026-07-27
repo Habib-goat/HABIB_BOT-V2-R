@@ -105,9 +105,61 @@ await api.sendMessage(info, event.threadID);
       description: "Safely restart the bot server-side process."
     },
     onStart: async ({ api, event }) => {
-      await api.sendMessage("♻️ Riyad Bot Framework is hot-restarting... Hold on tight!", event.threadID);
-      logger.system("Restart command triggered. Exiting node process to spark auto-recovery daemon...");
-      setTimeout(() => process.exit(0), 1000);
+      const threadID = event.threadID;
+      const spinnerFrames = ["◐", "◓", "◑", "◒"];
+      let frameIdx = 0;
+
+      const renderFrame = (pct, label) => {
+        const filled = Math.round(pct / 10);
+        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+        return `♻️ Restarting Riyad Bot...\n\n${spinnerFrames[frameIdx]} [${bar}] ${pct}%\n${label}`;
+      };
+
+      const sentMsg = await new Promise((resolve) => {
+        api.sendMessage(renderFrame(0, "Preparing restart..."), threadID, (err, info) => resolve(info));
+      });
+      const msgID = sentMsg?.messageID;
+
+      const editFrame = async (pct, label) => {
+        frameIdx = (frameIdx + 1) % spinnerFrames.length;
+        if (msgID && typeof api.editMessage === "function") {
+          try { await api.editMessage(renderFrame(pct, label), msgID); } catch (_) {}
+        }
+      };
+
+      try {
+        await editFrame(20, "Stopping current session...");
+
+        const commandLoaderReal = require("../handlers/commandLoader");
+        await editFrame(45, "Reloading all commands...");
+        commandLoaderReal.loadAll();
+
+        try {
+          const eventLoaderReal = require("../handlers/eventLoader");
+          if (typeof eventLoaderReal.loadAll === "function") eventLoaderReal.loadAll();
+        } catch (_) {}
+
+        await editFrame(70, "Reconnecting to Facebook Messenger...");
+        const messengerUtil = require("../utils/messenger");
+        messengerUtil.reconnectMessenger();
+
+        await new Promise((r) => setTimeout(r, 3500));
+
+        await editFrame(100, "✅ Done!");
+
+        await api.sendMessage(
+          "✅ [ RESTART SUCCESSFUL ]\n" +
+          "╭─────────────◊\n" +
+          "├‣ Commands & events reloaded\n" +
+          "├‣ Messenger session refreshed\n" +
+          "╰─────────────◊\n" +
+          "🤖 Riyad Bot is back online — no downtime!",
+          threadID
+        );
+      } catch (err) {
+        logger.error("Hot-restart failed:", err);
+        await api.sendMessage(`❌ Restart failed: ${err.message}`, threadID);
+      }
     }
   },
   {
