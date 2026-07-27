@@ -268,11 +268,7 @@ stopListener = api.listenMqtt(async (listenErr, event) => {
     logger.error("Broker connection encountered error:", listenErr);
     isConnected = false;
 
-    if (typeof stopListener === "function") {
-      try {
-        stopListener();
-      } catch (e) {}
-    }
+    stopCurrentListener();
 
     reconnectTimer = setTimeout(doConnect, 10000);
     return;
@@ -368,9 +364,7 @@ try {
 
 function reconnectMessenger() {
   logger.system("Hot-restart requested: tearing down current session and reconnecting...");
-  if (typeof stopListener === "function") {
-    try { stopListener(); } catch (_) {}
-  }
+  stopCurrentListener();
   isConnected = false;
   if (typeof doConnectRef === "function") {
     doConnectRef();
