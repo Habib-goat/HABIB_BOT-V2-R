@@ -177,7 +177,7 @@ await api.sendMessage(info, event.threadID);
         await withTimeout(
           new Promise((resolve, reject) => {
             freshApi.sendMessage(
-              "✅ [ RESTART SUCCESSFUL ]\n╭─────────────◊\n├‣ Commands & events reloaded\n├‣ Messenger session refreshed\n╰─────────────◊\n🤖 Riyad Bot is back online — no downtime!",
+              "╭─────────✦──────────╮\n⚡ ⌈ 𝗥𝗘𝗦𝗧𝗔𝗥𝗧 𝗦𝗨𝗖𝗖𝗘𝗦𝗦𝗙𝗨𝗟 ⌋ ⚡\n╰─────────✦──────────╯\n ⦾ All Commands & Events Reloaded\n ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n 🔥 𝗥𝗶𝘆𝗮𝗱 𝗕𝗼𝘁\n ✅ 𝗢𝗡𝗟𝗜𝗡𝗘 𝗡𝗼𝘄",
               threadID,
               (err, info) => (err ? reject(err) : resolve(info))
             );
