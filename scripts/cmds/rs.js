@@ -447,34 +447,32 @@ module.exports = {
 
     // --- 8. MANUAL SYNC ---
     if (subCommand === "sync") {
-      const spinnerFrames = ["◐", "◓", "◑", "◒"];
-      let percent = 0;
-      let frameIdx = 0;
-
-      const renderSyncFrame = (pct, spinner) => {
+      const renderSyncFrame = (current, total, fileName) => {
+        const pct = total ? Math.round((current / total) * 100) : 0;
         const filled = Math.round(pct / 10);
         const bar = "█".repeat(filled) + "░".repeat(10 - filled);
-        return `📦 Syncing with Riyad Store...\n\n${spinner} [${bar}] ${pct}%\n🔄 Checking & uploading changed files...`;
+        return `📦 Syncing with Riyad Store...\n\n[${bar}] ${pct}% (${current}/${total})\n🔄 ${fileName || "Starting..."}`;
       };
 
-      const syncMsg = await send(renderSyncFrame(0, spinnerFrames[0]));
+      const syncMsg = await send(renderSyncFrame(0, 0, "Preparing..."));
       const msgID = syncMsg?.messageID || syncMsg;
 
-      const progressInterval = setInterval(async () => {
-        if (percent < 90) {
-          percent = Math.min(90, percent + Math.floor(Math.random() * 6) + 3);
-        }
-        frameIdx = (frameIdx + 1) % spinnerFrames.length;
+      let lastEditTime = 0;
+      const throttledEdit = async (current, total, fileName) => {
+        const now = Date.now();
+        if (now - lastEditTime < 1500) return;
+        lastEditTime = now;
         if (msgID) {
-          try { await edit(renderSyncFrame(percent, spinnerFrames[frameIdx]), msgID); } catch (_) {}
+          try { await edit(renderSyncFrame(current, total, fileName), msgID); } catch (_) {}
         }
-      }, 600);
+      };
 
       try {
-        const res = await StoreSync.syncAll();
-        clearInterval(progressInterval);
+        const res = await StoreSync.syncAll((current, total, fileName) => {
+          throttledEdit(current, total, fileName);
+        });
 
-        await edit(renderSyncFrame(100, "✅"), msgID);
+        await edit(renderSyncFrame(res.syncedCount + res.skippedCount + (res.failedFiles?.length || 0), res.syncedCount + res.skippedCount + (res.failedFiles?.length || 0), "✅ Done"), msgID);
 
         const msg =
   `✅ [ STORE AUTO-SYNC COMPLETE ]\n` +
@@ -496,7 +494,6 @@ if (res.failedFiles && res.failedFiles.length > 0) {
 
         return await edit(msg, msgID);
       } catch (err) {
-        clearInterval(progressInterval);
         return await edit(`❌ Sync Error: ${err.message}`, msgID);
       }
     }
