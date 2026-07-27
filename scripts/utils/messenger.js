@@ -31,6 +31,17 @@ let isConnected = false;
 let stopListener = null;
 let reconnectTimer = null;
 let doConnectRef = null;
+
+function stopCurrentListener() {
+  if (!stopListener) return;
+  try {
+    if (typeof stopListener === "function") {
+      stopListener();
+    } else if (typeof stopListener.stopListening === "function") {
+      stopListener.stopListening();
+    }
+  } catch (_) {}
+}
 // Ensure non-blocking fetching of user metadata
 async function ensureUserData(api, senderID) {
   if (!senderID) return;
