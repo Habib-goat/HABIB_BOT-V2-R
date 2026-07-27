@@ -18,9 +18,9 @@ class StoreValidator {
       if (pattern.test(code)) return { valid: false, error: message };
     }
 
-    const hasModuleExports = /module\.exports\s*=/i.test(code);
-    const hasConfig = /config\s*:\s*\{/i.test(code);
-    const hasOnStart = /onStart\s*[:(]/i.test(code);
+    const hasModuleExports = /module\.exports(\s*=|\.\w+\s*=)/i.test(code);
+    const hasConfig = /(?:module\.exports\.config\s*=|config\s*:)\s*\{/i.test(code);
+    const hasOnStart = /(?:module\.exports\.onStart\s*=|onStart\s*[:(])/i.test(code);
 
     if (!hasModuleExports || !hasConfig) return { valid: false, error: "Missing 'module.exports' or 'config'." };
     if (!hasOnStart) return { valid: false, error: "Missing 'onStart' method." };
