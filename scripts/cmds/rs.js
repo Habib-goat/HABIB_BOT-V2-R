@@ -118,6 +118,7 @@ module.exports = {
   `├❖ /rs update <id>\n` +
   `├❖ /rs featured\n` +
   `├❖ /rs sync\n` +
+  `├❖ /rs uninstall <name>\n` +
   `╰───────────────\n` +
   `\n` +
   `╭─【 🌐 𝗕𝗔𝗦𝗘 𝗔𝗣𝗜 】\n` +
@@ -413,14 +414,35 @@ module.exports = {
 
     // --- 8. MANUAL SYNC ---
     if (subCommand === "sync") {
-      const syncMsg = await send(
-`📦 Syncing with Riyad Store...
+      const spinnerFrames = ["◐", "◓", "◑", "◒"];
+      let percent = 0;
+      let frameIdx = 0;
 
-🔄 Checking...
-📤 Uploading...`
-);
+      const renderSyncFrame = (pct, spinner) => {
+        const filled = Math.round(pct / 10);
+        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+        return `📦 Syncing with Riyad Store...\n\n${spinner} [${bar}] ${pct}%\n🔄 Checking & uploading changed files...`;
+      };
+
+      const syncMsg = await send(renderSyncFrame(0, spinnerFrames[0]));
+      const msgID = syncMsg?.messageID || syncMsg;
+
+      const progressInterval = setInterval(async () => {
+        if (percent < 90) {
+          percent = Math.min(90, percent + Math.floor(Math.random() * 6) + 3);
+        }
+        frameIdx = (frameIdx + 1) % spinnerFrames.length;
+        if (msgID) {
+          try { await edit(renderSyncFrame(percent, spinnerFrames[frameIdx]), msgID); } catch (_) {}
+        }
+      }, 600);
+
       try {
         const res = await StoreSync.syncAll();
+        clearInterval(progressInterval);
+
+        await edit(renderSyncFrame(100, "✅"), msgID);
+
         const msg =
   `✅ [ STORE AUTO-SYNC COMPLETE ]\n` +
   `╭─────────────◊\n` +
@@ -439,9 +461,10 @@ if (res.failedFiles && res.failedFiles.length > 0) {
   );
 }
 
-        return await edit(msg, syncMsg?.messageID || syncMsg);
+        return await edit(msg, msgID);
       } catch (err) {
-        return await edit(`❌ Sync Error: ${err.message}`, syncMsg?.messageID || syncMsg);
+        clearInterval(progressInterval);
+        return await edit(`❌ Sync Error: ${err.message}`, msgID);
       }
     }
 
