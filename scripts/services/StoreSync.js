@@ -46,34 +46,48 @@ class StoreSync {
     let processedCount = 0;
 
     for (const file of files) {
+    const withFileTimeout = (promise, ms) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`File processing timed out after ${ms / 1000}s`)), ms))
+      ]);
+    };
+
+    for (const file of files) {
       processedCount++;
       if (typeof onProgress === "function") {
         try { onProgress(processedCount, files.length, file); } catch (_) {}
       }
 
-      const filePath = path.join(CMDS_DIR, file);
-      let content;
-      try { content = fs.readFileSync(filePath, "utf8"); } catch (_) { continue; }
+      try {
+        await withFileTimeout((async () => {
+          const filePath = path.join(CMDS_DIR, file);
+          let content;
+          try { content = fs.readFileSync(filePath, "utf8"); } catch (_) { return; }
 
-      const fileHash = hashContent(content);
-      if (db.synced[file] === fileHash) {
-        skippedCount++;
-        continue;
-      }
+          const fileHash = hashContent(content);
+          if (db.synced[file] === fileHash) {
+            skippedCount++;
+            return;
+          }
 
-      const val = StoreValidator.validate(content);
-      if (!val.valid) continue;
+          const val = StoreValidator.validate(content);
+          if (!val.valid) {
+            failedFiles.push({ file, reason: val.error || "Validation failed" });
+            return;
+          }
 
-      const uploadRes = await StoreUploader.upload(content, file);
-      if (uploadRes.success) {
-        db.synced[file] = fileHash;
-        syncedCount++;
+          const uploadRes = await StoreUploader.upload(content, file);
+          if (uploadRes.success) {
+            db.synced[file] = fileHash;
+            syncedCount++;
+          } else {
+            failedFiles.push({ file, reason: uploadRes.error || "Upload failed" });
+          }
+        })(), 25000);
+      } catch (timeoutErr) {
+        failedFiles.push({ file, reason: timeoutErr.message });
       }
     }
-
-    if (syncedCount > 0) this.saveSyncDb(db);
-    return { syncedCount, skippedCount };
-  }
-}
 
 module.exports = StoreSync;
