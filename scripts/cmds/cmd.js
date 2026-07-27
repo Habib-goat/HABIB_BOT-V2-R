@@ -15,6 +15,81 @@ const path = require("path");
 // Local cache for pending confirmations
 const pendingConfirmations = new Map();
 
+async function sendCmdListPage(api, threadID, page, previousMessageID = null) {
+  const files = fs.readdirSync(__dirname);
+  const jsFiles = files.filter(f => f.endsWith(".js") && !f.startsWith("_temp_"));
+  const disabledFiles = files.filter(f => f.endsWith(".disabled"));
+
+  jsFiles.sort();
+  disabledFiles.sort();
+
+  const totalActive = jsFiles.length;
+  const totalDisabled = disabledFiles.length;
+  const allItems = [];
+
+  for (const file of jsFiles) {
+    try {
+      const commandName = file.replace(".js", "");
+      const cmd = require(path.join(__dirname, file));
+      allItems.push({
+        name: commandName,
+        version: cmd.config?.version || "1.0.0",
+        category: cmd.config?.category || "general",
+        active: true
+      });
+    } catch (_) {
+      allItems.push({ name: file.replace(".js", ""), version: "ERROR", category: "unknown", active: true, corrupt: true });
+    }
+  }
+
+  for (const file of disabledFiles) {
+    const commandName = file.replace(".js.disabled", "").replace(".disabled", "");
+    allItems.push({ name: commandName, version: "N/A", category: "disabled", active: false });
+  }
+
+  const itemsPerPage = 8;
+  const totalPages = Math.ceil(allItems.length / itemsPerPage) || 1;
+  const safePage = Math.max(1, Math.min(page, totalPages));
+  const startIndex = (safePage - 1) * itemsPerPage;
+  const pageItems = allItems.slice(startIndex, startIndex + itemsPerPage);
+
+  let msg = "╭─────────────────────╮\n";
+  msg += "  ✪𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 - 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒✪\n";
+  msg += "╰─────────────────────╯\n\n";
+  msg += ` ➜ 𝐀𝐜𝐭𝐢𝐯𝐞: ${totalActive} | 𝐃𝐢𝐬𝐚𝐛𝐥𝐞𝐝: ${totalDisabled}\n`;
+  msg += ` ➜ 𝐏𝐚𝐠𝐞: ${safePage}/${totalPages}\n\n`;
+
+  pageItems.forEach((item, idx) => {
+    const num = startIndex + idx + 1;
+    const statusIcon = item.corrupt ? "⚠️" : (item.active ? "🟢" : "🔴");
+    msg += `  ${num}. ${statusIcon} ╭─ [ ${item.name} ]\n`;
+    msg += `     ├─ 𝐕𝐞𝐫𝐬𝐢𝐨𝐧: ${item.version}\n`;
+    msg += `     ╰─ 𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲: ${item.category}\n\n`;
+  });
+
+  msg += "───────────────────────\n";
+  msg += "❤️ React ❤️/💝 for the next page\n";
+  msg += "💬 Reply with a page number to jump\n";
+  msg += "💡 𝐔𝐬𝐞 \"/cmd info [name]\" for details";
+
+  const sentMsg = await sendMessage(api, threadID, msg);
+  const msgID = sentMsg?.messageID || sentMsg;
+
+  if (msgID) {
+    const regData = { commandName: "cmd", type: "list_pagination", page: safePage, totalPages };
+    reactionManager.register(msgID, regData);
+    replyManager.set(msgID, regData);
+  }
+
+  if (previousMessageID && typeof api.unsendMessage === "function") {
+    try { await api.unsendMessage(previousMessageID); } catch (_) {}
+    reactionManager.delete(previousMessageID);
+    replyManager.delete(previousMessageID);
+  }
+
+  return sentMsg;
+}
+
 // Helper to safely send message
 function sendMessage(api, threadID, text, messageID) {
   return new Promise((resolve) => {
@@ -122,81 +197,12 @@ module.exports = {
     // -------------------------------------------------------------
     if (!sub || sub === "list") {
       try {
-        const files = fs.readdirSync(__dirname);
-        const jsFiles = files.filter(f => f.endsWith(".js") && !f.startsWith("_temp_"));
-        const disabledFiles = files.filter(f => f.endsWith(".disabled"));
-
-        jsFiles.sort();
-        disabledFiles.sort();
-
-        const totalActive = jsFiles.length;
-        const totalDisabled = disabledFiles.length;
-
-        // Collect all items to show
-        const allItems = [];
-        for (const file of jsFiles) {
-          try {
-            const commandName = file.replace(".js", "");
-            const filePath = path.join(__dirname, file);
-            const cmd = require(filePath);
-            allItems.push({
-              name: commandName,
-              version: cmd.config?.version || "1.0.0",
-              category: cmd.config?.category || "general",
-              active: true
-            });
-          } catch (_) {
-            allItems.push({
-              name: file.replace(".js", ""),
-              version: "ERROR",
-              category: "unknown",
-              active: true,
-              corrupt: true
-            });
-          }
-        }
-
-        for (const file of disabledFiles) {
-          const commandName = file.replace(".js.disabled", "").replace(".disabled", "");
-          allItems.push({
-            name: commandName,
-            version: "N/A",
-            category: "disabled",
-            active: false
-          });
-        }
-
-        const itemsPerPage = 8;
         const pageArg = parseInt(args[1]) || 1;
-        const totalPages = Math.ceil(allItems.length / itemsPerPage) || 1;
-        const page = Math.max(1, Math.min(pageArg, totalPages));
-        const startIndex = (page - 1) * itemsPerPage;
-        const pageItems = allItems.slice(startIndex, startIndex + itemsPerPage);
-
-        let msg = "╭───────────────────╮\n";
-        msg += "  ✪𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 - 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒✪\n";
-        msg += "╰───────────────────╯\n\n";
-        msg += ` ➜ 𝐀𝐜𝐭𝐢𝐯𝐞: ${totalActive} | 𝐃𝐢𝐬𝐚𝐛𝐥𝐞𝐝: ${totalDisabled}\n`;
-        msg += ` ➜ 𝐏𝐚𝐠𝐞: ${page}/${totalPages}\n\n`;
-
-        pageItems.forEach((item, idx) => {
-          const num = startIndex + idx + 1;
-          const statusIcon = item.corrupt ? "⚠️" : (item.active ? "🟢" : "🔴");
-          msg += `  ${num}. ${statusIcon} ╭─ [ ${item.name} ]\n`;
-          msg += `     ├─ 𝐕𝐞𝐫𝐬𝐢𝐨𝐧: ${item.version}\n`;
-          msg += `     ╰─ 𝐂𝐚𝐭𝐞𝐠𝐨𝐫𝐲: ${item.category}\n\n`;
-        });
-
-        msg += "───────────────────────\n";
-        msg += "💡 𝐔𝐬𝐞 \"/cmd list [page]\" to paginate\n";
-        msg += "💡 𝐔𝐬𝐞 \"/cmd info [name]\" for details";
-
-        return await sendMessage(api, threadID, msg, messageID);
+        return await sendCmdListPage(api, threadID, pageArg);
       } catch (error) {
         return await sendMessage(api, threadID, `❌ [𝐄𝐑𝐑𝐎𝐑] ➜ Failed to fetch command list: ${error.message}`, messageID);
       }
     }
-
     // -------------------------------------------------------------
     // INFO COMMAND
     // -------------------------------------------------------------
@@ -956,13 +962,22 @@ module.exports = {
     return await sendMessage(api, threadID, `⚠️ [𝐈𝐍𝐅𝐎] ➜ Unknown subcommand. Here is the usage guide:\n\n${module.exports.config.guide}`, messageID);
   },
 
-onReply: async function({ api, event, Reply }) {
+onReply: async function({ api, event, Reply, replyData }) {
     const threadID = event.threadID;
     const messageID = event.messageID;
     const senderID = event.senderID;
     const body = event.body;
     
     if (!Reply || !body) return;
+
+    if (replyData && replyData.type === "list_pagination") {
+      const requestedPage = parseInt(body.trim(), 10);
+      if (!requestedPage || requestedPage < 1) {
+        return await sendMessage(api, threadID, "⚠️ Please reply with a valid page number.", messageID);
+      }
+      await sendCmdListPage(api, threadID, requestedPage, Reply.messageID);
+      return;
+    }
 
 const pending = pendingConfirmations.get(Reply.messageID);
     if (!pending) return;
@@ -994,5 +1009,13 @@ const pending = pendingConfirmations.get(Reply.messageID);
     replyManager.delete(Reply.messageID);
       await sendMessage(api, threadID, "❌ [𝐂𝐀𝐍𝐂𝐄𝐋𝐋𝐄𝐃] ➜ Overwrite cancelled by user.", messageID);
     }
+  },
+
+  onReaction: async function({ api, event, reactionData }) {
+    if (!reactionData || reactionData.type !== "list_pagination") return;
+    const reaction = event.reaction;
+    if (reaction !== "❤️" && reaction !== "💝") return;
+    const nextPage = (reactionData.page || 1) + 1;
+    await sendCmdListPage(api, event.threadID, nextPage, event.messageID);
   }
 };
