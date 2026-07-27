@@ -109,21 +109,39 @@ await api.sendMessage(info, event.threadID);
       const spinnerFrames = ["◐", "◓", "◑", "◒"];
       let frameIdx = 0;
 
+      const withTimeout = (promise, ms, label) => {
+        return Promise.race([
+          promise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Timed out during: ${label} (waited ${ms / 1000}s)`)), ms)
+          )
+        ]);
+      };
+
       const renderFrame = (pct, label) => {
         const filled = Math.round(pct / 10);
         const bar = "█".repeat(filled) + "░".repeat(10 - filled);
         return `♻️ Restarting Riyad Bot...\n\n${spinnerFrames[frameIdx]} [${bar}] ${pct}%\n${label}`;
       };
 
-      const sentMsg = await new Promise((resolve) => {
-        api.sendMessage(renderFrame(0, "Preparing restart..."), threadID, (err, info) => resolve(info));
-      });
-      const msgID = sentMsg?.messageID;
+      let msgID = null;
+      try {
+        const sentMsg = await withTimeout(
+          new Promise((resolve) => {
+            api.sendMessage(renderFrame(0, "Preparing restart..."), threadID, (err, info) => resolve(info));
+          }),
+          8000,
+          "sending initial message"
+        );
+        msgID = sentMsg?.messageID;
+      } catch (_) {}
 
       const editFrame = async (pct, label) => {
         frameIdx = (frameIdx + 1) % spinnerFrames.length;
         if (msgID && typeof api.editMessage === "function") {
-          try { await api.editMessage(renderFrame(pct, label), msgID); } catch (_) {}
+          try {
+            await withTimeout(api.editMessage(renderFrame(pct, label), msgID), 6000, `editing progress (${pct}%)`);
+          } catch (_) {}
         }
       };
 
@@ -143,22 +161,39 @@ await api.sendMessage(info, event.threadID);
         const messengerUtil = require("../utils/messenger");
         messengerUtil.reconnectMessenger();
 
-        await new Promise((r) => setTimeout(r, 3500));
+        await withTimeout(new Promise((r) => setTimeout(r, 3500)), 6000, "waiting for reconnect");
 
         await editFrame(100, "✅ Done!");
 
-        await api.sendMessage(
-          "✅ [ RESTART SUCCESSFUL ]\n" +
-          "╭─────────────◊\n" +
-          "├‣ Commands & events reloaded\n" +
-          "├‣ Messenger session refreshed\n" +
-          "╰─────────────◊\n" +
-          "🤖 Riyad Bot is back online — no downtime!",
-          threadID
+        await withTimeout(
+          new Promise((resolve, reject) => {
+            api.sendMessage(
+              "✅ [ RESTART SUCCESSFUL ]\n" +
+              "╭─────────────◊\n" +
+              "├‣ Commands & events reloaded\n" +
+              "├‣ Messenger session refreshed\n" +
+              "╰─────────────◊\n" +
+              "🤖 Riyad Bot is back online — no downtime!",
+              threadID,
+              (err, info) => (err ? reject(err) : resolve(info))
+            );
+          }),
+          8000,
+          "sending success message"
         );
       } catch (err) {
-        logger.error("Hot-restart failed:", err);
-        await api.sendMessage(`❌ Restart failed: ${err.message}`, threadID);
+        logger.error("Hot-restart failed or timed out:", err);
+        try {
+          await withTimeout(
+            new Promise((resolve, reject) => {
+              api.sendMessage(`❌ Restart failed or timed out: ${err.message}\n\nCheck server logs for more detail.`, threadID, (e2) => (e2 ? reject(e2) : resolve()));
+            }),
+            6000,
+            "sending failure message"
+          );
+        } catch (finalErr) {
+          logger.error("Could not even send the restart-failed message:", finalErr);
+        }
       }
     }
   },
