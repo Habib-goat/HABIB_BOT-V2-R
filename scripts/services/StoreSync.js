@@ -30,7 +30,7 @@ class StoreSync {
     }
   }
 
-  static async syncAll() {
+  static async syncAll(onProgress = null) {
     if (!fs.existsSync(CMDS_DIR)) {
       try { fs.mkdirSync(CMDS_DIR, { recursive: true }); } catch (_) {}
       return { syncedCount: 0, skippedCount: 0 };
@@ -42,8 +42,15 @@ class StoreSync {
     const files = fs.readdirSync(CMDS_DIR).filter(f => f.endsWith(".js"));
     let syncedCount = 0;
     let skippedCount = 0;
+    const failedFiles = [];
+    let processedCount = 0;
 
     for (const file of files) {
+      processedCount++;
+      if (typeof onProgress === "function") {
+        try { onProgress(processedCount, files.length, file); } catch (_) {}
+      }
+
       const filePath = path.join(CMDS_DIR, file);
       let content;
       try { content = fs.readFileSync(filePath, "utf8"); } catch (_) { continue; }
