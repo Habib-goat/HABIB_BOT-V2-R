@@ -30,6 +30,7 @@ try {
 let isConnected = false;
 let stopListener = null;
 let reconnectTimer = null;
+let doConnectRef = null;
 // Ensure non-blocking fetching of user metadata
 async function ensureUserData(api, senderID) {
   if (!senderID) return;
@@ -350,10 +351,25 @@ try {
     });
   }
 
+  doConnectRef = doConnect;
   doConnect();
+}
+
+function reconnectMessenger() {
+  logger.system("Hot-restart requested: tearing down current session and reconnecting...");
+  if (typeof stopListener === "function") {
+    try { stopListener(); } catch (_) {}
+  }
+  isConnected = false;
+  if (typeof doConnectRef === "function") {
+    doConnectRef();
+  } else {
+    logger.error("Cannot hot-restart: messenger was never started.");
+  }
 }
 
 module.exports = {
   startMessenger,
-  isConnected: () => isConnected
+  isConnected: () => isConnected,
+  reconnectMessenger
 };
