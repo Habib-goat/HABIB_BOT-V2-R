@@ -92,97 +92,8 @@ await api.sendMessage(info, event.threadID);
         `• Total Command Invocations: ${executed}`, event.threadID);
     }
   },
+  
   {
-    config: {
-      name: "restart",
-      aliases: ["reboot"],
-      version: "1.0.0",
-      author: "Riyad Bot",
-      countDown: 10,
-      role: 2, // Bot Admin
-      category: "system",
-      guide: "{pn}",
-      description: "Safely restart the bot server-side process."
-    },
-    onStart: async ({ api, event }) => {
-      const threadID = event.threadID;
-      const spinnerFrames = ["◐", "◓", "◑", "◒"];
-      let frameIdx = 0;
-
-      const withTimeout = (promise, ms, label) => {
-        return Promise.race([
-          promise,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timed out during: ${label} (waited ${ms / 1000}s)`)), ms)
-          )
-        ]);
-      };
-
-      const renderFrame = (pct, label) => {
-        const filled = Math.round(pct / 10);
-        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
-        return `♻️ Restarting Riyad Bot...\n\n${spinnerFrames[frameIdx]} [${bar}] ${pct}%\n${label}`;
-      };
-
-      let msgID = null;
-      try {
-        const sentMsg = await withTimeout(
-          new Promise((resolve) => {
-            api.sendMessage(renderFrame(0, "Preparing restart..."), threadID, (err, info) => resolve(info));
-          }),
-          8000,
-          "sending initial message"
-        );
-        msgID = sentMsg?.messageID;
-      } catch (_) {}
-
-      const editFrame = async (pct, label) => {
-        frameIdx = (frameIdx + 1) % spinnerFrames.length;
-        if (msgID && typeof api.editMessage === "function") {
-          try {
-            await withTimeout(api.editMessage(renderFrame(pct, label), msgID), 6000, `editing progress (${pct}%)`);
-          } catch (_) {}
-        }
-      };
-
-      try {
-        await editFrame(20, "Stopping current session...");
-
-onStart: async ({ api, event }) => {
-      const threadID = event.threadID;
-      const spinnerFrames = ["◐", "◓", "◑", "◒"];
-      let frameIdx = 0;
-
-      const withTimeout = (promise, ms, label) => {
-        return Promise.race([
-          promise,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timed out during: ${label} (waited ${ms / 1000}s)`)), ms)
-          )
-        ]);
-      };
-
-      const renderFrame = (pct, label) => {
-        const filled = Math.round(pct / 10);
-        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
-        return `♻️ Restarting Riyad Bot...\n\n${spinnerFrames[frameIdx]} [${bar}] ${pct}%\n${label}`;
-      };
-
-      let msgID = null;
-      try {
-        const sentMsg = await withTimeout(
-          new Promise((resolve) => {
-            api.sendMessage(renderFrame(0, "Preparing restart..."), threadID, (err, info) => resolve(info));
-          }),
-          8000,
-          "sending initial message"
-        );
-        msgID = sentMsg?.messageID;
-      } catch (_) {}
-
-      const editFrame = async (pct, label) => {
-        frameIdx = (frameIdx + 1) % spinnerFrames.length;
-{
     config: {
       name: "restart",
       aliases: ["reboot"],
@@ -295,7 +206,8 @@ onStart: async ({ api, event }) => {
         }
       }
     }
-  },
+  },    
+
   {
     config: {
       name: "backup",
