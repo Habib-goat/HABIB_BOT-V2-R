@@ -261,7 +261,7 @@ module.exports = {
   config: {
     name: "edit",
     version: "3.0.0",
-    hasPermission: 0,
+    hasPermission: 2,
     credits: "Riyad",
     description:
       "Reply to any image with an instruction (Bangla, Banglish, or English) to edit it with AI. No fixed command word needed.",
