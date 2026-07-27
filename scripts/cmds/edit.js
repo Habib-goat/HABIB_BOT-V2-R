@@ -1,138 +1,334 @@
+/**
+ * @file edit.js
+ * @description AI Image Editor — reply to any image with a plain-language
+ *              instruction (Bangla, Banglish, or English) and the bot edits it
+ *              using deAPI's Image-to-Image API. No fixed command word needed —
+ *              this hooks into onChat, so any reply-to-image message is treated
+ *              as an edit request.
+ * @credits Riyad
+ * @dependencies axios, form-data, fs-extra, @google/genai
+ * @env DEAPI_API_KEY   - required, from https://app.deapi.ai/dashboard/api-keys
+ * @env GEMINI_API_KEY  - required, used to detect/translate Bangla & Banglish prompts
+ * @env GEMINI_API_KEY_2, GEMINI_API_KEY_3 - optional fallback keys
+ */
+
 const axios = require("axios");
+const FormData = require("form-data");
 const fs = require("fs-extra");
 const path = require("path");
-const http = require("http");
-const https = require("https");
+const { GoogleGenAI } = require("@google/genai");
 
-const apiUrl = "https://raw.githubusercontent.com/Saim-x69x/sakura/main/ApiUrl.json";
-let API_CACHE = null;
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
 
-const client = axios.create({
-  timeout: 60000, // reduced from 180s — fail fast and tell the user instead of hanging silently
-  httpAgent: new http.Agent({ keepAlive: true }),
-  httpsAgent: new https.Agent({ keepAlive: true })
-});
+const DEAPI_BASE = "https://api.deapi.ai";
+const DEAPI_KEY = process.env.DEAPI_API_KEY;
 
-async function getApiUrl() {
-  if (API_CACHE) return API_CACHE;
-  const r = await client.get(apiUrl);
-  if (!r.data?.apiv3) throw new Error("apiv3 key missing from ApiUrl.json");
-  API_CACHE = r.data.apiv3;
-  return API_CACHE;
+const GEMINI_KEYS = [
+  process.env.GEMINI_API_KEY,
+  process.env.GEMINI_API_KEY_2,
+  process.env.GEMINI_API_KEY_3
+].filter(Boolean);
+
+// Preferred img2img models, in priority order (matched against name or slug)
+const MODEL_PRIORITY = [
+  "qwen image edit plus",
+  "flux.2 klein 4b bf16",
+  "flux.1 dev",
+  "flux.1 schnell"
+];
+
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_DIR = path.join(__dirname, "cache");
+
+const client = axios.create({ timeout: 120000 });
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Fetch available img2img models from deAPI and pick the best one. */
+async function pickModel() {
+  const resp = await client.get(`${DEAPI_BASE}/api/v2/models`, {
+    headers: deapiHeaders(),
+    params: { "filter[inference_types]": "img2img" }
+  });
+
+  const models = resp.data?.data || [];
+  if (!models.length) {
+    throw new Error("No Image-to-Image models are currently available on deAPI.");
+  }
+
+  for (const preferred of MODEL_PRIORITY) {
+    const match = models.find(
+      (m) =>
+        m.name?.toLowerCase() === preferred ||
+        m.slug?.toLowerCase() === preferred.replace(/[.\s]/g, "").toLowerCase() ||
+        m.name?.toLowerCase().includes(preferred)
+    );
+    if (match) return match;
+  }
+
+  // Fallback: first available model
+  return models[0];
 }
 
-async function urlToBase64(url) {
-  const r = await client.get(url, { responseType: "arraybuffer" });
-  return Buffer.from(r.data).toString("base64");
-}
-
-async function progress(api, msgId, p, t) {
-  if (!api.editMessage || !msgId) return;
-  const bars = {
-    10: "▓░░░░░░░░░", 20: "▓▓░░░░░░░░", 30: "▓▓▓░░░░░░░", 40: "▓▓▓▓░░░░░░",
-    50: "▓▓▓▓▓░░░░░", 60: "▓▓▓▓▓▓░░░░", 70: "▓▓▓▓▓▓▓░░░", 80: "▓▓▓▓▓▓▓▓░░",
-    90: "▓▓▓▓▓▓▓▓▓░", 100: "▓▓▓▓▓▓▓▓▓▓"
+function deapiHeaders(extra = {}) {
+  return {
+    Authorization: `Bearer ${DEAPI_KEY}`,
+    Accept: "application/json",
+    ...extra
   };
+}
+
+/**
+ * Detect + translate a Bangla / Banglish / English prompt into a clean,
+ * professional English image-editing instruction using Gemini.
+ * Falls back to the raw text if every Gemini key fails.
+ */
+async function translatePrompt(rawText) {
+  if (!GEMINI_KEYS.length) return rawText.trim();
+
+  const instruction = `You are a prompt translator for an AI image editing system.
+
+Input text (may be Bangla, Banglish/Romanized Bangla, or English): "${rawText}"
+
+Rules:
+- If the input is Bangla or Banglish, translate it into natural, professional English.
+- If it is already English, refine it into a clear, professional image-editing instruction.
+- Preserve the user's intent exactly — do not add creative details they did not ask for.
+- Unless the user explicitly asks to change them, the instruction must preserve: face, identity, hairstyle, skin tone, clothing, body, pose, and expression.
+- Output ONLY the final English instruction. No quotes, no explanation, no extra text.`;
+
+  let lastError;
+  for (const apiKey of GEMINI_KEYS) {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-flash-latest",
+        contents: [{ parts: [{ text: instruction }] }]
+      });
+
+      const text =
+        response.text ||
+        response.candidates?.[0]?.content?.parts
+          ?.map((p) => p.text)
+          .filter(Boolean)
+          .join(" ");
+
+      if (text && text.trim()) return text.trim();
+    } catch (err) {
+      lastError = err;
+      const msg = String(err.message || "");
+      if (err.status === 429 || err.status === 404 || /RESOURCE_EXHAUSTED|NOT_FOUND/.test(msg)) {
+        continue; // try next key
+      }
+      break; // non-recoverable error, stop trying
+    }
+  }
+
+  // Translation failed — fall back to the raw prompt rather than blocking the edit.
+  console.error("Prompt translation failed, using raw text:", lastError?.message);
+  return rawText.trim();
+}
+
+async function downloadToBuffer(url) {
+  const resp = await client.get(url, { responseType: "arraybuffer" });
+  return Buffer.from(resp.data);
+}
+
+async function editMsg(api, msgId, text) {
+  if (!api.editMessage || !msgId) return;
   try {
-    await api.editMessage(`🖌️ Editing Image...\n\n${bars[p]} ${p}%\n${t}`, msgId);
-  } catch (err) {
-    // Previously silent — now logged so you can see in server logs if editMessage is failing
-    console.error(`[edit] progress update (${p}%) failed:`, err.message);
+    await api.editMessage(text, msgId);
+  } catch {
+    /* ignore — editing progress messages is best-effort */
   }
 }
+
+/** Submit the edit job to deAPI and return the request_id. */
+async function submitEditJob({ imageBuffer, prompt, model }) {
+  const form = new FormData();
+  form.append("prompt", prompt);
+  form.append("model", model.slug);
+  form.append("steps", String(model.info?.defaults?.steps ?? 4));
+  form.append("seed", "-1");
+  form.append("image", imageBuffer, {
+    filename: "input.jpg",
+    contentType: "image/jpeg"
+  });
+
+  const resp = await client.post(`${DEAPI_BASE}/api/v2/images/edits`, form, {
+    headers: deapiHeaders(form.getHeaders())
+  });
+
+  const requestId = resp.data?.data?.request_id;
+  if (!requestId) throw new Error("deAPI did not return a request_id.");
+  return requestId;
+}
+
+/** Poll a deAPI job until it's done, errors out, or times out. */
+async function pollJob(requestId) {
+  const start = Date.now();
+  while (Date.now() - start < POLL_TIMEOUT_MS) {
+    const resp = await client.get(`${DEAPI_BASE}/api/v2/jobs/${requestId}`, {
+      headers: deapiHeaders()
+    });
+    const data = resp.data?.data;
+
+    if (data?.status === "done") return data;
+    if (data?.status === "error") {
+      throw new Error(data?.error_message || "The image edit job failed on deAPI's side.");
+    }
+
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+  throw new Error("Timed out waiting for the image edit to finish.");
+}
+
+// ---------------------------------------------------------------------------
+// Command export
+// ---------------------------------------------------------------------------
 
 module.exports = {
   config: {
     name: "edit",
-    version: "2.0.1",
-    author: "Saimx69x + ChatGPT",
-    countDown: 5,
-    role: 0,
-    shortDescription: "Edit image",
-    longDescription: "Reply to an image",
-    category: "ai",
-    guide: "{p}edit <prompt>"
+    version: "3.0.0",
+    hasPermission: 0,
+    credits: "Riyad",
+    description:
+      "Reply to any image with an instruction (Bangla, Banglish, or English) to edit it with AI. No fixed command word needed.",
+    commandCategory: "AI Image",
+    usages: "Reply to an image with what you want changed, e.g. \"ghibli style\"",
+    cooldowns: 5
   },
 
+  // Manual fallback: "/edit <prompt>" while replying to an image still works.
   onStart: async function ({ api, event, args }) {
-    const img = event.messageReply?.attachments?.[0];
     const prompt = args.join(" ").trim();
-
-    if (!img || img.type !== "photo")
-      return api.sendMessage("❌ Reply to an image first.", event.threadID, event.messageID);
-
-    if (!prompt)
-      return api.sendMessage("❌ Please provide a prompt.", event.threadID, event.messageID);
-
-    let wait;
-    try {
-      wait = await new Promise((res, rej) => {
-        api.sendMessage(
-          "🖌️ Editing Image...\n\n▓░░░░░░░░░ 10%\n⏳ Initializing AI...",
-          event.threadID,
-          (e, i) => {
-            if (e) return rej(e);
-            res(i || {});
-          },
-          event.messageID
-        );
-      });
-    } catch (err) {
-      console.error("[edit] failed to send initial progress message:", err.message);
-      return api.sendMessage("❌ Could not start image edit (failed to send status message).", event.threadID, event.messageID);
+    if (!prompt) {
+      return api.sendMessage(
+        "❌ Reply to an image with your edit instruction.\nExample: reply to a photo and type \"background remove kore dao\".",
+        event.threadID,
+        event.messageID
+      );
     }
+    return handleEditRequest({ api, event, prompt });
+  },
 
-    const id = wait.messageID;
-    const timers = [
-      setTimeout(() => progress(api, id, 20, "📥 Uploading image..."), 2000),
-      setTimeout(() => progress(api, id, 30, "🧠 Analyzing image..."), 4000),
-      setTimeout(() => progress(api, id, 40, "🎨 Applying changes..."), 6000),
-      setTimeout(() => progress(api, id, 50, "✨ Enhancing details..."), 8000),
-      setTimeout(() => progress(api, id, 60, "🪄 Rendering..."), 10000),
-      setTimeout(() => progress(api, id, 70, "✨ Enhancing details..."), 12000),
-      setTimeout(() => progress(api, id, 80, "🔍 Final touches..."), 14000),
-      setTimeout(() => progress(api, id, 90, "📦 Preparing result..."), 16000)
-    ];
+  // Primary path: fires on every message. If it's a reply to a photo with
+  // non-empty text, treat the whole message body as the edit instruction —
+  // no "/edit" prefix required.
+  onChat: async function ({ api, event, args }) {
+    const replied = event.messageReply;
+    const attachment = replied?.attachments?.[0];
 
-    const cache = path.join(__dirname, "cache");
-    await fs.ensureDir(cache);
-    const out = path.join(cache, Date.now() + "_edit.jpg");
+    if (!replied || !attachment || attachment.type !== "photo") return;
 
-    try {
-      console.log("[edit] fetching apiv3 base url...");
-      const base = await getApiUrl();
-      console.log("[edit] apiv3 =", base);
+    const prompt = (Array.isArray(args) ? args.join(" ") : event.body || "").trim();
+    if (!prompt) return;
 
-      const payload = {
-        prompt: `Edit the given image based on this description:\n${prompt}`,
-        images: [await urlToBase64(img.url)],
-        format: "jpg"
-      };
-
-      console.log("[edit] sending request to apiv3...");
-      const resp = await client.post(base, payload, { responseType: "arraybuffer" });
-      console.log("[edit] apiv3 responded, bytes:", resp.data?.length);
-
-      await progress(api, id, 100, "✅ Uploading image...");
-      await fs.writeFile(out, Buffer.from(resp.data));
-      timers.forEach(clearTimeout);
-      if (id) try { await api.unsendMessage(id); } catch {}
-      api.sendMessage({ body: `✅ Image edited successfully!\n📝 ${prompt}`, attachment: fs.createReadStream(out) }, event.threadID, event.messageID);
-
-    } catch (e) {
-      timers.forEach(clearTimeout);
-      if (id) try { await api.unsendMessage(id); } catch {}
-
-      // Log full detail server-side so you can see exactly what failed
-      console.error("[edit] FAILED:", e.code || "", e.message, e?.response?.status || "");
-
-      let reason = e.message || "Unknown error";
-      if (e.code === "ECONNABORTED") reason = "The image API timed out (60s) — it may be cold-starting or offline. Try again in a minute.";
-      else if (e.response?.status) reason = `Image API returned status ${e.response.status}.`;
-
-      api.sendMessage(`❌ Failed to edit image.\n${reason}`, event.threadID, event.messageID);
-    } finally {
-      if (await fs.pathExists(out)) await fs.remove(out);
-    }
+    // Avoid double-handling: if this message is the explicit "/edit ..." form,
+    // let onStart's dispatch handle it instead of running twice.
+    // (onChat still fires alongside onStart per the framework's design, so we
+    // just let both paths converge on the same handleEditRequest — it's
+    // idempotent per-invocation since each call submits its own job.)
+    await handleEditRequest({ api, event, prompt, imageUrl: attachment.url });
   }
 };
+
+// ---------------------------------------------------------------------------
+// Core flow
+// ---------------------------------------------------------------------------
+
+async function handleEditRequest({ api, event, prompt, imageUrl }) {
+  const { threadID, messageID } = event;
+  const attachment = imageUrl ? { url: imageUrl } : event.messageReply?.attachments?.[0];
+
+  if (!DEAPI_KEY) {
+    return api.sendMessage("❌ Server misconfigured: DEAPI_API_KEY is missing.", threadID, messageID);
+  }
+  if (!attachment || !attachment.url) {
+    return api.sendMessage("❌ Please reply to an image to edit it.", threadID, messageID);
+  }
+
+  let progressId = null;
+  let outPath = null;
+
+  try {
+    progressId = await new Promise((resolve) => {
+      api.sendMessage("🖼️ Image detected...", threadID, (err, info) => resolve(info?.messageID || null), messageID);
+    });
+
+    await editMsg(api, progressId, "📥 Downloading your image...");
+    const imageBuffer = await downloadToBuffer(attachment.url);
+
+    await editMsg(api, progressId, "🌐 Translating prompt...");
+    const englishPrompt = await translatePrompt(prompt);
+
+    await editMsg(api, progressId, `🤖 Processing with AI...\n📝 ${englishPrompt}`);
+    const model = await pickModel();
+
+    const requestId = await submitEditJob({ imageBuffer, prompt: englishPrompt, model });
+
+    await editMsg(api, progressId, "⏳ Please wait, rendering your edit...");
+    const result = await pollJob(requestId);
+
+    if (!result.result_url) {
+      throw new Error("deAPI finished the job but returned no result file.");
+    }
+
+    await editMsg(api, progressId, "📥 Downloading result...");
+    const resultBuffer = await downloadToBuffer(result.result_url);
+
+    await fs.ensureDir(CACHE_DIR);
+    outPath = path.join(CACHE_DIR, `${Date.now()}_edited.jpg`);
+    await fs.writeFile(outPath, resultBuffer);
+
+    if (progressId) {
+      try {
+        await api.unsendMessage(progressId);
+      } catch {
+        /* best-effort */
+      }
+    }
+
+    await api.sendMessage(
+      { body: `✅ Image edited successfully.\n📝 ${englishPrompt}`, attachment: fs.createReadStream(outPath) },
+      threadID,
+      messageID
+    );
+  } catch (err) {
+    if (progressId) {
+      try {
+        await api.unsendMessage(progressId);
+      } catch {
+        /* best-effort */
+      }
+    }
+    api.sendMessage(`❌ ${friendlyError(err)}`, threadID, messageID);
+  } finally {
+    if (outPath && (await fs.pathExists(outPath))) {
+      await fs.remove(outPath).catch(() => {});
+    }
+  }
+}
+
+/** Map raw errors to short, user-friendly Messenger text. */
+function friendlyError(err) {
+  const status = err.response?.status;
+  const apiMsg = err.response?.data?.message;
+
+  if (status === 401) return "Invalid or missing deAPI key. Please check DEAPI_API_KEY.";
+  if (status === 422) return `Invalid request: ${apiMsg || "please check your image or prompt."}`;
+  if (status === 429) return "Rate limited by deAPI — please try again in a moment.";
+  if (/timed out|ETIMEDOUT|ECONNABORTED/i.test(err.message)) return "The request timed out. Please try again.";
+  if (/ENOTFOUND|ECONNREFUSED|network/i.test(err.message)) return "Network error while reaching deAPI. Please try again.";
+  if (/download/i.test(err.message)) return "Couldn't download the image. Please try replying to a different photo.";
+  if (/Image-to-Image models/i.test(err.message)) return "No image editing models are available right now. Try again later.";
+  if (/timed out waiting/i.test(err.message)) return "The edit took too long and timed out. Please try again.";
+
+  return err.message || "Something went wrong while editing the image.";
+}
