@@ -209,9 +209,9 @@ module.exports = {
         const startIndex = (page - 1) * itemsPerPage;
         const pageItems = allItems.slice(startIndex, startIndex + itemsPerPage);
 
-        let msg = "╭─────────────────────╮\n";
+        let msg = "╭───────────────────╮\n";
         msg += "  ✪𝐑𝐈𝐘𝐀𝐃 𝐁𝐎𝐓 - 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒✪\n";
-        msg += "╰─────────────────────╯\n\n";
+        msg += "╰───────────────────╯\n\n";
         msg += ` ➜ 𝐀𝐜𝐭𝐢𝐯𝐞: ${totalActive} | 𝐃𝐢𝐬𝐚𝐛𝐥𝐞𝐝: ${totalDisabled}\n`;
         msg += ` ➜ 𝐏𝐚𝐠𝐞: ${page}/${totalPages}\n\n`;
 
@@ -255,9 +255,9 @@ module.exports = {
         }
 
         const config = cmd.config;
-        let msg = "╭────────────────────────╮\n";
+        let msg = "╭─────────────────────╮\n";
         msg += `   ℹ️ 𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐈𝐍𝐅𝐎𝐑𝐌𝐀𝐓𝐈𝐎𝐍\n`;
-        msg += "╰────────────────────────╯\n\n";
+        msg += "╰─────────────────────╯\n\n";
         msg += `  • 𝐍𝐚𝐦𝐞: ${config.name}\n`;
         msg += `  • 𝐀𝐥𝐢𝐚𝐬𝐞𝐬: ${Array.isArray(config.aliases) ? config.aliases.join(", ") : (config.aliases || "None")}\n`;
         msg += `  • 𝐕𝐞𝐫𝐬𝐢𝐨𝐧: ${config.version || "1.0.0"}\n`;
@@ -314,7 +314,7 @@ module.exports = {
           return await sendMessage(api, threadID, `🔍 [𝐒𝐄𝐀𝐑𝐂𝐇] ➜ No commands found matching "${query}".`, messageID);
         }
 
-        let msg = `🔍 [𝐒𝐄𝐀𝐑𝐂𝐇] ➜ Found ${results.length} results:\n──────────────────────────\n\n`;
+        let msg = `🔍 [𝐒𝐄𝐀𝐑𝐂𝐇] ➜ Found ${results.length} results:\n──────────────────────\n\n`;
         results.forEach((cmd, idx) => {
           msg += `  ${idx + 1}. 🟢 ${cmd.name} (v${cmd.version || "1.0.0"})\n`;
           msg += `     └─ ${cmd.description || "No description"}\n\n`;
@@ -350,7 +350,7 @@ module.exports = {
           }
         }
 
-        let msg = "📊 [𝐂𝐎𝐔𝐍𝐓] ➜ Command Diagnostics Count:\n──────────────────────────\n\n";
+        let msg = "📊 [𝐂𝐎𝐔𝐍𝐓] ➜ Command Diagnostics Count:\n───────────────────────\n\n";
         msg += `  • 𝐓𝐨𝐭𝐚𝐥 𝐀𝐜𝐭𝐢𝐯𝐞: ${activeCount}\n`;
         msg += `  • 𝐓𝐨𝐭𝐚𝐥 𝐃𝐢𝐬𝐚𝐛𝐥𝐞𝐝: ${disabledFiles.length}\n`;
         msg += `  • 𝐂𝐨𝐫𝐫𝐮𝐩𝐭/𝐁𝐫𝐨𝐤𝐞𝐧: ${corruptCount}\n\n`;
@@ -678,7 +678,7 @@ module.exports = {
             }
           }
 
-          let msg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Reload Complete:\n──────────────────────────\n`;
+          let msg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Reload Complete:\n──────────────────────\n`;
           msg += `  • 𝐒𝐮𝐜𝐜𝐞𝐬𝐬𝐟𝐮𝐥𝐥𝐲 𝐑𝐞𝐥𝐨𝐚𝐝𝐞𝐝: ${reloadedCount}\n`;
           msg += `  • 𝐅𝐚𝐢𝐥𝐞𝐝: ${failedCount}`;
           if (errors.length > 0) {
@@ -736,7 +736,7 @@ module.exports = {
             }
           }
 
-          let msg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Load All Complete:\n──────────────────────────\n`;
+          let msg = `✨ [𝐒𝐔𝐂𝐂𝐄𝐒𝐒] ➜ Load All Complete:\n───────────────────────\n`;
           msg += `  • 𝐒𝐮𝐜𝐜𝐞𝐬𝐬𝐟𝐮𝐥𝐥𝐲 𝐋𝐨𝐚𝐝𝐞𝐝: ${loadedCount}\n`;
           msg += `  • 𝐅𝐚𝐢𝐥𝐞𝐝: ${failedCount}`;
           if (errors.length > 0) {
@@ -938,7 +938,7 @@ module.exports = {
     // -------------------------------------------------------------
     if (sub === "doctor") {
       try {
-        let msg = "🩺 [𝐃𝐎𝐂𝐓𝐎𝐑] ➜ System Health Diagnostics:\n──────────────────────────\n\n";
+        let msg = "🩺 [𝐃𝐎𝐂𝐓𝐎𝐑] ➜ System Health Diagnostics:\n───────────────────────\n\n";
 
         // Check 1: Directory Permissions
         try {
