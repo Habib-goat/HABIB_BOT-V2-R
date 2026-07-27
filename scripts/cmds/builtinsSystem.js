@@ -148,6 +148,50 @@ await api.sendMessage(info, event.threadID);
       try {
         await editFrame(20, "Stopping current session...");
 
+onStart: async ({ api, event }) => {
+      const threadID = event.threadID;
+      const spinnerFrames = ["◐", "◓", "◑", "◒"];
+      let frameIdx = 0;
+
+      const withTimeout = (promise, ms, label) => {
+        return Promise.race([
+          promise,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Timed out during: ${label} (waited ${ms / 1000}s)`)), ms)
+          )
+        ]);
+      };
+
+      const renderFrame = (pct, label) => {
+        const filled = Math.round(pct / 10);
+        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+        return `♻️ Restarting Riyad Bot...\n\n${spinnerFrames[frameIdx]} [${bar}] ${pct}%\n${label}`;
+      };
+
+      let msgID = null;
+      try {
+        const sentMsg = await withTimeout(
+          new Promise((resolve) => {
+            api.sendMessage(renderFrame(0, "Preparing restart..."), threadID, (err, info) => resolve(info));
+          }),
+          8000,
+          "sending initial message"
+        );
+        msgID = sentMsg?.messageID;
+      } catch (_) {}
+
+      const editFrame = async (pct, label) => {
+        frameIdx = (frameIdx + 1) % spinnerFrames.length;
+        if (msgID && typeof api.editMessage === "function") {
+          try {
+            await withTimeout(api.editMessage(renderFrame(pct, label), msgID), 6000, `editing progress (${pct}%)`);
+          } catch (_) {}
+        }
+      };
+
+      try {
+        await editFrame(20, "Stopping current session...");
+
         const commandLoaderReal = require("../handlers/commandLoader");
         await editFrame(45, "Reloading all commands...");
         commandLoaderReal.loadAll();
@@ -161,13 +205,23 @@ await api.sendMessage(info, event.threadID);
         const messengerUtil = require("../utils/messenger");
         messengerUtil.reconnectMessenger();
 
-        await withTimeout(new Promise((r) => setTimeout(r, 3500)), 6000, "waiting for reconnect");
+        // Give the new session time to fully establish
+        await new Promise((r) => setTimeout(r, 6000));
 
-        await editFrame(100, "✅ Done!");
+        // IMPORTANT: the old "api" is now a dead reference (old connection
+        // was torn down). Fetch the freshly reconnected api to finish up.
+        const freshApi = messengerUtil.getApi() || api;
+
+        // Remove the progress message, then send a clean success message
+        if (msgID && typeof freshApi.unsendMessage === "function") {
+          try {
+            await withTimeout(freshApi.unsendMessage(msgID), 6000, "removing progress message");
+          } catch (_) {}
+        }
 
         await withTimeout(
           new Promise((resolve, reject) => {
-            api.sendMessage(
+            freshApi.sendMessage(
               "✅ [ RESTART SUCCESSFUL ]\n" +
               "╭─────────────◊\n" +
               "├‣ Commands & events reloaded\n" +
@@ -184,9 +238,11 @@ await api.sendMessage(info, event.threadID);
       } catch (err) {
         logger.error("Hot-restart failed or timed out:", err);
         try {
+          const messengerUtil = require("../utils/messenger");
+          const fallbackApi = messengerUtil.getApi() || api;
           await withTimeout(
             new Promise((resolve, reject) => {
-              api.sendMessage(`❌ Restart failed or timed out: ${err.message}\n\nCheck server logs for more detail.`, threadID, (e2) => (e2 ? reject(e2) : resolve()));
+              fallbackApi.sendMessage(`❌ Restart failed or timed out: ${err.message}\n\nCheck server logs for more detail.`, threadID, (e2) => (e2 ? reject(e2) : resolve()));
             }),
             6000,
             "sending failure message"
