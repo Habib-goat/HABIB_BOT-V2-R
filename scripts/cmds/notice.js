@@ -334,8 +334,8 @@ for (const doc of noticeDocs) {
 
 module.exports = {
   config: {
-    name: "n",
-    aliases: ["notice"],
+    name: "notice",
+    aliases: ["n"],
     version: "2.0.0",
     author: "Riyad",
     countDown: 5,
