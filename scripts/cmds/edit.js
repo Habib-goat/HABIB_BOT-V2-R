@@ -167,13 +167,50 @@ async function downloadToBuffer(url) {
   return Buffer.from(resp.data);
 }
 
+/**
+ * fca-eryxenx's MQTT-backed calls (editMessage, unsendMessage) resolve their
+ * Promise only when the server sends back a matching response — and have no
+ * built-in timeout. If that response never arrives (flaky MQTT connection,
+ * seen in production logs as "mqtt puback ignored" warnings), the call hangs
+ * forever and silently stalls the whole edit flow. Guard every such call with
+ * a manual timeout so a missed response can never block progress.
+ */
+function withTimeout(promiseFactory, ms, label) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      console.error(`[edit.js] ${label} timed out after ${ms}ms, continuing anyway`);
+      resolve(null);
+    }, ms);
+
+    Promise.resolve()
+      .then(() => promiseFactory())
+      .then((result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        console.error(`[edit.js] ${label} failed:`, err.message || err);
+        resolve(null);
+      });
+  });
+}
+
 async function editMsg(api, msgId, text) {
   if (!api.editMessage || !msgId) return;
-  try {
-    await api.editMessage(text, msgId);
-  } catch {
-    /* ignore — editing progress messages is best-effort */
-  }
+  await withTimeout(() => api.editMessage(text, msgId), 5000, "editMessage");
+}
+
+async function safeUnsend(api, msgId) {
+  if (!api.unsendMessage || !msgId) return;
+  await withTimeout(() => api.unsendMessage(msgId), 5000, "unsendMessage");
 }
 
 /** Submit the edit job to deAPI and return the request_id. */
@@ -335,13 +372,8 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
     outPath = path.join(CACHE_DIR, `${Date.now()}_edited.jpg`);
     await fs.writeFile(outPath, resultBuffer);
 
-    if (progressId) {
-      try {
-        await api.unsendMessage(progressId);
-      } catch {
-        /* best-effort */
-      }
-    }
+    console.log("[edit.js] step: unsending progress message");
+    await safeUnsend(api, progressId);
 
     console.log("[edit.js] step: sending final edited image to Messenger");
     await api.sendMessage(
@@ -355,13 +387,7 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
     );
   } catch (err) {
     console.error("[edit.js] handleEditRequest failed:", err.response?.data || err.message || err);
-    if (progressId) {
-      try {
-        await api.unsendMessage(progressId);
-      } catch {
-        /* best-effort */
-      }
-    }
+    await safeUnsend(api, progressId);
     api.sendMessage(`❌ ${friendlyError(err)}`, threadID, messageID, (err2) => {
       if (err2) console.error("[edit.js] sendMessage(error-notice) error:", err2);
     });
