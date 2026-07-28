@@ -4,7 +4,7 @@ module.exports = {
   config: {
     name: "prefix",
     aliases: ["pf"],
-    version: "1.0.0",
+    version: "1.0.1",
     author: "Riyad",
     role: 0,
     permission: "0",
@@ -31,9 +31,9 @@ module.exports = {
 ˗ˋˏ ♡ 𝙃𝙖 𝙅𝙖𝙣𝙨 𝘽𝙤𝙡𝙤 ˎˊ˗
 –❥ ˗ˋˏ ♡ 𝙀𝙩𝙖𝙞 𝘼𝙢𝙞 ˎˊ˗ ❥–
 ꕤ╰( ${prefix} )╯ꕤ
-╰──────────────❀,
-        event.threadID
-      );
+╰──────────────❀`,
+event.threadID
+);
     }
 
     // Wrong Prefix Message
