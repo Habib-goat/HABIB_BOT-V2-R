@@ -27,14 +27,11 @@ module.exports = {
     // Alive Message
     if (body === prefix) {
       return api.sendMessage(
-`╭━━━━━━━━━━━━━━━━━━╮
-           ⚡ 𝗥𝗜𝗬𝗔𝗗 𝗕𝗢𝗧 ⚡
-╰━━━━━━━━━━━━━━━━━━╯
-
-✨ I'm Alive & Ready!
-
-📚 Type: ${prefix}help to
-🚀 View all available commands.`,
+`╭──────────────❀
+˗ˋˏ ♡ 𝙃𝙖 𝙅𝙖𝙣𝙨 𝘽𝙤𝙡𝙤 ˎˊ˗
+–❥ ˗ˋˏ ♡ 𝙀𝙩𝙖𝙞 𝘼𝙢𝙞 ˎˊ˗ ❥–
+ꕤ╰( ${prefix} )╯ꕤ
+╰──────────────❀,
         event.threadID
       );
     }
