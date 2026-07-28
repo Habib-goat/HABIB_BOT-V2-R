@@ -47,7 +47,22 @@ function extractVideo(data) {
     null
   );
 }
+// ================= SUPPORTED DOMAIN ONLY CHECK (strict) =================
+function isSupportedDomain(url) {
+  if (!url) return false;
+  const urlLower = url.toLowerCase();
 
+  const domains = [
+    "tiktok.com", "fb.watch", "facebook.com", "fb.com", "instagram.com", "instagr.am",
+    "youtube.com", "youtu.be", "x.com", "twitter.com", "pin.it", "pinterest.com",
+    "threads.net", "snapchat.com", "vimeo.com", "dailymotion.com", "dai.ly"
+  ];
+
+  return domains.some(domain => urlLower.includes(domain));
+}
+
+// ================= SUPPORTED LINKS CHECK =================
+function isSupportedUrl(url) {
 // ================= SUPPORTED LINKS CHECK =================
 function isSupportedUrl(url) {
   if (!url) return false;
@@ -185,7 +200,7 @@ module.exports = {
   config: {
     name: "autodl",
     aliases: ["fb", "tiktok", "ig", "yt", "alldl"],
-    version: "1.0.0",
+    version: "1.0.1",
     author: "Riyad",
     countDown: 5,
     role: 0,
@@ -209,19 +224,24 @@ module.exports = {
     const matches = text.match(urlRegex);
     if (!matches) return;
 
-    // Find the first supported link
+    // Find the first link that matches our supported domains ONLY
+    // (strict domain check — no more matching random links by file extension)
     let finalUrl = null;
     for (const match of matches) {
-      if (isSupportedUrl(match)) {
+      if (isSupportedDomain(match)) {
         finalUrl = match;
         break;
       }
     }
 
-    if (!finalUrl) return;
+    if (!finalUrl) {
+      // Unsupported / unknown link — react with ❓ and do nothing else
+      api.setMessageReaction("❓", event.messageID, () => {}, true);
+      return;
+    }
 
-    // Set interactive reaction to indicate processing has started
-    api.setMessageReaction("📥", event.messageID, () => {}, true);
+    // Supported link accepted — react with 🔥 and start processing
+    api.setMessageReaction("🔥", event.messageID, () => {}, true);
     const startTime = Date.now();
 
     let loadingMessageID = null;
