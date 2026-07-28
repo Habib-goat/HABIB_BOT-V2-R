@@ -28,9 +28,9 @@ module.exports = {
     if (body === prefix) {
       return api.sendMessage(
 `╭──────────────❀
-˗ˋˏ ♡ 𝙃𝙖 𝙅𝙖𝙣𝙨 𝘽𝙤𝙡𝙤 ˎˊ˗
+   ˗ˋˏ ♡ 𝙃𝙖 𝙅𝙖𝙣𝙨 𝘽𝙤𝙡𝙤 ˎˊ˗
 –❥ ˗ˋˏ ♡ 𝙀𝙩𝙖𝙞 𝘼𝙢𝙞 ˎˊ˗ ❥–
-ꕤ╰( ${prefix} )╯ꕤ
+            ꕤ╰( ${prefix} )╯ꕤ
 ╰──────────────❀`,
 event.threadID
 );
@@ -42,9 +42,9 @@ event.threadID
     if (wrongPrefixes.includes(body)) {
       return api.sendMessage(
 `╭──────────────❀ 
-˗ˋˏ 😾 𝙀𝙞𝙩𝙖 𝘼𝙢𝙞 𝙉𝙖 ˎˊ˗
+    ˗ˋˏ 😾 𝙀𝙞𝙩𝙖 𝘼𝙢𝙞 𝙉𝙖 ˎˊ˗
 –❥𝙉𝙞𝙘𝙝𝙚 𝙏𝙖𝙠𝙖𝙮 𝘿𝙚𝙠𝙝❥– 
-ꕤ╰( ${prefix} )╯ꕤ
+            ꕤ╰( ${prefix} )╯ꕤ
 ╰──────────────❀`,
         event.threadID
       );
