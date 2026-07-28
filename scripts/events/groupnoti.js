@@ -47,7 +47,8 @@ module.exports = {
       "log:thread-color",
       "log:magic-words",
       "log:thread-poll",
-      "log:thread-approval-mode"
+      "log:thread-approval-mode",
+      "log:unsubscribe"
     ]
   },
 
@@ -159,6 +160,19 @@ module.exports = {
         case "log:thread-color": {
           const actorName = await resolveUserName(api, author, usersData);
           message = `[ GROUP UPDATE ]\n🏡 Group: ${groupName}\n🎨 ${(event.logMessageBody || "").replace("Topic", "color")}\n✨ Changed by: ${actorName}`;
+          break;
+        }
+
+        case "log:unsubscribe": {
+          const leftUserID = logMessageData.leftParticipantFbId;
+          const leftUserName = await resolveUserName(api, leftUserID, usersData);
+
+          if (String(leftUserID) === String(author)) {
+            message = `[ GROUP UPDATE ]\n🏡 Group: ${groupName}\n🚶 ${leftUserName} left the group.`;
+          } else {
+            const kickerName = await resolveUserName(api, author, usersData);
+            message = `[ GROUP UPDATE ]\n🏡 Group: ${groupName}\n👢 ${leftUserName} was kicked from the group.\n✨ Kicked by: ${kickerName}`;
+          }
           break;
         }
 
