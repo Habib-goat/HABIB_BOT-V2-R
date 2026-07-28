@@ -47,6 +47,7 @@ function extractVideo(data) {
     null
   );
 }
+
 // ================= SUPPORTED DOMAIN ONLY CHECK (strict) =================
 function isSupportedDomain(url) {
   if (!url) return false;
@@ -59,42 +60,6 @@ function isSupportedDomain(url) {
   ];
 
   return domains.some(domain => urlLower.includes(domain));
-}
-
-// ================= SUPPORTED LINKS CHECK =================
-function isSupportedUrl(url) {
-// ================= SUPPORTED LINKS CHECK =================
-function isSupportedUrl(url) {
-  if (!url) return false;
-  const urlLower = url.toLowerCase();
-
-  const domains = [
-    "tiktok.com", "fb.watch", "facebook.com", "fb.com", "instagram.com", "instagr.am",
-    "youtube.com", "youtu.be", "x.com", "twitter.com", "pin.it", "pinterest.com",
-    "threads.net", "snapchat.com", "vimeo.com", "dailymotion.com", "dai.ly"
-  ];
-
-  if (domains.some(domain => urlLower.includes(domain))) {
-    return true;
-  }
-
-  const directExtensions = [
-    ".mp4", ".mp3", ".wav", ".m4a", ".mov", ".gif", ".png", ".jpg", ".jpeg", ".pdf", ".zip", ".docx", ".txt"
-  ];
-
-  try {
-    const parsed = new URL(url);
-    const pathname = parsed.pathname.toLowerCase();
-    if (directExtensions.some(ext => pathname.endsWith(ext) || urlLower.endsWith(ext))) {
-      return true;
-    }
-  } catch (e) {
-    if (directExtensions.some(ext => urlLower.endsWith(ext))) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 // ================= MEDIA TYPE & EXTENSION RESOLUTION =================
@@ -200,7 +165,7 @@ module.exports = {
   config: {
     name: "autodl",
     aliases: ["fb", "tiktok", "ig", "yt", "alldl"],
-    version: "1.0.1",
+    version: "1.0.2",
     author: "Riyad",
     countDown: 5,
     role: 0,
@@ -308,7 +273,7 @@ module.exports = {
         const data = res.data;
         downloadUrl = extractVideo(data);
         console.log("Download URL:", downloadUrl);
-console.log("API Response:", JSON.stringify(data, null, 2));
+        console.log("API Response:", JSON.stringify(data, null, 2));
         const resultInfo = data.result || data;
         if (resultInfo) {
           info = {
@@ -330,22 +295,22 @@ console.log("API Response:", JSON.stringify(data, null, 2));
 
       const buffer = response.data;
       const contentType = response.headers["content-type"] || "";
-const sizeInBytes = response.headers["content-length"]
-  ? parseInt(response.headers["content-length"], 10)
-  : buffer.length;
+      const sizeInBytes = response.headers["content-length"]
+        ? parseInt(response.headers["content-length"], 10)
+        : buffer.length;
 
-let fileInfo = getFileInfo(contentType, downloadUrl || finalUrl);
+      let fileInfo = getFileInfo(contentType, downloadUrl || finalUrl);
 
-// Instagram video fix
-if (
-  detectPlatform(finalUrl) === "𝙄𝙣𝙨𝙩𝙖𝙜𝙧𝙖𝙢" &&
-  fileInfo.typeLabel === "Document"
-) {
-  fileInfo.ext = "mp4";
-  fileInfo.typeLabel = "Video";
-}
+      // Instagram video fix
+      if (
+        detectPlatform(finalUrl) === "𝙄𝙣𝙨𝙩𝙖𝙜𝙧𝙖𝙢" &&
+        fileInfo.typeLabel === "Document"
+      ) {
+        fileInfo.ext = "mp4";
+        fileInfo.typeLabel = "Video";
+      }
 
-filePath = path.join(cacheDir, `autodl_${Date.now()}.${fileInfo.ext}`);
+      filePath = path.join(cacheDir, `autodl_${Date.now()}.${fileInfo.ext}`);
 
       await fs.writeFile(filePath, Buffer.from(buffer));
 
