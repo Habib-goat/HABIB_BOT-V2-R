@@ -41,12 +41,11 @@ module.exports = {
 
     if (wrongPrefixes.includes(body)) {
       return api.sendMessage(
-`╭─〔 ⚠️ 𝗪𝗿𝗼𝗻𝗴 𝗣𝗿𝗲𝗳𝗶𝘅 〕─╮
-│ ❌ That's not my prefix.
-│
-│ ✅ My Prefix: ${prefix}
-│ 📚 Type: ${prefix}help
-╰────────────────╯`,
+`╭──────────────❀ 
+˗ˋˏ 😾 𝙀𝙞𝙩𝙖 𝘼𝙢𝙞 𝙉𝙖 ˎˊ˗
+–❥𝙉𝙞𝙘𝙝𝙚 𝙏𝙖𝙠𝙖𝙮 𝘿𝙚𝙠𝙝❥– 
+ꕤ╰( ${prefix} )╯ꕤ
+╰──────────────❀`,
         event.threadID
       );
     }
