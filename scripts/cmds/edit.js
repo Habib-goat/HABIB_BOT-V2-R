@@ -45,6 +45,18 @@ const MODEL_PRIORITY = [
   "flux.1 schnell"
 ];
 
+// Preferred upscale models, in priority order
+const UPSCALE_MODEL_PRIORITY = ["realesrgan_x4plus", "realesrgan", "gfpgan"];
+
+// Prompts that mean "make it higher resolution" (Bangla/Banglish/English) route
+// to the dedicated Image Upscale endpoint instead of img2img — img2img can
+// restyle a photo but doesn't actually add resolution/detail.
+const UPSCALE_INTENT_RE = /\b(hd|4k|8k|upscale|enhance|resolution|sharp(en)?|clear(er)?|high\s*quality|quality\s*barano|clarity)\b/i;
+
+function looksLikeUpscaleRequest(prompt) {
+  return UPSCALE_INTENT_RE.test(prompt);
+}
+
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const CACHE_DIR = path.join(__dirname, "cache");
@@ -78,6 +90,28 @@ async function pickModel() {
   }
 
   // Fallback: first available model
+  return models[0];
+}
+
+/** Fetch available Image Upscale models from deAPI and pick the best one. */
+async function pickUpscaleModel() {
+  const resp = await client.get(`${DEAPI_BASE}/api/v2/models`, {
+    headers: deapiHeaders(),
+    params: { "filter[inference_types]": "img-upscale" }
+  });
+
+  const models = resp.data?.data || [];
+  if (!models.length) {
+    throw new Error("No Image Upscale models are currently available on deAPI.");
+  }
+
+  for (const preferred of UPSCALE_MODEL_PRIORITY) {
+    const match = models.find(
+      (m) => m.slug?.toLowerCase().includes(preferred) || m.name?.toLowerCase().includes(preferred)
+    );
+    if (match) return match;
+  }
+
   return models[0];
 }
 
@@ -212,6 +246,24 @@ async function submitEditJob({ imageBuffer, prompt, model }) {
   return requestId;
 }
 
+/** Submit a real super-resolution upscale job to deAPI and return the request_id. */
+async function submitUpscaleJob({ imageBuffer, model }) {
+  const form = new FormData();
+  form.append("model", model.slug);
+  form.append("image", imageBuffer, {
+    filename: "input.jpg",
+    contentType: "image/jpeg"
+  });
+
+  const resp = await client.post(`${DEAPI_BASE}/api/v2/images/upscales`, form, {
+    headers: deapiHeaders(form.getHeaders())
+  });
+
+  const requestId = resp.data?.data?.request_id;
+  if (!requestId) throw new Error("deAPI did not return a request_id.");
+  return requestId;
+}
+
 /** Poll a deAPI job until it's done, errors out, or times out. */
 async function pollJob(requestId) {
   const start = Date.now();
@@ -238,13 +290,13 @@ async function pollJob(requestId) {
 module.exports = {
   config: {
     name: "edit",
-    version: "3.0.1",
+    version: "3.0.0",
     hasPermission: 2,
     credits: "Riyad",
     description:
-      "Reply to any image with an instruction (Bangla, Banglish, or English) to edit it with AI. No fixed command word needed.",
+      "Reply to an image with an instruction (Bangla, Banglish, or English) to edit it with AI. Say \"hd 4k enhance\" to run real super-resolution upscaling.",
     commandCategory: "AI Image",
-    usages: "Reply to an image with what you want changed, e.g. \"ghibli style\"",
+    usages: "Reply to an image with what you want changed, e.g. \"ghibli style\" or \"hd 4k enhance\"",
     cooldowns: 5
   },
 
@@ -253,7 +305,7 @@ module.exports = {
     const prompt = args.join(" ").trim();
     if (!prompt) {
       return api.sendMessage(
-        "❌ Reply to an image with your edit instruction.\nExample: reply to a photo and type \"background remove kore dao\".",
+        "❌ Reply to an image with your edit instruction.\nExample: reply to a photo and type \"background remove kore dao\" or \"hd 4k enhance\".",
         event.threadID,
         event.messageID
       );
@@ -279,6 +331,7 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
 
   let progressId = null;
   let outPath = null;
+  const isUpscale = looksLikeUpscaleRequest(prompt);
 
   try {
     console.log("[edit.js] step: sending initial progress message");
@@ -295,21 +348,37 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
     const imageBuffer = await downloadToBuffer(attachment.url);
     console.log("[edit.js] step: image downloaded, bytes =", imageBuffer.length);
 
-    await editMsg(api, progressId, "🌐 Translating prompt...");
-    console.log("[edit.js] step: translating prompt:", prompt);
-    const englishPrompt = await translatePrompt(prompt);
-    console.log("[edit.js] step: translated prompt:", englishPrompt);
+    let requestId, resultLabel;
 
-    await editMsg(api, progressId, `🤖 Processing with AI...\n📝 ${englishPrompt}`);
-    console.log("[edit.js] step: picking model");
-    const model = await pickModel();
-    console.log("[edit.js] step: model selected:", model.slug);
+    if (isUpscale) {
+      // Real super-resolution path — no prompt translation needed, the
+      // upscale model just sharpens/enlarges the actual pixels.
+      await editMsg(api, progressId, "🤖 Enhancing to HD/4K...");
+      console.log("[edit.js] step: picking upscale model");
+      const model = await pickUpscaleModel();
+      console.log("[edit.js] step: upscale model selected:", model.slug);
 
-    console.log("[edit.js] step: submitting edit job to deAPI");
-    const requestId = await submitEditJob({ imageBuffer, prompt: englishPrompt, model });
+      console.log("[edit.js] step: submitting upscale job to deAPI");
+      requestId = await submitUpscaleJob({ imageBuffer, model });
+      resultLabel = "✅ Image enhanced to HD/4K.";
+    } else {
+      await editMsg(api, progressId, "🌐 Translating prompt...");
+      console.log("[edit.js] step: translating prompt:", prompt);
+      const englishPrompt = await translatePrompt(prompt);
+      console.log("[edit.js] step: translated prompt:", englishPrompt);
+
+      await editMsg(api, progressId, `🤖 Processing with AI...\n📝 ${englishPrompt}`);
+      console.log("[edit.js] step: picking model");
+      const model = await pickModel();
+      console.log("[edit.js] step: model selected:", model.slug);
+
+      console.log("[edit.js] step: submitting edit job to deAPI");
+      requestId = await submitEditJob({ imageBuffer, prompt: englishPrompt, model });
+      resultLabel = `✅ Image edited successfully.\n📝 ${englishPrompt}`;
+    }
     console.log("[edit.js] step: job submitted, request_id =", requestId);
 
-    await editMsg(api, progressId, "⏳ Please wait, rendering your edit...");
+    await editMsg(api, progressId, "⏳ Please wait, rendering your image...");
     const result = await pollJob(requestId);
     console.log("[edit.js] step: job done, result_url =", result.result_url);
 
@@ -330,7 +399,7 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
 
     console.log("[edit.js] step: sending final edited image to Messenger");
     await api.sendMessage(
-      { body: `✅ Image edited successfully.\n📝 ${englishPrompt}`, attachment: fs.createReadStream(outPath) },
+      { body: resultLabel, attachment: fs.createReadStream(outPath) },
       threadID,
       messageID,
       (err) => {
@@ -362,7 +431,7 @@ function friendlyError(err) {
   if (/timed out|ETIMEDOUT|ECONNABORTED/i.test(err.message)) return "The request timed out. Please try again.";
   if (/ENOTFOUND|ECONNREFUSED|network/i.test(err.message)) return "Network error while reaching deAPI. Please try again.";
   if (/download/i.test(err.message)) return "Couldn't download the image. Please try replying to a different photo.";
-  if (/Image-to-Image models/i.test(err.message)) return "No image editing models are available right now. Try again later.";
+  if (/Image-to-Image models|Image Upscale models/i.test(err.message)) return "No suitable AI models are available right now. Try again later.";
   if (/timed out waiting/i.test(err.message)) return "The edit took too long and timed out. Please try again.";
 
   return err.message || "Something went wrong while editing the image.";
