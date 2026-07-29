@@ -4,7 +4,7 @@ module.exports = {
   config: {
     name: "help",
     aliases: ["menu", "commands", "cmds"],
-    version: "1.0.1",
+    version: "1.0.2",
     author: "Riyad Bot",
     countDown: 3,
     role: 0,
@@ -37,9 +37,9 @@ module.exports = {
         }
       }
 
-      let responseText = `┏━━━━━━━━━━━━━━━━━━━━┓
+      let responseText = `┏━━━━━━━━━━━━━━━━━━━┓
 📂✦『 𝙍𝙄𝙔𝘼𝘿 𝘽𝙊𝙏 𝙈𝙀𝙉𝙐 』✦📂
-┗━━━━━━━━━━━━━━━━━━━━┛
+┗━━━━━━━━━━━━━━━━━━━┛
 
 ⚡ 𝙋𝙧𝙚𝙛𝙞𝙭 ➜ '${prefix}'
 ✨ 𝘾𝙤𝙢𝙢𝙖𝙣𝙙𝙨 ➜ ${commands.size}
