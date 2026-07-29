@@ -5,8 +5,8 @@ const path = require("path");
 module.exports = {
   config: {
     name: "protect",
-    version: "1.2",
-    author: "MOHAMMAD AKASH",
+    version: "1.3",
+    author: "Riyad",
     role: 2,
     shortDescription: "Lock group name, nickname, theme, emoji",
     category: "group",
@@ -148,6 +148,21 @@ if (logMessageType === "log:thread-image") {
           threadID,
           participant_id
         );
+      }
+
+      if (logMessageType === "log:thread-name") {
+        console.log("Restoring thread name to:", protectData.name);
+        await api.setTitle(protectData.name || "", threadID);
+      }
+
+      if (logMessageType === "log:thread-icon") {
+        console.log("Restoring thread emoji to:", protectData.emoji);
+        await api.changeThreadEmoji(protectData.emoji || "", threadID);
+      }
+
+      if (logMessageType === "log:thread-color") {
+        console.log("Restoring thread color to:", protectData.color);
+        await api.changeThreadColor(protectData.color || "", threadID);
       }
 
   } catch (err) {
