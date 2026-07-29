@@ -4,7 +4,7 @@ module.exports = {
   config: {
     name: "help",
     aliases: ["menu", "commands", "cmds"],
-    version: "1.0.0",
+    version: "1.0.1",
     author: "Riyad Bot",
     countDown: 3,
     role: 0,
