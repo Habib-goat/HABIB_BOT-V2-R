@@ -1,10 +1,9 @@
 /**
  * @file edit.js
- * @description AI Image Editor — reply to any image with a plain-language
- *              instruction (Bangla, Banglish, or English) and the bot edits it
- *              using deAPI's Image-to-Image API. No fixed command word needed —
- *              this hooks into onChat, so any reply-to-image message is treated
- *              as an edit request.
+ * @description AI Image Editor — reply to an image and run "/edit <prompt>"
+ *              (Bangla, Banglish, or English) and the bot edits it using
+ *              deAPI's Image-to-Image API. Only triggers on the explicit
+ *              /edit command — plain replies to images are left alone.
  * @credits Riyad
  * @dependencies axios, form-data, fs-extra, @google/genai
  * @env DEAPI_API_KEY   - required, from https://app.deapi.ai/dashboard/api-keys
@@ -17,7 +16,6 @@ const FormData = require("form-data");
 const fs = require("fs-extra");
 const path = require("path");
 const { GoogleGenAI } = require("@google/genai");
-const commandLoader = require("../handlers/commandLoader");
 
 // ---------------------------------------------------------------------------
 // Config
@@ -37,26 +35,6 @@ if (!DEAPI_KEY) {
 }
 if (!GEMINI_KEYS.length) {
   console.error("[edit.js] WARNING: no GEMINI_API_KEY set — prompts will be sent to deAPI untranslated.");
-}
-
-// Prefix characters this framework's commands can start with.
-const PREFIX_CHARS = ["/", "!", ".", "-", "#"];
-
-/**
- * True if `rawBody` looks like an invocation of a DIFFERENT loaded command
- * (e.g. "/pp", "!gptimage") rather than a plain-language edit instruction.
- * Only messages that start with a prefix char AND match a real command name
- * are excluded — plain sentences like "help me remove the background" are
- * never mistaken for a command since "help" alone (no prefix) doesn't match.
- */
-function looksLikeOtherCommand(rawBody) {
-  const firstWord = rawBody.trim().split(/\s+/)[0] || "";
-  if (!PREFIX_CHARS.includes(firstWord[0])) return false;
-
-  const withoutPrefix = firstWord.slice(1).toLowerCase();
-  if (!withoutPrefix) return false;
-
-  return commandLoader.commands.has(withoutPrefix) || commandLoader.aliases.has(withoutPrefix);
 }
 
 // Preferred img2img models, in priority order (matched against name or slug)
@@ -260,7 +238,7 @@ async function pollJob(requestId) {
 module.exports = {
   config: {
     name: "edit",
-    version: "3.0.0",
+    version: "3.0.1",
     hasPermission: 2,
     credits: "Riyad",
     description:
@@ -281,31 +259,6 @@ module.exports = {
       );
     }
     return handleEditRequest({ api, event, prompt });
-  },
-
-  // Primary path: fires on every message. If it's a reply to a photo with
-  // non-empty text, treat the whole message body as the edit instruction —
-  // no "/edit" prefix required.
-  onChat: async function ({ api, event }) {
-    const replied = event.messageReply;
-    const attachment = replied?.attachments?.[0];
-
-    if (!replied || !attachment || attachment.type !== "photo") return;
-
-    const rawBody = (event.body || "").trim();
-    if (!rawBody) return;
-
-    // Don't hijack other commands (e.g. "/pp", "!gptimage", or even our own
-    // "/edit" with no prompt) sent while replying to a photo — let the
-    // framework's normal dispatcher (and that command's own onStart) handle
-    // those. Only plain-language text falls through to the auto-edit flow.
-    if (looksLikeOtherCommand(rawBody)) {
-      console.log(`[edit.js] onChat: skipping, looks like another command -> "${rawBody}"`);
-      return;
-    }
-
-    console.log(`[edit.js] onChat: treating reply-to-image text as edit prompt -> "${rawBody}"`);
-    await handleEditRequest({ api, event, prompt: rawBody, imageUrl: attachment.url });
   }
 };
 
