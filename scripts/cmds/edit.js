@@ -191,11 +191,40 @@ async function downloadToBuffer(url) {
   return Buffer.from(resp.data);
 }
 function getDimensionLimits(model) {
-  ...
+  const key = `${model.name || ""} ${model.slug || ""}`.toLowerCase();
+  if (key.includes("qwen")) return DIMENSION_LIMITS.qwen;
+  if (key.includes("flux")) return DIMENSION_LIMITS.flux;
+  return DEFAULT_LIMITS;
 }
 
 async function prepareImageForModel(buffer, model) {
-  ...
+  const { min, max, step } = getDimensionLimits(model);
+  const img = sharp(buffer, { failOn: "none" });
+  const meta = await img.metadata();
+
+  let { width, height } = meta;
+
+  if (!width || !height) {
+    throw new Error("Couldn't read the image's dimensions — the file may be corrupted.");
+  }
+
+  const longSide = Math.max(width, height);
+  let scale = 1;
+
+  if (longSide > max) scale = max / longSide;
+  else if (longSide < min) scale = min / longSide;
+
+  width = Math.round((width * scale) / step) * step;
+  height = Math.round((height * scale) / step) * step;
+
+  width = Math.min(Math.max(width, min), max);
+  height = Math.min(Math.max(height, min), max);
+
+  return img
+    .resize(width, height, { fit: "fill" })
+    .flatten({ background: "#ffffff" })
+    .jpeg({ quality: 92 })
+    .toBuffer();
 }
 /**
  * fca-eryxenx's MQTT-backed calls (editMessage, unsendMessage) resolve their
@@ -374,11 +403,16 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
       await editMsg(api, progressId, "🤖 Enhancing to HD/4K...");
       console.log("[edit.js] step: picking upscale model");
       const model = await pickUpscaleModel();
-      console.log("[edit.js] step: upscale model selected:", model.slug);
+console.log("[edit.js] step: upscale model selected:", model.slug);
 
-      console.log("[edit.js] step: submitting upscale job to deAPI");
-      requestId = await submitUpscaleJob({ imageBuffer, model });
-      resultLabel = "✅ Image enhanced to HD/4K.";
+const imageForApi = await prepareImageForModel(imageBuffer, model);
+
+console.log("[edit.js] step: submitting upscale job to deAPI");
+requestId = await submitUpscaleJob({
+  imageBuffer: imageForApi,
+  model
+});
+resultLabel = "✅ Image enhanced to HD/4K.";
     } else {
       await editMsg(api, progressId, "🌐 Translating prompt...");
       console.log("[edit.js] step: translating prompt:", prompt);
@@ -387,12 +421,19 @@ async function handleEditRequest({ api, event, prompt, imageUrl }) {
 
       await editMsg(api, progressId, `🤖 Processing with AI...\n📝 ${englishPrompt}`);
       console.log("[edit.js] step: picking model");
-      const model = await pickModel();
-      console.log("[edit.js] step: model selected:", model.slug);
+const model = await pickModel();
+console.log("[edit.js] step: model selected:", model.slug);
 
-      console.log("[edit.js] step: submitting edit job to deAPI");
-      requestId = await submitEditJob({ imageBuffer, prompt: englishPrompt, model });
-      resultLabel = `✅ Image edited successfully.\n📝 ${englishPrompt}`;
+const imageForApi = await prepareImageForModel(imageBuffer, model);
+
+console.log("[edit.js] step: submitting edit job to deAPI");
+requestId = await submitEditJob({
+  imageBuffer: imageForApi,
+  prompt: englishPrompt,
+  model
+});
+
+resultLabel = `✅ Image edited successfully.\n📝 ${englishPrompt}`;
     }
     console.log("[edit.js] step: job submitted, request_id =", requestId);
 
@@ -446,11 +487,24 @@ function friendlyError(err) {
   if (status === 401) return "Invalid or missing deAPI key. Please check DEAPI_API_KEY.";
   if (status === 422) return `Invalid request: ${apiMsg || "please check your image or prompt."}`;
   if (status === 429) return "Rate limited by deAPI — please try again in a moment.";
-  if (/timed out|ETIMEDOUT|ECONNABORTED/i.test(err.message)) return "The request timed out. Please try again.";
-  if (/ENOTFOUND|ECONNREFUSED|network/i.test(err.message)) return "Network error while reaching deAPI. Please try again.";
-  if (/download/i.test(err.message)) return "Couldn't download the image. Please try replying to a different photo.";
-  if (/Image-to-Image models|Image Upscale models/i.test(err.message)) return "No suitable AI models are available right now. Try again later.";
-  if (/timed out waiting/i.test(err.message)) return "The edit took too long and timed out. Please try again.";
+
+  if (/timed out|ETIMEDOUT|ECONNABORTED/i.test(err.message))
+    return "The request timed out. Please try again.";
+
+  if (/ENOTFOUND|ECONNREFUSED|network/i.test(err.message))
+    return "Network error while reaching deAPI. Please try again.";
+
+  if (/download/i.test(err.message))
+    return "Couldn't download the image. Please try replying to a different photo.";
+
+  if (/Image-to-Image models|Image Upscale models/i.test(err.message))
+    return "No suitable AI models are available right now. Try again later.";
+
+  if (/timed out waiting/i.test(err.message))
+    return "The edit took too long and timed out. Please try again.";
+
+  if (/dimensions|failOn|unsupported image format/i.test(err.message))
+    return "Couldn't process that image — please try a standard JPEG or PNG photo.";
 
   return err.message || "Something went wrong while editing the image.";
 }
