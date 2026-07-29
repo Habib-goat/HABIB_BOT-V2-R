@@ -37,32 +37,35 @@ module.exports = {
         }
       }
 
-      let responseText = `╔═══════════════════╗
+      let responseText = `┏━━━━━━━━━━━━━━━━━━━━┓
 📂✦『 𝙍𝙄𝙔𝘼𝘿 𝘽𝙊𝙏 𝙈𝙀𝙉𝙐 』✦📂
-╚═══════════════════╝
+┗━━━━━━━━━━━━━━━━━━━━┛
 
 ⚡ 𝙋𝙧𝙚𝙛𝙞𝙭 ➜ '${prefix}'
 ✨ 𝘾𝙤𝙢𝙢𝙖𝙣𝙙𝙨 ➜ ${commands.size}
 
 `;
 
-      for (const [category, cmdsList] of Object.entries(categories)) {
-  responseText += `╭━━━━━━━━━━━━━━━╮
-┃ ${getCategoryIcon(category)} 『 ${category.toUpperCase()} 』
-╰━━━━━━━━━━━━━━━╯
+for (const [category, cmdsList] of Object.entries(categories)) {
+
+  responseText += `┏━━━━━━━━━━━━━━━━━━┓
+┃⃟ ㉿◈❰ ${getCategoryIcon(category)}${category.toUpperCase()} ❱◈㉿⃟﷼
+┣━━━━━━━━━━━━━━━━━━┫
 `;
 
   responseText += cmdsList
     .sort()
-    .map(cmd => `➤ » ${cmd}`)
+    .map(cmd => `┃ ❯ ${cmd}`)
     .join("\n");
 
-  responseText += "\n\n";
+  responseText += `\n┗━━━━━━━━━━━━━━━━━━┛\n\n`;
 }
 
-      responseText += `╔═══════════════════╗
-💡 𝙏𝙮𝙥𝙚 '${prefix}help [command]' 𝙩𝙤 𝙜𝙚𝙩 𝙘𝙤𝙢𝙢𝙖𝙣𝙙 𝙞𝙣𝙛𝙤.
-╚═══════════════════╝`;
+responseText += `━━━━━━━━━━━━━━━━
+㉿◈❰ ⚡𝗛𝗘𝗟𝗣 ❱◈㉿﷼
+━━━━━━━━━━━━━━━━
+❯ ${prefix}help <command>
+━━━━━━━━━━━━━━━━`;
       await api.sendMessage({
   body: responseText,
   attachment: fs.createReadStream("./assets/help.gif")
@@ -105,12 +108,33 @@ module.exports = {
 
 function getCategoryIcon(category) {
   switch (category.toLowerCase()) {
-    case "ai": return "🤖";
-    case "economy": return "💰";
-    case "fun": return "🎮";
-    case "system": return "⚙️";
-    case "utility": return "🛠️";
-    case "info": return "👑";
-    default: return "📁";
+    case "box chat":
+      return "⚡";
+    case "general":
+      return "🔥";
+    case "media":
+      return "🌸";
+    case "system":
+      return "❄️";
+    case "owner":
+      return "😈";
+    case "economy":
+      return "♨️";
+    case "utility":
+      return "☔";
+    case "info":
+      return "🦋";
+    case "image":
+      return "🌸";
+    case "group":
+      return "🔥";
+    case "music":
+      return "⚡";
+    case "ai":
+      return "⚡";
+    case "fun":
+      return "🌸";
+    default:
+      return "⚡";
   }
 }
