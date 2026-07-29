@@ -16,6 +16,7 @@ const FormData = require("form-data");
 const fs = require("fs-extra");
 const path = require("path");
 const { GoogleGenAI } = require("@google/genai");
+const sharp = require("sharp");
 
 // ---------------------------------------------------------------------------
 // Config
@@ -47,6 +48,17 @@ const MODEL_PRIORITY = [
 
 // Preferred upscale models, in priority order
 const UPSCALE_MODEL_PRIORITY = ["realesrgan_x4plus", "realesrgan", "gfpgan"];
+
+const DIMENSION_LIMITS = {
+  qwen: { min: 256, max: 1024, step: 16 },
+  flux: { min: 256, max: 1536, step: 16 }
+};
+
+const DEFAULT_LIMITS = {
+  min: 256,
+  max: 1024,
+  step: 16
+};
 
 // Prompts that mean "make it higher resolution" (Bangla/Banglish/English) route
 // to the dedicated Image Upscale endpoint instead of img2img — img2img can
@@ -178,7 +190,13 @@ async function downloadToBuffer(url) {
   const resp = await client.get(url, { responseType: "arraybuffer" });
   return Buffer.from(resp.data);
 }
+function getDimensionLimits(model) {
+  ...
+}
 
+async function prepareImageForModel(buffer, model) {
+  ...
+}
 /**
  * fca-eryxenx's MQTT-backed calls (editMessage, unsendMessage) resolve their
  * Promise only when the server sends back a matching response — and have no
@@ -290,7 +308,7 @@ async function pollJob(requestId) {
 module.exports = {
   config: {
     name: "edit",
-    version: "3.0.0",
+    version: "3.0.3",
     hasPermission: 2,
     credits: "Riyad",
     description:
