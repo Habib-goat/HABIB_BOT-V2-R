@@ -43,7 +43,7 @@ console.log("THREAD INFO:");
   name: info.threadName || "",
   emoji: info.emoji || "",
   color: info.color || "",
-  imageSrc: info.imageSrc || "",
+  imageSrc: info.imageSrc || info.threadPicture || info.groupPhoto || info.image || "",
   nickname: {}
 };
 
@@ -113,31 +113,43 @@ if (logMessageType === "log:thread-image") {
 
     console.log("Downloading image...");
 
-    const response = await axios({
-      url: protectData.imageSrc,
-      method: "GET",
-      responseType: "stream"
-    });
+    try {
+      const response = await axios({
+        url: protectData.imageSrc,
+        method: "GET",
+        responseType: "stream",
+        maxRedirects: 5,
+        timeout: 15000,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
 
-    const writer = fs.createWriteStream(filePath);
+      const writer = fs.createWriteStream(filePath);
 
-    await new Promise((resolve, reject) => {
-      response.data.pipe(writer);
-      writer.on("finish", resolve);
-      writer.on("error", reject);
-    });
+      await new Promise((resolve, reject) => {
+        response.data.pipe(writer);
+        writer.on("finish", resolve);
+        writer.on("error", reject);
+      });
 
-    console.log("Downloaded.");
-    console.log("Calling changeGroupImage...");
+      console.log("Downloaded.");
+      console.log("Calling changeGroupImage...");
 
-    await api.changeGroupImage(
-      fs.createReadStream(filePath),
-      threadID
-    );
+      await api.changeGroupImage(
+        fs.createReadStream(filePath),
+        threadID
+      );
 
-    console.log("changeGroupImage success!");
-
-    fs.unlinkSync(filePath);
+      console.log("changeGroupImage success!");
+    } catch (imgErr) {
+      console.error("PROTECT IMAGE RESTORE ERROR:", imgErr.message);
+    } finally {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+  } else {
+    console.log("No stored imageSrc, skipping photo restore.");
   }
 }
 
