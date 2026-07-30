@@ -1,6 +1,8 @@
-// দুইটা leave event খুব কাছাকাছি সময়ে এলে যাতে duplicate processing না হয়,
-// তার জন্য একটা ছোট in-memory lock রাখা হলো।
-const processingLocks = new Set();
+// একদম কাছাকাছি সময়ে (মিলিসেকেন্ডের মধ্যে) একই leave event একাধিকবার এলে
+// শুধু সেটা ঠেকানোর জন্য এই ছোট debounce। এটা কখনোই বারবার leave/re-add
+// করাকে ব্লক করবে না — প্রতিটা leave-এর জন্য আলাদাভাবে re-add চলবে।
+const recentlyProcessed = new Map(); // key -> timestamp
+const DEBOUNCE_MS = 4000;
 
 function extractErrorMessage(err) {
   return (
@@ -16,10 +18,17 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function autoUnsend(api, messageID, delayMs = 7500) {
+  if (!messageID || typeof api.unsendMessage !== "function") return;
+  setTimeout(() => {
+    api.unsendMessage(messageID).catch(() => {});
+  }, delayMs);
+}
+
 module.exports = {
   config: {
     name: "antileave",
-    version: "2.0.0",
+    version: "2.1.0",
     author: "Riyad Bot",
     eventType: ["log:unsubscribe"]
   },
@@ -46,14 +55,22 @@ module.exports = {
 
     if (leftUserID === botID) return;
 
-    // একই ইউজার/থ্রেড এর জন্য একই সাথে দুইবার প্রসেস না হয় তার জন্য lock
+    // ================= শুধু সত্যিকারের duplicate event ঠেকানোর debounce =================
     const lockKey = `${threadID}_${leftUserID}`;
-    if (processingLocks.has(lockKey)) {
-      console.log(`[ANTILEAVE] Skipping duplicate event for ${lockKey}`);
+    const now = Date.now();
+    const lastTime = recentlyProcessed.get(lockKey);
+
+    if (lastTime && now - lastTime < DEBOUNCE_MS) {
+      console.log(`[ANTILEAVE] Ignoring duplicate fired event for ${lockKey} (within ${DEBOUNCE_MS}ms)`);
       return;
     }
-    processingLocks.add(lockKey);
-    setTimeout(() => processingLocks.delete(lockKey), 60000); // ৬০ সেকেন্ড পর lock রিসেট
+    recentlyProcessed.set(lockKey, now);
+    // পুরনো entry গুলো মেমোরি থেকে পরিষ্কার রাখতে
+    setTimeout(() => {
+      if (recentlyProcessed.get(lockKey) === now) {
+        recentlyProcessed.delete(lockKey);
+      }
+    }, DEBOUNCE_MS);
 
     console.log("[ANTILEAVE] Detected self-leave:", leftUserID, "in", threadID);
 
@@ -61,9 +78,6 @@ module.exports = {
     await sleep(5000);
 
     // ================= লাইভ গ্রুপ তথ্য চেক =================
-    // DB-এর উপর নির্ভর না করে সরাসরি Facebook থেকে fresh তথ্য আনা হচ্ছে,
-    // কারণ approvalMode / adminIDs সঠিকভাবে কাজ না করলে re-add ব্যর্থ হয়
-    // অথবা "pending approval"-এ আটকে থাকে অথচ বট ভুলভাবে সফল বলে জানায়।
     let approvalMode = false;
     let botIsAdmin = false;
 
@@ -81,12 +95,6 @@ module.exports = {
       console.log("[ANTILEAVE] getThreadInfo failed, proceeding without it:", e.message);
     }
 
-    // বট Admin না থাকলে এবং approval mode চালু থাকলে re-add ব্যর্থ/pending হওয়ার
-    // সম্ভাবনা অনেক বেশি — এটাই সেই কারণ যার জন্য কিছু কিছু গ্রুপে কাজ করে না
-    if (approvalMode && !botIsAdmin) {
-      console.log(`[ANTILEAVE] Group ${threadID}: approvalMode ON & bot is not admin — re-add may just queue for approval.`);
-    }
-
     // ================= Re-add চেষ্টা (Retry সহ) =================
     const MAX_ATTEMPTS = 2;
     let lastError = null;
@@ -101,7 +109,7 @@ module.exports = {
         lastError = err;
         console.error(`[ANTILEAVE] Add attempt ${attempt} failed:`, extractErrorMessage(err));
         if (attempt < MAX_ATTEMPTS) {
-          await sleep(6000); // দ্বিতীয়বার চেষ্টার আগে একটু বেশি সময় দেওয়া
+          await sleep(6000);
         }
       }
     }
@@ -111,13 +119,18 @@ module.exports = {
 
       let reason = extractErrorMessage(lastError);
       if (!botIsAdmin) {
-        reason += "\n\n👉 সম্ভাব্য কারণ: বট এই গ্রুপে Admin/Moderator না। বটকে Admin বানালে এই সমস্যা সাধারণত ঠিক হয়ে যায়।";
+        reason += "\n\n👉 সম্ভাব্য কারণ: বট এই গ্রুপে Admin/Moderator না।";
       }
 
-      await api.sendMessage(
-        `❌ AntiLeave Failed\n\n${reason}`,
-        threadID
-      );
+      try {
+        const failMsg = await api.sendMessage(
+          `❌ AntiLeave Failed\n\n${reason}`,
+          threadID
+        );
+        autoUnsend(api, failMsg?.messageID);
+      } catch (e) {
+        console.error("[ANTILEAVE] Could not send failure message:", extractErrorMessage(e));
+      }
       return;
     }
 
@@ -141,8 +154,7 @@ module.exports = {
       console.log("getUserInfo failed:", e.message);
     }
 
-    // approval mode চালু আর বট admin না থাকলে সাথে সাথে গ্রুপে ঢুকবে না,
-    // admin approval লাগবে — তাই মেসেজ সেই অনুযায়ী পাল্টানো হলো
+    // approval mode চালু আর বট admin না থাকলে সাথে সাথে গ্রুপে ঢুকবে না
     const needsApproval = approvalMode && !botIsAdmin;
 
     const body = needsApproval
@@ -170,7 +182,7 @@ module.exports = {
 ╚════════════════════╝`;
 
     try {
-      await api.sendMessage({
+      const sentMsg = await api.sendMessage({
         body,
         mentions: [
           {
@@ -179,6 +191,9 @@ module.exports = {
           }
         ]
       }, threadID);
+
+      // ৭.৫ সেকেন্ড পর মেসেজটা auto-unsend হয়ে যাবে
+      autoUnsend(api, sentMsg?.messageID);
     } catch (err) {
       console.error("[ANTILEAVE] Failed to send confirmation message:", extractErrorMessage(err));
     }
