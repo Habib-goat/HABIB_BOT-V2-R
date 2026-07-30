@@ -48,10 +48,10 @@ const THEMES = {
     hudBg: "rgba(10, 14, 30, 0.85)",
     hudBorder: "#00f0ff",
     hudGlow: "rgba(0, 240, 255, 0.4)",
-    ringType: "electric_dual", // blue left, pink right
-    kanjiMain: "団結", // Unity
-    kanjiSub: "伝説", // Legend
-    subtextJapanese: "一緖に、最強になろう", // Together, let's be the strongest
+    ringType: "electric_dual",
+    kanjiMain: "団結",
+    kanjiSub: "伝説",
+    subtextJapanese: "一緖に、最強になろう",
     styleTag: "CYBERPUNK"
   },
   inferno_fire: {
@@ -68,9 +68,9 @@ const THEMES = {
     hudBorder: "#ff5500",
     hudGlow: "rgba(255, 85, 0, 0.5)",
     ringType: "fire_ring",
-    kanjiMain: "火炎", // Flame
-    kanjiSub: "無敵", // Invincible
-    subtextJapanese: "燃え上がれ、魂の炎", // Burn up, flame of soul
+    kanjiMain: "火炎",
+    kanjiSub: "無敵",
+    subtextJapanese: "燃え上がれ、魂の炎",
     styleTag: "INFERNO"
   },
   tokyo_pink: {
@@ -87,9 +87,9 @@ const THEMES = {
     hudBorder: "#ff1493",
     hudGlow: "rgba(255, 20, 147, 0.45)",
     ringType: "neon_double",
-    kanjiMain: "未来", // Future
-    kanjiSub: "歓迎", // Welcome
-    subtextJapanese: "未来を信じる・東京ナイト", // Believe in future, Tokyo night
+    kanjiMain: "未来",
+    kanjiSub: "歓迎",
+    subtextJapanese: "未来を信じる・東京ナイト",
     styleTag: "TOKYO"
   },
   silver_diamond: {
@@ -106,9 +106,9 @@ const THEMES = {
     hudBorder: "#a0b0c0",
     hudGlow: "rgba(200, 215, 230, 0.3)",
     ringType: "chrome_bevel",
-    kanjiMain: "金剛", // Diamond / Hard
-    kanjiSub: "頂点", // Apex
-    subtextJapanese: "漆黒の輝き、頂点へ", // Darkness shine, to the top
+    kanjiMain: "金剛",
+    kanjiSub: "頂点",
+    subtextJapanese: "漆黒の輝き、頂点へ",
     styleTag: "DIAMOND"
   },
   emerald_matrix: {
@@ -125,9 +125,9 @@ const THEMES = {
     hudBorder: "#00ff66",
     hudGlow: "rgba(0, 255, 102, 0.4)",
     ringType: "matrix_circuit",
-    kanjiMain: "電脳", // Cyber
-    kanjiSub: "覚醒", // Awakening
-    subtextJapanese: "システム接続完了・覚醒", // System connected, awakening
+    kanjiMain: "電脳",
+    kanjiSub: "覚醒",
+    subtextJapanese: "システム接続完了・覚醒",
     styleTag: "MATRIX"
   }
 };
@@ -189,7 +189,6 @@ function drawLightningArcRing(ctx, cx, cy, radius, color, glowColor, numArcs = 8
 
     const points = generateLightningPoints(x1, y1, x2, y2, 22, 4);
 
-    // Glow line
     ctx.shadowColor = glowColor;
     ctx.shadowBlur = 18;
     ctx.strokeStyle = color;
@@ -201,7 +200,6 @@ function drawLightningArcRing(ctx, cx, cy, radius, color, glowColor, numArcs = 8
     }
     ctx.stroke();
 
-    // Hot center core
     ctx.shadowBlur = 4;
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1.5;
@@ -216,7 +214,6 @@ function drawLightningArcRing(ctx, cx, cy, radius, color, glowColor, numArcs = 8
 function drawFireRing(ctx, cx, cy, radius, theme) {
   ctx.save();
 
-  // Base flame ring background glow
   const grad = ctx.createRadialGradient(cx, cy, radius - 20, cx, cy, radius + 40);
   grad.addColorStop(0, "rgba(255, 200, 0, 0.8)");
   grad.addColorStop(0.4, "rgba(255, 85, 0, 0.6)");
@@ -228,7 +225,6 @@ function drawFireRing(ctx, cx, cy, radius, theme) {
   ctx.arc(cx, cy, radius + 45, 0, Math.PI * 2);
   ctx.fill();
 
-  // Outer flaming tongues / particles
   const particleCount = 70;
   for (let i = 0; i < particleCount; i++) {
     const angle = Math.random() * Math.PI * 2;
@@ -246,7 +242,6 @@ function drawFireRing(ctx, cx, cy, radius, theme) {
     ctx.fill();
   }
 
-  // Inner bright fire ring boundary
   ctx.shadowColor = "#ffaa00";
   ctx.shadowBlur = 25;
   ctx.strokeStyle = "#ffffff";
@@ -264,7 +259,6 @@ function drawFireRing(ctx, cx, cy, radius, theme) {
 function drawKanjiStamp(ctx, x, y, text, primaryColor) {
   ctx.save();
 
-  // Stamp container
   ctx.fillStyle = "rgba(10, 10, 20, 0.75)";
   ctx.strokeStyle = primaryColor;
   ctx.lineWidth = 2;
@@ -276,12 +270,10 @@ function drawKanjiStamp(ctx, x, y, text, primaryColor) {
   ctx.fill();
   ctx.stroke();
 
-  // Inner border
   ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 3, y + 3, 48, 74);
 
-  // Vertical text
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 22px 'Arial Black', sans-serif";
   ctx.textAlign = "center";
@@ -301,10 +293,8 @@ function drawDragonGraphics(ctx, width, height, theme) {
   ctx.save();
   ctx.globalAlpha = 0.18;
 
-  // Draw cyber dragon head silhouette on top left
   ctx.fillStyle = theme.primaryGlow;
   ctx.beginPath();
-  // Dragon horns and mouth path
   ctx.moveTo(80, 40);
   ctx.lineTo(240, 20);
   ctx.lineTo(190, 80);
@@ -318,7 +308,6 @@ function drawDragonGraphics(ctx, width, height, theme) {
   ctx.closePath();
   ctx.fill();
 
-  // Secondary dragon claws / flames on bottom right
   ctx.fillStyle = theme.secondaryGlow;
   ctx.beginPath();
   ctx.moveTo(width - 40, height - 200);
@@ -340,7 +329,6 @@ function drawDragonGraphics(ctx, width, height, theme) {
 function draw3DText(ctx, text, x, y, baseFontSize, theme, maxWidth) {
   ctx.save();
 
-  // Auto-scale font size if text is long
   let fontSize = baseFontSize;
   ctx.font = `900 ${fontSize}px "Impact", "Arial Black", sans-serif`;
 
@@ -349,7 +337,6 @@ function draw3DText(ctx, text, x, y, baseFontSize, theme, maxWidth) {
     ctx.font = `900 ${fontSize}px "Impact", "Arial Black", sans-serif`;
   }
 
-  // 1. Deep Shadow Layer for 3D extrusion
   const depth = 8;
   for (let i = depth; i > 0; i--) {
     ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
@@ -358,13 +345,11 @@ function draw3DText(ctx, text, x, y, baseFontSize, theme, maxWidth) {
     ctx.fillText(text, x + i, y + i);
   }
 
-  // 2. Intense Glow Backdrop
   ctx.shadowColor = theme.primaryGlow;
   ctx.shadowBlur = 35;
   ctx.fillStyle = theme.primaryGlow;
   ctx.fillText(text, x, y);
 
-  // 3. Metallic Linear Gradient Fill
   const textMetrics = ctx.measureText(text);
   const textWidth = textMetrics.width;
 
@@ -379,7 +364,6 @@ function draw3DText(ctx, text, x, y, baseFontSize, theme, maxWidth) {
   ctx.fillStyle = grad;
   ctx.fillText(text, x, y);
 
-  // 4. Fine Metallic Highlight Stroke
   ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
   ctx.lineWidth = 2;
   ctx.strokeText(text, x, y);
@@ -410,7 +394,6 @@ async function generateWelcomeCard(options = {}) {
     asDataUrl = false
   } = options;
 
-  // Pick theme options or allow custom theme color override
   const baseTheme = THEMES[themeKey] || THEMES.cyberpunk_neon;
   const theme = { ...baseTheme };
   if (themeColor) {
@@ -419,7 +402,6 @@ async function generateWelcomeCard(options = {}) {
     theme.badgeBg = `linear-gradient(90deg, ${themeColor}, #ffffff)`;
   }
 
-  // Create Canvas at 1536x1024 high resolution
   let canvas, ctx;
   if (typeof window !== "undefined" && window.document) {
     canvas = window.document.createElement("canvas");
@@ -430,16 +412,13 @@ async function generateWelcomeCard(options = {}) {
     canvas = createCanvas(width, height);
     ctx = canvas.getContext("2d");
   } else {
-    throw new Error("No canvas implementation found in Node.js environment.");
+    throw new Error("No canvas implementation found. Please install @napi-rs/canvas or canvas package.");
   }
 
-  // Enable anti-aliasing & high quality image smoothing
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // 1. BACKGROUND LAYER: Deep Sci-Fi / Cyberpunk Atmosphere
-  // ───────────────────────────────────────────────────────────────────────────
+  // 1. BACKGROUND
   const bgGrad = ctx.createRadialGradient(
     width * 0.35, height * 0.45, 100,
     width * 0.5, height * 0.5, width * 0.8
@@ -451,7 +430,6 @@ async function generateWelcomeCard(options = {}) {
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // Background Grid overlay
   ctx.save();
   ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
   ctx.lineWidth = 1.5;
@@ -470,10 +448,8 @@ async function generateWelcomeCard(options = {}) {
   }
   ctx.restore();
 
-  // Japanese / Dragon Background Graphics
   drawDragonGraphics(ctx, width, height, theme);
 
-  // Speed Light Rays / Radial Energy Lines
   ctx.save();
   ctx.translate(width * 0.3, height * 0.4);
   ctx.strokeStyle = theme.primaryGlow;
@@ -487,25 +463,21 @@ async function generateWelcomeCard(options = {}) {
   }
   ctx.restore();
 
-  // Corner Kanji Badges
   drawKanjiStamp(ctx, 48, 48, theme.kanjiMain, theme.primaryGlow);
   drawKanjiStamp(ctx, width - 102, 48, theme.kanjiSub, theme.secondaryGlow);
 
-  // Top/Bottom Sci-Fi Frame Borders
   ctx.save();
   ctx.strokeStyle = theme.primaryGlow;
   ctx.lineWidth = 3;
   ctx.shadowColor = theme.primaryGlow;
   ctx.shadowBlur = 15;
 
-  // Top Left Tech Border Accent
   ctx.beginPath();
   ctx.moveTo(120, 48);
   ctx.lineTo(380, 48);
   ctx.lineTo(410, 78);
   ctx.stroke();
 
-  // Top Right Tech Border Accent
   ctx.beginPath();
   ctx.moveTo(width - 120, 48);
   ctx.lineTo(width - 380, 48);
@@ -514,14 +486,11 @@ async function generateWelcomeCard(options = {}) {
 
   ctx.restore();
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // 2. AVATAR SECTION: Cyber Ring, Glow, Lightning & Shadow
-  // ───────────────────────────────────────────────────────────────────────────
+  // 2. AVATAR SECTION
   const avCenterX = 340;
   const avCenterY = 440;
   const avRadius = 200;
 
-  // Outer Neon Atmosphere Bloom
   const avGlow = ctx.createRadialGradient(
     avCenterX, avCenterY, avRadius * 0.8,
     avCenterX, avCenterY, avRadius * 1.6
@@ -538,15 +507,12 @@ async function generateWelcomeCard(options = {}) {
   ctx.fill();
   ctx.restore();
 
-  // Render Avatar Ring according to Theme Ring Type
   if (theme.ringType === "fire_ring") {
     drawFireRing(ctx, avCenterX, avCenterY, avRadius, theme);
   } else if (theme.ringType === "electric_dual") {
-    // Dual Lightning arc ring
     drawLightningArcRing(ctx, avCenterX, avCenterY, avRadius + 14, theme.primaryGlow, theme.primaryGlow, 10);
     drawLightningArcRing(ctx, avCenterX, avCenterY, avRadius + 24, theme.secondaryGlow, theme.secondaryGlow, 8);
   } else {
-    // Double Neon / Chrome Bevel
     ctx.save();
     ctx.shadowColor = theme.primaryGlow;
     ctx.shadowBlur = 30;
@@ -566,7 +532,6 @@ async function generateWelcomeCard(options = {}) {
     ctx.restore();
   }
 
-  // Clip & Render Avatar Image (or default high-tech gamer silhouette)
   ctx.save();
   ctx.beginPath();
   ctx.arc(avCenterX, avCenterY, avRadius, 0, Math.PI * 2);
@@ -584,11 +549,9 @@ async function generateWelcomeCard(options = {}) {
   }
 
   if (!avatarLoaded) {
-    // Gamer Hooded Silhouette Background
     ctx.fillStyle = "#0a0e1a";
     ctx.fillRect(avCenterX - avRadius, avCenterY - avRadius, avRadius * 2, avRadius * 2);
 
-    // Grid in avatar
     ctx.strokeStyle = theme.primaryGlow;
     ctx.globalAlpha = 0.2;
     ctx.lineWidth = 2;
@@ -600,12 +563,10 @@ async function generateWelcomeCard(options = {}) {
     }
     ctx.globalAlpha = 1.0;
 
-    // Hooded Gamer Helmet Graphic
     ctx.fillStyle = theme.primaryGlow;
     ctx.shadowColor = theme.primaryGlow;
     ctx.shadowBlur = 15;
 
-    // Head / visor
     ctx.beginPath();
     ctx.moveTo(avCenterX, avCenterY - 90);
     ctx.lineTo(avCenterX + 70, avCenterY - 20);
@@ -615,7 +576,6 @@ async function generateWelcomeCard(options = {}) {
     ctx.closePath();
     ctx.fill();
 
-    // Glowing Eyes
     ctx.fillStyle = "#ffffff";
     ctx.shadowColor = "#ffffff";
     ctx.shadowBlur = 20;
@@ -626,7 +586,6 @@ async function generateWelcomeCard(options = {}) {
   }
   ctx.restore();
 
-  // Inner Bevel Ring Overlay on Avatar
   ctx.save();
   ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
   ctx.lineWidth = 3;
@@ -635,12 +594,9 @@ async function generateWelcomeCard(options = {}) {
   ctx.stroke();
   ctx.restore();
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // 3. MAIN TYPOGRAPHY SECTION
-  // ───────────────────────────────────────────────────────────────────────────
+  // 3. MAIN TYPOGRAPHY
   const textX = 610;
 
-  // A. "WELCOME" / Japanese Sub-Header Title
   ctx.save();
   ctx.fillStyle = theme.primaryGlow;
   ctx.shadowColor = theme.primaryGlow;
@@ -653,10 +609,8 @@ async function generateWelcomeCard(options = {}) {
   ctx.fillText(theme.subtextJapanese, textX + 340, 230);
   ctx.restore();
 
-  // B. HUGE 3D MEMBER NAME TITLE
   draw3DText(ctx, memberName.toUpperCase(), textX, 350, 110, theme, width - textX - 80);
 
-  // C. BRUSH STYLE "JOINED GROUP" / SUBTEXT
   ctx.save();
   ctx.fillStyle = theme.accentColor;
   ctx.shadowColor = theme.accentColor;
@@ -665,7 +619,6 @@ async function generateWelcomeCard(options = {}) {
   ctx.fillText(`${customSubtitle.toUpperCase()} ★ ${groupName.toUpperCase()}`, textX, 430);
   ctx.restore();
 
-  // D. Glowing Energy Divider Line
   ctx.save();
   ctx.shadowColor = theme.primaryGlow;
   ctx.shadowBlur = 15;
@@ -682,16 +635,13 @@ async function generateWelcomeCard(options = {}) {
   ctx.lineTo(width - 120, 465);
   ctx.stroke();
 
-  // Decorative diamond notch on line
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
   ctx.arc(textX, 465, 6, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // 4. GLASSMORPHISM HUD INFORMATION PANEL (Bottom)
-  // ───────────────────────────────────────────────────────────────────────────
+  // 4. GLASSMORPHISM HUD PANEL
   const hudX = 90;
   const hudY = 720;
   const hudW = width - 180;
@@ -699,26 +649,22 @@ async function generateWelcomeCard(options = {}) {
   const chamfer = 24;
 
   ctx.save();
-  // Panel Background Glass
   drawChamferRect(ctx, hudX, hudY, hudW, hudH, chamfer);
   ctx.fillStyle = theme.hudBg;
   ctx.fill();
 
-  // Panel Glow Border
   ctx.shadowColor = theme.hudBorder;
   ctx.shadowBlur = 25;
   ctx.strokeStyle = theme.hudBorder;
   ctx.lineWidth = 3.5;
   ctx.stroke();
 
-  // Inner Hairline Highlights
   ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
   ctx.lineWidth = 1;
   drawChamferRect(ctx, hudX + 4, hudY + 4, hudW - 8, hudH - 8, chamfer - 2);
   ctx.stroke();
   ctx.restore();
 
-  // HUD Panel 3-Column Info Layout
   const cols = [
     { title: "MEMBER ID", value: memberId, icon: "🪪" },
     { title: "ADDED BY", value: addedBy, icon: "👑" },
@@ -730,7 +676,6 @@ async function generateWelcomeCard(options = {}) {
   cols.forEach((col, idx) => {
     const colX = hudX + idx * colWidth + colWidth / 2;
 
-    // Column Divider Line
     if (idx > 0) {
       ctx.save();
       ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
@@ -742,7 +687,6 @@ async function generateWelcomeCard(options = {}) {
       ctx.restore();
     }
 
-    // Icon Badge Container
     ctx.save();
     const iconBoxY = hudY + 42;
     ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
@@ -752,24 +696,20 @@ async function generateWelcomeCard(options = {}) {
     ctx.fill();
     ctx.stroke();
 
-    // Emoji / Icon
     ctx.font = "24px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(col.icon, colX, iconBoxY + 22);
 
-    // Label
     ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
     ctx.font = "bold 18px 'Arial', sans-serif";
     ctx.fillText(col.title, colX, hudY + 120);
 
-    // Value Text
     ctx.fillStyle = "#ffffff";
     ctx.shadowColor = theme.primaryGlow;
     ctx.shadowBlur = 8;
     ctx.font = "900 28px 'Impact', 'Arial Black', sans-serif";
 
-    // Truncate value if too long
     let displayVal = col.value.toString();
     if (displayVal.length > 18) {
       displayVal = displayVal.slice(0, 16) + "…";
@@ -779,9 +719,7 @@ async function generateWelcomeCard(options = {}) {
     ctx.restore();
   });
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // 5. FOOTER BRANDING & SHURIKEN DECORATION
-  // ───────────────────────────────────────────────────────────────────────────
+  // 5. FOOTER
   ctx.save();
   ctx.shadowColor = theme.primaryGlow;
   ctx.shadowBlur = 12;
@@ -791,7 +729,6 @@ async function generateWelcomeCard(options = {}) {
   ctx.fillText("❖ 一緒に、最強になろう ❖ Made By RIYAD BOT ❖", width / 2, height - 36);
   ctx.restore();
 
-  // Return PNG Buffer or Canvas or DataURL
   if (asDataUrl && canvas.toDataURL) {
     return canvas.toDataURL("image/png");
   } else if (canvas.toBuffer) {
@@ -801,12 +738,7 @@ async function generateWelcomeCard(options = {}) {
   }
 }
 
-/**
- * Standard Node.js (CommonJS) export — matches how scripts/events/memberWelcome.js
- * consumes this module: const { generateWelcomeCard } = require("../utils/welcomeCardGenerator");
- */
 module.exports = generateWelcomeCard;
 module.exports.generateWelcomeCard = generateWelcomeCard;
 module.exports.welcomeCardGenerator = generateWelcomeCard;
 module.exports.THEMES = THEMES;
-
