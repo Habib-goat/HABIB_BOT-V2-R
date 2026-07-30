@@ -22,3 +22,27 @@ module.exports = {
     try {
       thread = await threadsData.getThread(threadID);
     } catch (err) {
+      console.error("[WELCOME] getThread ERROR:", err?.message || err);
+    }
+
+    // Only proceed if welcomeMessage is configured for this thread
+    const welcomeMessage = thread?.settings?.welcomeMessage;
+    if (!welcomeMessage) return;
+
+    const threadName = thread?.name || "Group Chat";
+
+    for (const participant of addedParticipants) {
+      const name = participant.fullName || "New Member";
+
+      const msg = welcomeMessage
+        .replace(/{name}/g, name)
+        .replace(/{threadName}/g, threadName);
+
+      try {
+        await api.sendMessage(msg, threadID);
+      } catch (err) {
+        console.error("[WELCOME] sendMessage ERROR:", err?.message || err);
+      }
+    }
+  }
+};
