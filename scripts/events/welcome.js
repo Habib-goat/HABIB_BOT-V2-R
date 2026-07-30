@@ -4,27 +4,21 @@ module.exports = {
   config: {
     name: "welcome",
     eventType: ["log:subscribe"],
-    version: "1.0.1",
+    version: "1.1.0",
     author: "Riyad Bot"
   },
 
   onStart: async function({ api, event, threadsData, usersData }) {
-    // Check if the event type is subscribe
-    if (event.logMessageType === "log:subscribe") {
-      const { threadID } = event;
-const thread = await threadsData.getThread(threadID);
+    if (event.logMessageType !== "log:subscribe") return;
 
-const addedParticipants = event.logMessageData.addedParticipants;
+    const { threadID } = event;
+    if (!threadID) return;
 
-for (const participant of addedParticipants) {
-  const name = participant.fullName;
+    const addedParticipants = event.logMessageData?.addedParticipants;
+    if (!Array.isArray(addedParticipants) || addedParticipants.length === 0) return;
 
-  const msg = (thread?.settings?.welcomeMessage || "🎉 Welcome {name} to {threadName}!")
-    .replace(/{name}/g, name)
-    .replace(/{threadName}/g, thread?.name || "Group");
-
-  await api.sendMessage(msg, threadID);
-}
-    }
-  }
-};
+    // FIXED: was missing `await` — getThread returns a Promise
+    let thread = null;
+    try {
+      thread = await threadsData.getThread(threadID);
+    } catch (err) {
