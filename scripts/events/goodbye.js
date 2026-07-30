@@ -5,67 +5,23 @@ module.exports = {
   config: {
     name: "goodbye",
     eventType: ["log:unsubscribe"],
-    version: "1.0.0",
+    version: "1.1.0",
     author: "Riyad Bot"
   },
 
   onStart: async function({ api, event, threadsData, usersData }) {
-    if (event.logMessageType !== "log:unsubscribe")
-      return;
+    if (event.logMessageType !== "log:unsubscribe") return;
 
     const { threadID } = event;
+    if (!threadID) return;
 
-console.log("usersData methods:", Object.keys(usersData || {}));
+    let thread = null;
+    try {
+      thread = await threadsData.getThread(threadID);
+    } catch (err) {
+      console.error("[GOODBYE] getThread ERROR:", err?.message || err);
+    }
 
-const thread = await threadsData.getThread(threadID);
-const groupName = thread?.name || "Unknown Group";
-// AntiLeave চালু থাকলে Goodbye message পাঠাবে না
-if (
-  thread &&
-  (thread.antileave === true ||
-    (thread.data && thread.data.antileave === true))
-) {
-  return;
-}
-    const leftParticipantID = String(event.logMessageData.leftParticipantFbId);
-    let leftParticipantName;
+    const groupName = thread?.name || "Unknown Group";
 
-try {
-  const user = await database.getUser(leftParticipantID);
-leftParticipantName = user?.name || `User ${leftParticipantID.slice(-4)}`;
-  console.log("Goodbye Name:", leftParticipantName);
-} catch (err) {
-  leftParticipantName = `User ${leftParticipantID.slice(-4)}`;
-}
-
-    const msg = `╭━━━〔 🥀 𝐆𝐎𝐎𝐃𝐁𝐘𝐄 🥀 〕━━━╮
-
-◈ ━━━━━━ ⸙ ━━━━━━ ◈
-
-⚡ 𝗠𝗘𝗠𝗕𝗘𝗥: ◤ ${leftParticipantName} ◢ 🔥
-
-⚛️ 𝗚𝗥𝗢𝗨𝗣: ◤ ${groupName} ◢ ❄️
-
-◈ ━━━━━━ ⸙ ━━━━━━ ◈
-
-❤️‍🩹 যদি কখনো আবার ফিরে আসতে মন চায়, তবে নির্দ্বিধায় আমাদের ইনবক্সে একটি মেসেজ দিয়ো। 📩
-
-🔥 আমরা তোমাকে সাদরে আবারও আমাদের গ্রুপে অ্যাড করে নেবো। 🤝✨
-
-🍃 ভালো থেকো, নিজের খেয়াল রেখো সবসময়। 💫
-
-🤍 আল্লাহ হাফেজ! 🌸
-
-✨ আবার দেখা হবে, শুভকামনা রইল! 🎉
-
-╰━━〔 ⚡ 𝐒𝐄𝐄 𝐘𝐎𝐔 𝐒𝐎𝐎𝐍 ⚡ 〕━━╯`;
-
-    await api.sendMessage({
-      body: msg,
-      mentions: [{
-        id: leftParticipantID,
-        tag: leftParticipantName
-      }]
-    }, threadID);
-  }
-};
+    // AntiLeave চালু থাকলে Goodbye message পাঠাবে না
