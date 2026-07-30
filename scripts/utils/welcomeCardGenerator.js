@@ -13,32 +13,21 @@ let createCanvas, loadImage, registerFont;
 // Try loading Node canvas library (@napi-rs/canvas or canvas) in Node environment
 if (typeof window === 'undefined') {
   try {
-    let req;
+    const napi = require('@napi-rs/canvas');
+    createCanvas = napi.createCanvas;
+    loadImage = napi.loadImage;
+    registerFont = napi.GlobalFonts
+      ? (path, opts) => napi.GlobalFonts.registerFromPath(path, opts && opts.family)
+      : napi.registerFont;
+  } catch (e1) {
     try {
-      req = eval("require");
-    } catch (_e) {
-      // In pure ESM, create require from node:module
-      const createRequire = eval("require('node:module')").createRequire;
-      req = createRequire(import.meta.url);
+      const c = require('canvas');
+      createCanvas = c.createCanvas;
+      loadImage = c.loadImage;
+      registerFont = c.registerFont;
+    } catch (e2) {
+      // Browser or pure SVG fallback handled below
     }
-
-    if (req) {
-      try {
-        const napi = req('@napi-rs/canvas');
-        createCanvas = napi.createCanvas;
-        loadImage = napi.loadImage;
-      } catch (e1) {
-        try {
-          const c = req('canvas');
-          createCanvas = c.createCanvas;
-          loadImage = c.loadImage;
-        } catch (e2) {
-          // Browser or pure SVG fallback handled below
-        }
-      }
-    }
-  } catch (e) {
-    // Ignore in browser
   }
 }
 
@@ -813,16 +802,11 @@ async function generateWelcomeCard(options = {}) {
 }
 
 /**
- * Standard Node.js export for bot compatibility (CommonJS + ES Module)
+ * Standard Node.js (CommonJS) export — matches how scripts/events/memberWelcome.js
+ * consumes this module: const { generateWelcomeCard } = require("../utils/welcomeCardGenerator");
  */
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = generateWelcomeCard;
-  module.exports.generateWelcomeCard = generateWelcomeCard;
-  module.exports.welcomeCardGenerator = generateWelcomeCard;
-  module.exports.default = generateWelcomeCard;
-  module.exports.THEMES = THEMES;
-}
-
-export default generateWelcomeCard;
-export { generateWelcomeCard, generateWelcomeCard as welcomeCardGenerator, THEMES };
+module.exports = generateWelcomeCard;
+module.exports.generateWelcomeCard = generateWelcomeCard;
+module.exports.welcomeCardGenerator = generateWelcomeCard;
+module.exports.THEMES = THEMES;
 
