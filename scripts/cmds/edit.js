@@ -15,56 +15,25 @@ module.exports = {
 		author: "MahMUD",
 		countDown: 10,
 		role: 0,
-		description: {
-			bn: "এআই এর মাধ্যমে আপনার ছবি এডিট করুন",
-			en: "Edit your image using AI prompt",
-			vi: "Chỉnh sửa hình ảnh của bạn bằng lời nhắc AI"
-		},
+		description: "Edit your image using AI prompt",
 		category: "image",
-		guide: {
-			bn: '   {pn} <প্রম্পট>: ছবির রিপ্লাই দিয়ে এডিট প্রম্পট লিখুন'
-				+ '\n   উদাহরণ: {pn} change hair color to red',
-			en: '   {pn} <prompt>: Reply to an image with edit instructions'
-				+ '\n   Example: {pn} add sunglasses to face',
-			vi: '   {pn} <lời nhắc>: Phản hồi ảnh kèm hướng dẫn chỉnh sửa'
-				+ '\n   Ví dụ: {pn} đổi màu tóc thành đỏ'
-		}
+		guide: "{pn} <prompt>: Reply to an image with edit instructions\n   Example: {pn} add sunglasses to face"
 	},
 
-	langs: {
-		bn: {
-			noInput: "× বেবি, একটি ছবিতে রিপ্লাই দিয়ে বলো কি এডিট করতে হবে! 🪄",
-			wait: "🔄 | তোমার ছবি এডিট করা হচ্ছে, একটু অপেক্ষা করো বেবি...",
-			success: "✅ | তোমার এডিট করা ছবি তৈরি: \"%1\"",
-			error: "× এডিট করতে সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।\n•WhatsApp: 01836298139"
-		},
-		en: {
-			noInput: "× Baby, please reply to a photo with your prompt to edit it! 🪄",
-			wait: "🔄 | Editing your image, please wait...",
-			success: "✅ Here's your Edited image\nPrompt: %1",
-			error: "× Failed to edit: %1. Contact MahMUD for help.\n•WhatsApp: 01836298139"
-		},
-		vi: {
-			noInput: "× Cưng ơi, vui lòng phản hồi ảnh kèm lời nhắc chỉnh sửa! 🪄",
-			wait: "🔄 | Đang chỉnh sửa ảnh, vui lòng chờ chút nhé...",
-			success: "✅ | Ảnh đã chỉnh sửa cho: \"%1\"",
-			error: "× Lỗi chỉnh sửa: %1. Liên hệ MahMUD để hỗ trợ.\n•WhatsApp: 01836298139"
-		}
-	},
-
-	onStart: async function ({ api, event, args, message, getLang }) {
+	onStart: async function ({ api, event, args }) {
+		const { threadID, messageID } = event;
 		const prompt = args.join(" ");
 		const repliedImage = event.messageReply?.attachments?.[0];
 
 		if (!prompt || !repliedImage || repliedImage.type !== "photo") {
-			return message.reply(getLang("noInput"));
+			return api.sendMessage("× Baby, please reply to a photo with your prompt to edit it! 🪄", threadID, messageID);
 		}
 
 		const cacheDir = path.join(__dirname, "cache");
 		const imgPath = path.join(cacheDir, `${Date.now()}_edit.jpg`);
 		await fs.ensureDir(cacheDir);
 
-		const waitMsg = await message.reply(getLang("wait"));
+		const waitMsg = await api.sendMessage("🔄 | Editing your image, please wait...", threadID, messageID);
 
 		try {
 			const res = await axios.post(
@@ -75,16 +44,18 @@ module.exports = {
 
 			await fs.writeFile(imgPath, Buffer.from(res.data, "binary"));
 
-			await message.reply({
-				body: getLang("success", prompt),
+			await api.sendMessage({
+				body: `✅ Here's your Edited image\nPrompt: ${prompt}`,
 				attachment: fs.createReadStream(imgPath)
-			});
+			}, threadID, messageID);
 
 		} catch (err) {
 			console.error("Edit Command Error:", err);
-			return message.reply(getLang("error", err.message));
+			return api.sendMessage(`× Failed to edit: ${err.message}. Contact MahMUD for help.\n•WhatsApp: 01836298139`, threadID, messageID);
 		} finally {
-			if (waitMsg?.messageID) api.unsendMessage(waitMsg.messageID);
+			if (waitMsg?.messageID && typeof api.unsendMessage === "function") {
+				try { api.unsendMessage(waitMsg.messageID); } catch (e) {}
+			}
 			setTimeout(() => {
 				if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
 			}, 10000);
