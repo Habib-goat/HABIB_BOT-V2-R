@@ -76,23 +76,43 @@ const FONT_STACK = '"Hind Siliguri", "Noto Sans Bengali", "Trebuchet MS", "Segoe
 const FONT_STACK_DISPLAY = '"Hind Siliguri", "Noto Sans Bengali", "Arial Black", "Impact", "Trebuchet MS", sans-serif';
 
 /**
- * Format date into "30 Jul 2025, 08:30 PM" format if needed
+ * Format date into "30 Jul 2026, 08:30 PM" format, always in
+ * Bangladesh Standard Time (Asia/Dhaka, UTC+6) — independent of what
+ * timezone the server itself runs in.
  */
 function formatDate(dateInput) {
-  if (!dateInput) {
-    const now = new Date();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = months[now.getMonth()];
-    const year = now.getFullYear();
-    let hours = now.getHours();
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12 || 12;
-    const formattedHours = String(hours).padStart(2, '0');
-    return `${day} ${month} ${year}, ${formattedHours}:${minutes} ${ampm}`;
+  // If a plain, already-formatted string was passed in (not a Date/number),
+  // keep it as-is instead of trying to reparse it.
+  if (typeof dateInput === 'string' && dateInput.trim() !== '') {
+    return dateInput;
   }
-  return String(dateInput);
+
+  const date = dateInput instanceof Date ? dateInput : new Date();
+  const validDate = isNaN(date.getTime()) ? new Date() : date;
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Dhaka',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).formatToParts(validDate);
+
+  const get = (type) => parts.find((p) => p.type === type)?.value || '';
+  const day = get('day');
+  const month = get('month');
+  const year = get('year');
+  let hour = get('hour');
+  const minute = get('minute');
+  let ampm = (get('dayPeriod') || '').toUpperCase();
+  // Some Node/ICU builds render "am"/"pm" lowercase or "in the morning" —
+  // normalize to AM/PM, and pad the hour to 2 digits.
+  ampm = ampm.startsWith('P') ? 'PM' : 'AM';
+  hour = String(hour).padStart(2, '0');
+
+  return `${day} ${month} ${year}, ${hour}:${minute} ${ampm}`;
 }
 
 /**
