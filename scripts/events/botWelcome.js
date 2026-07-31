@@ -4,7 +4,7 @@ module.exports = {
   config: {
     name: "botWelcome",
     eventType: ["log:subscribe"],
-    version: "1.0.0",
+    version: "1.0.1",
     author: "Riyad Bot"
   },
 
@@ -28,8 +28,35 @@ module.exports = {
         const prefix = config.prefix || "/";
         
         // Retrieve thread name or fallback
-        const threadInfo = threadsData.getThread(threadID);
+        // FIXED: getThread returns a Promise — this was never awaited, so
+        // `threadInfo` was always a pending Promise (never the actual thread).
+        let threadInfo = null;
+        try {
+          threadInfo = await threadsData.getThread(threadID);
+        } catch (e) {
+          // ignore, fall back to default group name below
+        }
         const groupName = (threadInfo && threadInfo.name) ? threadInfo.name : "this group";
+
+        // FIXED: `adderName` was referenced below but never defined anywhere —
+        // that ReferenceError crashed this whole function before sendMessage
+        // ever ran, which is why the bot-join welcome message never appeared.
+        let adderName = "Someone";
+        try {
+          if (typeof api.getUserInfo === "function" && event.author) {
+            const info = await new Promise((resolve, reject) => {
+              api.getUserInfo(event.author, (err, data) => {
+                if (err) return reject(err);
+                resolve(data);
+              });
+            });
+            if (info && info[event.author]?.name) {
+              adderName = info[event.author].name;
+            }
+          }
+        } catch (e) {
+          // keep fallback "Someone"
+        }
 
         const welcomeMessage =
 `╔═❰ ⚡ SYSTEM ONLINE ⚡ ❱═╗
