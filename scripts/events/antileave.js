@@ -28,7 +28,7 @@ async function autoUnsend(api, messageID, delayMs = 7500) {
 module.exports = {
   config: {
     name: "antileave",
-    version: "2.1.0",
+    version: "2.1.1",
     author: "Riyad Bot",
     eventType: ["log:unsubscribe"]
   },
@@ -41,7 +41,15 @@ module.exports = {
     const authorID = String(event.author || "");
 
     // শুধুমাত্র নিজে Leave করলে কাজ করবে (কাউকে kick করলে antileave কাজ করবে না)
-    if (leftUserID !== authorID) return;
+    // FIXED: fca-eryxenx মাঝেমধ্যে log:unsubscribe ইভেন্টে `author` ফিল্ড
+    // পাঠায় না (খালি থাকে)। আগের কোডে authorID খালি ("") হলেও leftUserID
+    // এর সাথে না মেলায় সাথে সাথে return হয়ে যেত — মানে re-add করার
+    // চেষ্টাই কখনো হতো না। এখন শুধু তখনই skip করবে যখন author সত্যিই
+    // পাওয়া গেছে এবং সেটা leftUserID-এর থেকে আলাদা (অর্থাৎ নিশ্চিতভাবে kick)।
+    if (authorID && leftUserID !== authorID) {
+      console.log(`[ANTILEAVE] Skipping — ${leftUserID} was kicked by ${authorID}, not a self-leave.`);
+      return;
+    }
 
     // বট Leave করলে কিছু করবে না
     let botID = "";
