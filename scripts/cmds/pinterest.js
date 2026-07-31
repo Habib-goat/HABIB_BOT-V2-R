@@ -15,60 +15,37 @@ module.exports = {
 		author: "MahMUD",
 		countDown: 10,
 		role: 0,
-		description: {
-			bn: "পিন্টারেস্ট থেকে যেকোনো ছবি সার্চ করে ডাউনলোড করুন",
-			en: "Search and download images from Pinterest",
-			vi: "Tìm kiếm và tải xuống hình ảnh từ Pinterest"
-		},
+		description: "Search and download images from Pinterest",
 		category: "image gen",
-		guide: {
-			bn: '   {pn} <নাম> - <পরিমাণ>: (যেমন: {pn} goku - 10)',
-			en: '   {pn} <query> - <amount>: (Ex: {pn} goku - 10)',
-			vi: '   {pn} <từ khóa> - <số lượng>: (VD: {pn} goku - 10)'
-		}
+		guide: "{pn} <query> - <amount>: (Ex: {pn} goku - 10)"
 	},
 
-	langs: {
-		bn: {
-			noInput: "× বেবি, কী ছবি খুঁজছো? নাম ও পরিমাণ দাও! 🔍\nউদাহরণ: {pn} goku - 10",
-			noData: "× দুঃখিত, আপনার সার্চ অনুযায়ী কোনো ছবি পাওয়া যায়নি।",
-			success: "✅ | আপনার জন্য \"%1\" এর %2টি ছবি এখানে রয়েছে:",
-			error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।\n•WhatsApp: 01836298139"
-		},
-		en: {
-			noInput: "× Baby, please enter a search query and amount! 🔍\nExample: {pn} goku - 10",
-			noData: "× Sorry, no images found for your query.",
-			success: "✅ | Here are your %2 images for \"%1\":",
-			error: "× API error: %1. Contact MahMUD for help.\n•WhatsApp: 01836298139"
-		},
-		vi: {
-			noInput: "× Cưng ơi, hãy nhập từ khóa và số lượng! 🔍\nVD: {pn} goku - 10",
-			noData: "× Rất tiếc, không tìm thấy hình ảnh nào.",
-			success: "✅ | Đây là %2 hình ảnh cho \"%1\":",
-			error: "× Lỗi: %1. Liên hệ MahMUD để hỗ trợ.\n•WhatsApp: 01836298139"
-		}
-	},
+	onStart: async function ({ api, event, args }) {
+		const { threadID, messageID } = event;
 
-	onStart: async function ({ api, event, args, message, getLang }) {
 		const queryAndLength = args.join(" ").split("-");
 		const keySearch = queryAndLength[0]?.trim();
 		const count = queryAndLength[1]?.trim();
 		const numberSearch = count ? Math.min(parseInt(count), 20) : 6;
 
-		if (!keySearch) return message.reply(getLang("noInput"));
+		if (!keySearch) {
+			return api.sendMessage("× Baby, please enter a search query and amount! 🔍\nExample: pin goku - 10", threadID, messageID);
+		}
 
 		const cacheDir = path.join(__dirname, "cache");
 		if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
 
+		const hasReaction = typeof api.setMessageReaction === "function";
+
 		try {
-			api.setMessageReaction("⏳", event.messageID, () => {}, true);
+			if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
 
 			const response = await axios.get(`${await baseApiUrl()}/api/pin/mahmud?query=${encodeURIComponent(keySearch)}&limit=${numberSearch}`);
 
 			const data = response.data.images;
 			if (!data || data.length === 0) {
-				api.setMessageReaction("❌", event.messageID, () => {}, true);
-				return message.reply(getLang("noData"));
+				if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
+				return api.sendMessage("× Sorry, no images found for your query.", threadID, messageID);
 			}
 
 			const attachments = [];
@@ -81,11 +58,11 @@ module.exports = {
 				attachments.push(fs.createReadStream(imgPath));
 			}
 
-			await message.reply({
-				body: getLang("success", keySearch, attachments.length),
+			await api.sendMessage({
+				body: `✅ | Here are your ${attachments.length} images for "${keySearch}":`,
 				attachment: attachments
-			}, () => {
-				api.setMessageReaction("✅", event.messageID, () => {}, true);
+			}, threadID, messageID, () => {
+				if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
 				imgPaths.forEach(p => {
 					if (fs.existsSync(p)) fs.unlinkSync(p);
 				});
@@ -93,8 +70,8 @@ module.exports = {
 
 		} catch (err) {
 			console.error("Pinterest Error:", err);
-			api.setMessageReaction("❌", event.messageID, () => {}, true);
-			return message.reply(getLang("error", err.message));
+			if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
+			return api.sendMessage(`× API error: ${err.message}. Contact MahMUD for help.\n•WhatsApp: 01836298139`, threadID, messageID);
 		}
 	}
 };
