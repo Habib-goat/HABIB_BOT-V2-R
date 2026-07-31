@@ -10,6 +10,12 @@
 
 const path = require('path');
 const fs = require('fs');
+let axios = null;
+try {
+  axios = require('axios'); // already a project dependency (see package.json)
+} catch (e) {
+  // If axios somehow isn't available we still fall back to loadImage(url) directly.
+}
 
 // Load Node canvas library. This project ships the "canvas" package, but we
 // also try "@napi-rs/canvas" first in case it's available/faster, then fall
@@ -316,8 +322,56 @@ function drawDefaultAvatar(ctx, cx, cy, radius) {
 }
 
 /**
- * Main Welcome Card Generator Function
+ * Reliably load an avatar image for the canvas.
+ *
+ * Why this exists: node-canvas's built-in loadImage(url) fetches the URL
+ * itself with no custom headers. Facebook's CDN (and the graph.facebook.com
+ * /picture redirect) will sometimes reject or hang on that bare request
+ * (missing User-Agent, redirect not followed, slow/no timeout), which made
+ * the profile picture silently fail and fall back to the default silhouette
+ * with no visible error. Fetching the bytes ourselves via axios (already a
+ * project dependency) with a real User-Agent + a timeout, then handing the
+ * raw buffer to loadImage(), fixes that and also guarantees we get the
+ * full-resolution (HD) image Facebook serves rather than a cached tiny copy.
  */
+async function loadAvatarImage(input) {
+  if (!input) return null;
+
+  // Already raw bytes (e.g. someone passed a Buffer/Image directly).
+  if (Buffer.isBuffer(input)) {
+    return loadImage(input);
+  }
+  if (typeof input !== 'string') {
+    // Assume it's already a loaded Image-like object.
+    return input;
+  }
+
+  // Local file path.
+  if (!/^https?:\/\//i.test(input)) {
+    return loadImage(input);
+  }
+
+  // Remote URL — fetch bytes ourselves for reliability + HD quality.
+  if (axios) {
+    const response = await axios.get(input, {
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      maxRedirects: 5,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+      },
+      validateStatus: (status) => status >= 200 && status < 400,
+    });
+    return loadImage(Buffer.from(response.data));
+  }
+
+  // No axios available — fall back to node-canvas's own URL loader.
+  return loadImage(input);
+}
+
+
 async function generateWelcomeCard(optionsOrAvatar, nameParam, groupParam, memberIdParam, addedByParam, joinedOnParam, totalMembersParam) {
   ensureFontsRegistered();
 
@@ -646,12 +700,7 @@ async function generateWelcomeCard(optionsOrAvatar, nameParam, groupParam, membe
   let avatarLoaded = false;
   if (avatarInput) {
     try {
-      let img;
-      if (typeof avatarInput === 'string' || Buffer.isBuffer(avatarInput)) {
-        img = await loadImage(avatarInput);
-      } else {
-        img = avatarInput;
-      }
+      const img = await loadAvatarImage(avatarInput);
       if (img) {
         ctx.beginPath();
         ctx.arc(avatarCX, avatarCY, avatarRadius, 0, Math.PI * 2);
@@ -662,6 +711,10 @@ async function generateWelcomeCard(optionsOrAvatar, nameParam, groupParam, membe
       }
     } catch (err) {
       avatarLoaded = false;
+      // Previously this failure was swallowed completely, so a broken
+      // avatar URL silently fell back to the default silhouette with no
+      // way to tell why. Log it so it's actually diagnosable.
+      console.error('[welcomeCardGenerator] Failed to load avatar image:', err?.message || err);
     }
   }
 
