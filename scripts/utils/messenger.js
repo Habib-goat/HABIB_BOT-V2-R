@@ -380,8 +380,15 @@ try {
 
 } else if (event.type === "event") {
 
-  await dispatchSystemEvent(adaptedApi, event);
-
+  // NOTE: previously this also called dispatchSystemEvent(adaptedApi, event)
+  // right before botEngine.processMessage(). Both functions independently
+  // loop over eventLoader.events and call each handler's onStart() for the
+  // same logMessageType — so every "event" (member join/leave, thread name
+  // change, admin change, etc.) was running twice: welcome/memberWelcome
+  // cards sent twice, groupnoti sent twice, goodbye/antileave sent twice.
+  // botEngine.processMessage's log-event branch already covers everything
+  // dispatchSystemEvent did (plus replyManager/reactionManager context and
+  // wildcard "*" event types), so we only call it once here.
   await botEngine.processMessage(
     event,
     commandLoader,
