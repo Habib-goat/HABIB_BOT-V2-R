@@ -128,7 +128,7 @@ module.exports = {
 ‎🌿 𝐌𝐞𝐦𝐛𝐞𝐫:  𓆩 ${memberCount !== null ? memberCount : "N/A"} 𓆪
 ‎🌿 𝐀𝐝𝐝𝐞𝐝 𝐁𝐘:  𓆩 ${addedByName} 𓆪
 
-‎♛【​•════════════════•】♛`;
+‎♛【​•═══════════════•】♛`;
 
       try {
         if (imagePath && fs.existsSync(imagePath)) {
