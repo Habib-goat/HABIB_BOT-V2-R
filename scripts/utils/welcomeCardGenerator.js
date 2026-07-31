@@ -1,744 +1,904 @@
 /**
  * welcomeCardGenerator.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Ultra-Premium Gaming/Cyberpunk Welcome Card Generator for Node.js & Web.
- * Renders 1536x1024 Photoshop-quality cards with 3D metallic typography,
- * electric/flame avatar rings, glassmorphism HUD panels, Japanese decorations,
- * and HDR lighting effects.
- * ─────────────────────────────────────────────────────────────────────────────
+ * High-Quality Node.js Canvas Welcome Card Generator
+ * Matches Canva Template Design with 100% Precision
+ *
+ * Fixed for compatibility with RIYAD BOT (CommonJS project, "canvas" package).
+ * Also supports Bangla (বাংলা) text via bundled Hind Siliguri font, falling
+ * back to whatever system fonts are available (e.g. fonts-noto in Docker).
  */
 
+const path = require('path');
+const fs = require('fs');
+
+// Load Node canvas library. This project ships the "canvas" package, but we
+// also try "@napi-rs/canvas" first in case it's available/faster, then fall
+// back gracefully instead of crashing at require-time.
 let createCanvas, loadImage, registerFont;
-
-// Try loading Node canvas library (@napi-rs/canvas or canvas) in Node environment
-if (typeof window === 'undefined') {
+try {
+  const napi = require('@napi-rs/canvas');
+  createCanvas = napi.createCanvas;
+  loadImage = napi.loadImage;
+  registerFont = napi.GlobalFonts
+    ? (fontPath, opts) => napi.GlobalFonts.registerFromPath(fontPath, opts && opts.family)
+    : napi.registerFont;
+} catch (e1) {
   try {
-    const napi = require('@napi-rs/canvas');
-    createCanvas = napi.createCanvas;
-    loadImage = napi.loadImage;
-    registerFont = napi.GlobalFonts
-      ? (path, opts) => napi.GlobalFonts.registerFromPath(path, opts && opts.family)
-      : napi.registerFont;
-  } catch (e1) {
+    const c = require('canvas');
+    createCanvas = c.createCanvas;
+    loadImage = c.loadImage;
+    registerFont = c.registerFont;
+  } catch (e2) {
+    throw new Error(
+      'No canvas implementation found. Please run "npm install canvas" (or "@napi-rs/canvas").'
+    );
+  }
+}
+
+/**
+ * Register bundled fonts (Poppins for English, Hind Siliguri for Bangla) if
+ * the .ttf files exist in ./fonts. Safe to call multiple times; silently
+ * skips missing files so the bot still works without them (falls back to
+ * system fonts, e.g. fonts-noto installed via Docker).
+ */
+let fontsRegistered = false;
+function ensureFontsRegistered() {
+  if (fontsRegistered) return;
+  fontsRegistered = true;
+
+  const fontsDir = path.join(__dirname, 'fonts');
+  const fontFiles = [
+    { file: 'Poppins-Bold.ttf', family: 'Poppins', weight: 'bold' },
+    { file: 'Poppins-Regular.ttf', family: 'Poppins', weight: 'normal' },
+    { file: 'HindSiliguri-Bold.ttf', family: 'Hind Siliguri', weight: 'bold' },
+    { file: 'HindSiliguri-Regular.ttf', family: 'Hind Siliguri', weight: 'normal' },
+  ];
+
+  for (const f of fontFiles) {
     try {
-      const c = require('canvas');
-      createCanvas = c.createCanvas;
-      loadImage = c.loadImage;
-      registerFont = c.registerFont;
-    } catch (e2) {
-      // Browser or pure SVG fallback handled below
+      const fullPath = path.join(fontsDir, f.file);
+      if (fs.existsSync(fullPath) && typeof registerFont === 'function') {
+        registerFont(fullPath, { family: f.family, weight: f.weight });
+      }
+    } catch (err) {
+      console.error('[welcomeCardGenerator] Font registration failed for', f.file, err?.message || err);
     }
   }
 }
 
 /**
- * 5 Iconic Master Themes
+ * Font stack used everywhere text is drawn. "Hind Siliguri" (and the
+ * "Noto Sans Bengali" system fallback) makes Bangla (বাংলা) render as real
+ * glyphs instead of tofu boxes, while still preferring the English display
+ * fonts for latin text.
  */
-const THEMES = {
-  cyberpunk_neon: {
-    id: "cyberpunk_neon",
-    name: "Cyberpunk Dragon (Blue/Pink Dual Neon)",
-    bgDark: "#050716",
-    bgMid: "#0c0d28",
-    primaryGlow: "#00f0ff",
-    secondaryGlow: "#ff007f",
-    accentColor: "#ff007f",
-    textColor: "#ffffff",
-    badgeBg: "linear-gradient(90deg, #00f0ff, #ff007f)",
-    hudBg: "rgba(10, 14, 30, 0.85)",
-    hudBorder: "#00f0ff",
-    hudGlow: "rgba(0, 240, 255, 0.4)",
-    ringType: "electric_dual",
-    kanjiMain: "団結",
-    kanjiSub: "伝説",
-    subtextJapanese: "一緖に、最強になろう",
-    styleTag: "CYBERPUNK"
-  },
-  inferno_fire: {
-    id: "inferno_fire",
-    name: "Inferno Volcanic Fire",
-    bgDark: "#0d0202",
-    bgMid: "#210603",
-    primaryGlow: "#ff5500",
-    secondaryGlow: "#ffaa00",
-    accentColor: "#ff8800",
-    textColor: "#ffffff",
-    badgeBg: "linear-gradient(90deg, #ff3300, #ffaa00)",
-    hudBg: "rgba(20, 5, 2, 0.88)",
-    hudBorder: "#ff5500",
-    hudGlow: "rgba(255, 85, 0, 0.5)",
-    ringType: "fire_ring",
-    kanjiMain: "火炎",
-    kanjiSub: "無敵",
-    subtextJapanese: "燃え上がれ、魂の炎",
-    styleTag: "INFERNO"
-  },
-  tokyo_pink: {
-    id: "tokyo_pink",
-    name: "Tokyo Cyber Sakura (Magenta Night)",
-    bgDark: "#08020e",
-    bgMid: "#1a0628",
-    primaryGlow: "#ff1493",
-    secondaryGlow: "#8a2be2",
-    accentColor: "#ff69b4",
-    textColor: "#ffffff",
-    badgeBg: "linear-gradient(90deg, #ff1493, #da70d6)",
-    hudBg: "rgba(18, 5, 28, 0.85)",
-    hudBorder: "#ff1493",
-    hudGlow: "rgba(255, 20, 147, 0.45)",
-    ringType: "neon_double",
-    kanjiMain: "未来",
-    kanjiSub: "歓迎",
-    subtextJapanese: "未来を信じる・東京ナイト",
-    styleTag: "TOKYO"
-  },
-  silver_diamond: {
-    id: "silver_diamond",
-    name: "Silver Obsidian Diamond",
-    bgDark: "#050507",
-    bgMid: "#121318",
-    primaryGlow: "#e0e6ed",
-    secondaryGlow: "#788896",
-    accentColor: "#c0cdd8",
-    textColor: "#ffffff",
-    badgeBg: "linear-gradient(90deg, #8a9ba8, #e0e6ed)",
-    hudBg: "rgba(15, 17, 22, 0.88)",
-    hudBorder: "#a0b0c0",
-    hudGlow: "rgba(200, 215, 230, 0.3)",
-    ringType: "chrome_bevel",
-    kanjiMain: "金剛",
-    kanjiSub: "頂点",
-    subtextJapanese: "漆黒の輝き、頂点へ",
-    styleTag: "DIAMOND"
-  },
-  emerald_matrix: {
-    id: "emerald_matrix",
-    name: "Emerald Matrix Tech HUD",
-    bgDark: "#020b05",
-    bgMid: "#061f0e",
-    primaryGlow: "#00ff66",
-    secondaryGlow: "#00b33c",
-    accentColor: "#00ff88",
-    textColor: "#ffffff",
-    badgeBg: "linear-gradient(90deg, #00b33c, #00ff66)",
-    hudBg: "rgba(3, 18, 8, 0.88)",
-    hudBorder: "#00ff66",
-    hudGlow: "rgba(0, 255, 102, 0.4)",
-    ringType: "matrix_circuit",
-    kanjiMain: "電脳",
-    kanjiSub: "覚醒",
-    subtextJapanese: "システム接続完了・覚醒",
-    styleTag: "MATRIX"
-  }
-};
+const FONT_STACK = '"Hind Siliguri", "Noto Sans Bengali", "Trebuchet MS", "Segoe UI", "Arial", sans-serif';
+const FONT_STACK_DISPLAY = '"Hind Siliguri", "Noto Sans Bengali", "Arial Black", "Impact", "Trebuchet MS", sans-serif';
 
 /**
- * Utility: Draw high-tech chamfered (angled-corner) panel
+ * Format date into "30 Jul 2025, 08:30 PM" format if needed
  */
-function drawChamferRect(ctx, x, y, width, height, chamfer) {
+function formatDate(dateInput) {
+  if (!dateInput) {
+    const now = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = months[now.getMonth()];
+    const year = now.getFullYear();
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    const formattedHours = String(hours).padStart(2, '0');
+    return `${day} ${month} ${year}, ${formattedHours}:${minutes} ${ampm}`;
+  }
+  return String(dateInput);
+}
+
+/**
+ * Helper to draw rounded rectangle
+ */
+function drawRoundedRect(ctx, x, y, width, height, radius) {
   ctx.beginPath();
-  ctx.moveTo(x + chamfer, y);
-  ctx.lineTo(x + width - chamfer, y);
-  ctx.lineTo(x + width, y + chamfer);
-  ctx.lineTo(x + width, y + height - chamfer);
-  ctx.lineTo(x + width - chamfer, y + height);
-  ctx.lineTo(x + chamfer, y + height);
-  ctx.lineTo(x, y + height - chamfer);
-  ctx.lineTo(x, y + chamfer);
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
 }
 
 /**
- * Utility: Generate realistic jagged electric lightning path
+ * Helper to draw 4-point sparkle star
  */
-function generateLightningPoints(x1, y1, x2, y2, roughness = 18, iterations = 5) {
-  let points = [{ x: x1, y: y1 }, { x: x2, y: y2 }];
-  for (let i = 0; i < iterations; i++) {
-    const newPoints = [points[0]];
-    for (let j = 0; j < points.length - 1; j++) {
-      const p1 = points[j];
-      const p2 = points[j + 1];
-      const midX = (p1.x + p2.x) / 2;
-      const midY = (p1.y + p2.y) / 2;
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      const nx = -dy / (len || 1);
-      const ny = dx / (len || 1);
-      const offset = (Math.random() - 0.5) * roughness * (1 / (i + 1));
-      newPoints.push({ x: midX + nx * offset, y: midY + ny * offset });
-      newPoints.push(p2);
-    }
-    points = newPoints;
-  }
-  return points;
-}
-
-/**
- * Render procedural Lightning Arc around a center point
- */
-function drawLightningArcRing(ctx, cx, cy, radius, color, glowColor, numArcs = 8) {
+function drawSparkleStar(ctx, cx, cy, size, color) {
   ctx.save();
-  for (let i = 0; i < numArcs; i++) {
-    const angle1 = (i / numArcs) * Math.PI * 2;
-    const angle2 = ((i + 1) / numArcs) * Math.PI * 2;
-    const x1 = cx + Math.cos(angle1) * radius;
-    const y1 = cy + Math.sin(angle1) * radius;
-    const x2 = cx + Math.cos(angle2) * radius;
-    const y2 = cy + Math.sin(angle2) * radius;
-
-    const points = generateLightningPoints(x1, y1, x2, y2, 22, 4);
-
-    ctx.shadowColor = glowColor;
-    ctx.shadowBlur = 18;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let p = 1; p < points.length; p++) {
-      ctx.lineTo(points[p].x, points[p].y);
-    }
-    ctx.stroke();
-
-    ctx.shadowBlur = 4;
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-/**
- * Draw procedural Fire Ring Particles around avatar
- */
-function drawFireRing(ctx, cx, cy, radius, theme) {
-  ctx.save();
-
-  const grad = ctx.createRadialGradient(cx, cy, radius - 20, cx, cy, radius + 40);
-  grad.addColorStop(0, "rgba(255, 200, 0, 0.8)");
-  grad.addColorStop(0.4, "rgba(255, 85, 0, 0.6)");
-  grad.addColorStop(0.8, "rgba(200, 0, 0, 0.2)");
-  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-
-  ctx.fillStyle = grad;
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(cx, cy, radius + 45, 0, Math.PI * 2);
+  ctx.moveTo(cx, cy - size);
+  ctx.quadraticCurveTo(cx, cy, cx + size, cy);
+  ctx.quadraticCurveTo(cx, cy, cx, cy + size);
+  ctx.quadraticCurveTo(cx, cy, cx - size, cy);
+  ctx.quadraticCurveTo(cx, cy, cx, cy - size);
   ctx.fill();
-
-  const particleCount = 70;
-  for (let i = 0; i < particleCount; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = radius + (Math.random() * 32 - 8);
-    const px = cx + Math.cos(angle) * dist;
-    const py = cy + Math.sin(angle) * dist;
-    const pSize = Math.random() * 12 + 4;
-
-    ctx.shadowColor = i % 2 === 0 ? "#ffcc00" : "#ff3300";
-    ctx.shadowBlur = 15;
-    ctx.fillStyle = i % 3 === 0 ? "#ffffff" : (i % 2 === 0 ? "#ff9900" : "#ff2200");
-
-    ctx.beginPath();
-    ctx.arc(px, py, pSize, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.shadowColor = "#ffaa00";
-  ctx.shadowBlur = 25;
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius + 6, 0, Math.PI * 2);
-  ctx.stroke();
-
   ctx.restore();
 }
 
 /**
- * Draw Japanese Kanji Stamp Badge
+ * Helper to draw cross plus icon
  */
-function drawKanjiStamp(ctx, x, y, text, primaryColor) {
+function drawCross(ctx, cx, cy, size, thickness, color) {
   ctx.save();
+  ctx.fillStyle = color;
+  ctx.fillRect(cx - thickness / 2, cy - size / 2, thickness, size);
+  ctx.fillRect(cx - size / 2, cy - thickness / 2, size, thickness);
+  ctx.restore();
+}
 
-  ctx.fillStyle = "rgba(10, 10, 20, 0.75)";
-  ctx.strokeStyle = primaryColor;
+/**
+ * Helper to draw heart
+ */
+function drawHeart(ctx, cx, cy, size, color) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  const topCurveHeight = size * 0.3;
+  ctx.moveTo(cx, cy + size * 0.3);
+  ctx.bezierCurveTo(cx, cy, cx - size / 2, cy - topCurveHeight, cx - size / 2, cy + topCurveHeight / 2);
+  ctx.bezierCurveTo(cx - size / 2, cy + (size + topCurveHeight) / 2, cx, cy + size * 0.8, cx, cy + size);
+  ctx.bezierCurveTo(cx, cy + size * 0.8, cx + size / 2, cy + (size + topCurveHeight) / 2, cx + size / 2, cy + topCurveHeight / 2);
+  ctx.bezierCurveTo(cx + size / 2, cy - topCurveHeight, cx, cy, cx, cy + size * 0.3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Helper to draw vector icons inside row boxes
+ */
+function drawRowIcon(ctx, iconType, x, y, size) {
+  ctx.save();
+  ctx.strokeStyle = '#ffffff';
+  ctx.fillStyle = '#ffffff';
   ctx.lineWidth = 2;
-  ctx.shadowColor = primaryColor;
-  ctx.shadowBlur = 10;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
 
-  ctx.beginPath();
-  ctx.rect(x, y, 54, 80);
-  ctx.fill();
-  ctx.stroke();
+  const cx = x + size / 2;
+  const cy = y + size / 2;
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 3, y + 3, 48, 74);
+  switch (iconType) {
+    case 'person': {
+      // Head
+      ctx.beginPath();
+      ctx.arc(cx, cy - 5, 5, 0, Math.PI * 2);
+      ctx.fill();
+      // Body
+      ctx.beginPath();
+      ctx.arc(cx, cy + 9, 9, Math.PI, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'id': {
+      // ID Card Badge
+      drawRoundedRect(ctx, cx - 11, cy - 9, 22, 18, 3);
+      ctx.stroke();
+      // Photo square inside badge
+      ctx.fillRect(cx - 8, cy - 5, 6, 6);
+      // Small lines
+      ctx.fillRect(cx + 1, cy - 5, 6, 1.5);
+      ctx.fillRect(cx + 1, cy - 2, 6, 1.5);
+      ctx.fillRect(cx - 8, cy + 3, 15, 1.5);
+      break;
+    }
+    case 'group': {
+      // Two overlapping persons
+      // Left person
+      ctx.beginPath();
+      ctx.arc(cx - 4, cy - 4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx - 4, cy + 8, 7, Math.PI, Math.PI * 2);
+      ctx.fill();
+      // Right person
+      ctx.beginPath();
+      ctx.arc(cx + 5, cy - 4, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + 5, cy + 8, 6, Math.PI, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'addedBy': {
+      // Person + Plus sign
+      ctx.beginPath();
+      ctx.arc(cx - 3, cy - 4, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx - 3, cy + 8, 7.5, Math.PI, Math.PI * 2);
+      ctx.fill();
+      // Plus sign
+      drawCross(ctx, cx + 7, cy - 1, 7, 2, '#ffffff');
+      break;
+    }
+    case 'calendar': {
+      // Calendar box
+      drawRoundedRect(ctx, cx - 10, cy - 8, 20, 18, 3);
+      ctx.stroke();
+      // Top line
+      ctx.fillRect(cx - 10, cy - 4, 20, 2);
+      // Binder loops
+      ctx.fillRect(cx - 6, cy - 10, 2, 3);
+      ctx.fillRect(cx + 4, cy - 10, 2, 3);
+      // Grid dots / checkmark
+      ctx.fillRect(cx - 6, cy, 3, 3);
+      ctx.fillRect(cx - 1, cy, 3, 3);
+      ctx.fillRect(cx + 4, cy, 3, 3);
+      ctx.fillRect(cx - 6, cy + 4, 3, 3);
+      ctx.fillRect(cx - 1, cy + 4, 3, 3);
+      break;
+    }
+    case 'members': {
+      // Member list / group icon
+      ctx.beginPath();
+      ctx.arc(cx - 5, cy - 4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx - 5, cy + 7, 6.5, Math.PI, Math.PI * 2);
+      ctx.fill();
 
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 22px 'Arial Black', sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  const chars = text.split("");
-  if (chars[0]) ctx.fillText(chars[0], x + 27, y + 26);
-  if (chars[1]) ctx.fillText(chars[1], x + 27, y + 54);
+      ctx.beginPath();
+      ctx.arc(cx + 5, cy - 4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + 5, cy + 7, 6.5, Math.PI, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    default: {
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
   ctx.restore();
 }
 
 /**
- * Draw Japanese Cyber Dragon / Pattern Silhouette in background
+ * Draw default fallback silhouette avatar
  */
-function drawDragonGraphics(ctx, width, height, theme) {
+function drawDefaultAvatar(ctx, cx, cy, radius) {
   ctx.save();
-  ctx.globalAlpha = 0.18;
-
-  ctx.fillStyle = theme.primaryGlow;
+  // Black background circle
   ctx.beginPath();
-  ctx.moveTo(80, 40);
-  ctx.lineTo(240, 20);
-  ctx.lineTo(190, 80);
-  ctx.lineTo(310, 60);
-  ctx.lineTo(260, 130);
-  ctx.lineTo(380, 150);
-  ctx.lineTo(220, 210);
-  ctx.lineTo(160, 170);
-  ctx.lineTo(120, 250);
-  ctx.lineTo(60, 180);
-  ctx.closePath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = '#111111';
   ctx.fill();
 
-  ctx.fillStyle = theme.secondaryGlow;
+  // White avatar shape
+  ctx.fillStyle = '#ffffff';
+  // Head
   ctx.beginPath();
-  ctx.moveTo(width - 40, height - 200);
-  ctx.lineTo(width - 180, height - 320);
-  ctx.lineTo(width - 220, height - 240);
-  ctx.lineTo(width - 340, height - 310);
-  ctx.lineTo(width - 280, height - 160);
-  ctx.lineTo(width - 400, height - 120);
-  ctx.lineTo(width - 120, height - 40);
-  ctx.closePath();
+  ctx.arc(cx, cy - radius * 0.2, radius * 0.32, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Body
+  ctx.beginPath();
+  ctx.arc(cx, cy + radius * 0.75, radius * 0.65, Math.PI, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();
-}
-
-/**
- * Draw 3D Metallic / Glowing Text with bevel, shadows, & depth
- */
-function draw3DText(ctx, text, x, y, baseFontSize, theme, maxWidth) {
-  ctx.save();
-
-  let fontSize = baseFontSize;
-  ctx.font = `900 ${fontSize}px "Impact", "Arial Black", sans-serif`;
-
-  while (ctx.measureText(text).width > maxWidth && fontSize > 36) {
-    fontSize -= 4;
-    ctx.font = `900 ${fontSize}px "Impact", "Arial Black", sans-serif`;
-  }
-
-  const depth = 8;
-  for (let i = depth; i > 0; i--) {
-    ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-    ctx.shadowBlur = 12;
-    ctx.fillStyle = "#020308";
-    ctx.fillText(text, x + i, y + i);
-  }
-
-  ctx.shadowColor = theme.primaryGlow;
-  ctx.shadowBlur = 35;
-  ctx.fillStyle = theme.primaryGlow;
-  ctx.fillText(text, x, y);
-
-  const textMetrics = ctx.measureText(text);
-  const textWidth = textMetrics.width;
-
-  const grad = ctx.createLinearGradient(x, y - fontSize, x, y);
-  grad.addColorStop(0, "#ffffff");
-  grad.addColorStop(0.45, "#e6edf5");
-  grad.addColorStop(0.50, "#88a0b5");
-  grad.addColorStop(0.80, "#ffffff");
-  grad.addColorStop(1, "#b0c4de");
-
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = grad;
-  ctx.fillText(text, x, y);
-
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
-  ctx.lineWidth = 2;
-  ctx.strokeText(text, x, y);
-
-  ctx.restore();
-
-  return { fontSize, textWidth };
 }
 
 /**
  * Main Welcome Card Generator Function
- * Accepts options object and outputs canvas or buffer
  */
-async function generateWelcomeCard(options = {}) {
-  const {
-    memberName = "CYBER_WARRIOR",
-    groupName = "NIGHT RAIDERS",
-    memberId = "#2025-0988",
-    addedBy = "SHADOW_X",
-    avatarUrl = null,
-    theme: themeKey = "cyberpunk_neon",
-    themeColor = null,
-    customTitle = "NEW MEMBER",
-    customSubtitle = "JOINED GROUP",
-    customLogoUrl = null,
-    width = 1536,
-    height = 1024,
-    asDataUrl = false
-  } = options;
+async function generateWelcomeCard(optionsOrAvatar, nameParam, groupParam, memberIdParam, addedByParam, joinedOnParam, totalMembersParam) {
+  ensureFontsRegistered();
 
-  const baseTheme = THEMES[themeKey] || THEMES.cyberpunk_neon;
-  const theme = { ...baseTheme };
-  if (themeColor) {
-    theme.primaryGlow = themeColor;
-    theme.hudBorder = themeColor;
-    theme.badgeBg = `linear-gradient(90deg, ${themeColor}, #ffffff)`;
-  }
-
-  let canvas, ctx;
-  if (typeof window !== "undefined" && window.document) {
-    canvas = window.document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    ctx = canvas.getContext("2d");
-  } else if (createCanvas) {
-    canvas = createCanvas(width, height);
-    ctx = canvas.getContext("2d");
+  // Parse options flexible arguments
+  let opts = {};
+  if (typeof optionsOrAvatar === 'object' && optionsOrAvatar !== null && !Buffer.isBuffer(optionsOrAvatar)) {
+    opts = optionsOrAvatar;
   } else {
-    throw new Error("No canvas implementation found. Please install @napi-rs/canvas or canvas package.");
+    opts = {
+      avatar: optionsOrAvatar,
+      name: nameParam,
+      groupName: groupParam,
+      userId: memberIdParam,
+      addedBy: addedByParam,
+      joinedOn: joinedOnParam,
+      totalMembers: totalMembersParam,
+    };
   }
 
+  // Extract dynamic values with flexible fallbacks
+  const avatarInput = opts.avatar || opts.avatarUrl || opts.avatarURL || opts.userAvatar || opts.icon || opts.image;
+  const memberName = String(opts.name || opts.memberName || opts.username || opts.user || opts.member || 'Riyad Ahmed');
+  const userId = String(opts.userId || opts.memberId || opts.id || opts.user_id || '100012345678901');
+  const groupName = String(opts.groupName || opts.group || opts.guildName || opts.serverName || opts.title || 'CHADER ALO ADDA BOX');
+  const addedBy = String(opts.addedBy || opts.inviter || opts.referrer || opts.added_by || 'Bad Boy Riyad');
+  const joinedOn = formatDate(opts.joinedOn || opts.joinedAt || opts.date || opts.time);
+  const totalMembers = String(opts.totalMembers || opts.memberCount || opts.members || opts.count || '256 Members');
+
+  // Canvas Dimensions (HD 1280 x 720)
+  const width = opts.width || 1280;
+  const height = opts.height || 720;
+
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+
+  // Enable high-quality anti-aliasing
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
+  ctx.imageSmoothingQuality = 'high';
 
-  // 1. BACKGROUND
-  const bgGrad = ctx.createRadialGradient(
-    width * 0.35, height * 0.45, 100,
-    width * 0.5, height * 0.5, width * 0.8
-  );
-  bgGrad.addColorStop(0, theme.bgMid);
-  bgGrad.addColorStop(0.6, theme.bgDark);
-  bgGrad.addColorStop(1, "#000206");
-
+  // 1. BASE BACKGROUND GRADIENT
+  const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+  bgGrad.addColorStop(0, '#0a021a');
+  bgGrad.addColorStop(0.35, '#150630');
+  bgGrad.addColorStop(0.7, '#1b073b');
+  bgGrad.addColorStop(1, '#070114');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
+  // 2. BACKGROUND GLOWING NEON CORNER WAVES & BLOBS
+  // Top-Left Wave
   ctx.save();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
-  ctx.lineWidth = 1.5;
-  const gridSize = 48;
-  for (let x = 0; x < width; x += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
-  }
-  for (let y = 0; y < height; y += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  drawDragonGraphics(ctx, width, height, theme);
-
-  ctx.save();
-  ctx.translate(width * 0.3, height * 0.4);
-  ctx.strokeStyle = theme.primaryGlow;
-  ctx.globalAlpha = 0.06;
-  ctx.lineWidth = 2;
-  for (let a = 0; a < Math.PI * 2; a += Math.PI / 18) {
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(Math.cos(a) * width, Math.sin(a) * width);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  drawKanjiStamp(ctx, 48, 48, theme.kanjiMain, theme.primaryGlow);
-  drawKanjiStamp(ctx, width - 102, 48, theme.kanjiSub, theme.secondaryGlow);
-
-  ctx.save();
-  ctx.strokeStyle = theme.primaryGlow;
-  ctx.lineWidth = 3;
-  ctx.shadowColor = theme.primaryGlow;
-  ctx.shadowBlur = 15;
-
   ctx.beginPath();
-  ctx.moveTo(120, 48);
-  ctx.lineTo(380, 48);
-  ctx.lineTo(410, 78);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(width - 120, 48);
-  ctx.lineTo(width - 380, 48);
-  ctx.lineTo(width - 410, 78);
-  ctx.stroke();
-
-  ctx.restore();
-
-  // 2. AVATAR SECTION
-  const avCenterX = 340;
-  const avCenterY = 440;
-  const avRadius = 200;
-
-  const avGlow = ctx.createRadialGradient(
-    avCenterX, avCenterY, avRadius * 0.8,
-    avCenterX, avCenterY, avRadius * 1.6
-  );
-  avGlow.addColorStop(0, theme.primaryGlow);
-  avGlow.addColorStop(0.5, theme.secondaryGlow);
-  avGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-
-  ctx.save();
-  ctx.globalAlpha = 0.45;
-  ctx.fillStyle = avGlow;
-  ctx.beginPath();
-  ctx.arc(avCenterX, avCenterY, avRadius * 1.6, 0, Math.PI * 2);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(380, 0);
+  ctx.bezierCurveTo(320, 100, 200, 180, 0, 220);
+  ctx.closePath();
+  const wave1Grad = ctx.createLinearGradient(0, 0, 300, 200);
+  wave1Grad.addColorStop(0, 'rgba(140, 25, 230, 0.7)');
+  wave1Grad.addColorStop(0.6, 'rgba(85, 12, 160, 0.5)');
+  wave1Grad.addColorStop(1, 'rgba(35, 5, 80, 0.1)');
+  ctx.fillStyle = wave1Grad;
   ctx.fill();
+  ctx.strokeStyle = '#c842ff';
+  ctx.lineWidth = 3;
+  ctx.shadowColor = '#d95eff';
+  ctx.shadowBlur = 20;
+  ctx.stroke();
   ctx.restore();
 
-  if (theme.ringType === "fire_ring") {
-    drawFireRing(ctx, avCenterX, avCenterY, avRadius, theme);
-  } else if (theme.ringType === "electric_dual") {
-    drawLightningArcRing(ctx, avCenterX, avCenterY, avRadius + 14, theme.primaryGlow, theme.primaryGlow, 10);
-    drawLightningArcRing(ctx, avCenterX, avCenterY, avRadius + 24, theme.secondaryGlow, theme.secondaryGlow, 8);
-  } else {
-    ctx.save();
-    ctx.shadowColor = theme.primaryGlow;
-    ctx.shadowBlur = 30;
-    ctx.strokeStyle = theme.primaryGlow;
-    ctx.lineWidth = 10;
-    ctx.beginPath();
-    ctx.arc(avCenterX, avCenterY, avRadius + 16, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.shadowColor = theme.secondaryGlow;
-    ctx.shadowBlur = 20;
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(avCenterX, avCenterY, avRadius + 6, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
+  // Top-Right Wave
   ctx.save();
   ctx.beginPath();
-  ctx.arc(avCenterX, avCenterY, avRadius, 0, Math.PI * 2);
-  ctx.clip();
+  ctx.moveTo(width, 0);
+  ctx.lineTo(920, 0);
+  ctx.bezierCurveTo(980, 80, 1080, 150, width, 180);
+  ctx.closePath();
+  const wave2Grad = ctx.createLinearGradient(width, 0, 950, 150);
+  wave2Grad.addColorStop(0, 'rgba(155, 30, 240, 0.7)');
+  wave2Grad.addColorStop(1, 'rgba(40, 5, 85, 0.1)');
+  ctx.fillStyle = wave2Grad;
+  ctx.fill();
+  ctx.strokeStyle = '#d448ff';
+  ctx.lineWidth = 3;
+  ctx.shadowColor = '#e262ff';
+  ctx.shadowBlur = 18;
+  ctx.stroke();
+  ctx.restore();
 
+  // Bottom-Left Wave
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, height);
+  ctx.lineTo(0, 480);
+  ctx.bezierCurveTo(150, 520, 260, 620, 320, height);
+  ctx.closePath();
+  const wave3Grad = ctx.createLinearGradient(0, height, 250, 500);
+  wave3Grad.addColorStop(0, 'rgba(130, 20, 220, 0.75)');
+  wave3Grad.addColorStop(1, 'rgba(30, 4, 70, 0.1)');
+  ctx.fillStyle = wave3Grad;
+  ctx.fill();
+  ctx.strokeStyle = '#b832ff';
+  ctx.lineWidth = 3.5;
+  ctx.shadowColor = '#cf44ff';
+  ctx.shadowBlur = 22;
+  ctx.stroke();
+  ctx.restore();
+
+  // Bottom-Right Corner Waves (Multi-layered)
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(width, height);
+  ctx.lineTo(800, height);
+  ctx.bezierCurveTo(920, 630, 1080, 520, width, 450);
+  ctx.closePath();
+  const wave4Grad = ctx.createLinearGradient(width, height, 850, 500);
+  wave4Grad.addColorStop(0, 'rgba(165, 35, 250, 0.8)');
+  wave4Grad.addColorStop(0.5, 'rgba(105, 18, 180, 0.5)');
+  wave4Grad.addColorStop(1, 'rgba(40, 5, 85, 0.1)');
+  ctx.fillStyle = wave4Grad;
+  ctx.fill();
+  ctx.strokeStyle = '#e058ff';
+  ctx.lineWidth = 4;
+  ctx.shadowColor = '#f075ff';
+  ctx.shadowBlur = 25;
+  ctx.stroke();
+  ctx.restore();
+
+  // Bottom Right Diagonal Stripes (////)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(215, 85, 255, 0.35)';
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath();
+    ctx.moveTo(1120 + i * 20, 680);
+    ctx.lineTo(1210 + i * 20, 590);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 3. BACKGROUND DECORATIVE ELEMENTS (Rings, Sparkles, Crosses, Dots)
+  // Large Hollow Rings
+  ctx.save();
+  ctx.strokeStyle = '#a822f0';
+  ctx.lineWidth = 8;
+  ctx.shadowColor = '#c842ff';
+  ctx.shadowBlur = 15;
+  // Ring top left
+  ctx.beginPath();
+  ctx.arc(310, 130, 16, 0, Math.PI * 2);
+  ctx.stroke();
+  // Ring top right
+  ctx.beginPath();
+  ctx.arc(1050, 135, 16, 0, Math.PI * 2);
+  ctx.stroke();
+  // Ring left bottom
+  ctx.beginPath();
+  ctx.arc(58, 598, 14, 0, Math.PI * 2);
+  ctx.stroke();
+  // Large Ring right middle
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = '#9d1ee6';
+  ctx.beginPath();
+  ctx.arc(1155, 480, 36, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Sparkles (✦)
+  drawSparkleStar(ctx, 380, 190, 8, '#ffffff');
+  drawSparkleStar(ctx, 430, 310, 6, '#e27eff');
+  drawSparkleStar(ctx, 990, 180, 9, '#ffffff');
+  drawSparkleStar(ctx, 1110, 330, 7, '#d862ff');
+  drawSparkleStar(ctx, 90, 310, 8, '#ffffff');
+
+  // Crosses (+)
+  drawCross(ctx, 60, 200, 14, 3.5, '#bd3aff');
+  drawCross(ctx, 70, 280, 18, 4, '#ffffff');
+  drawCross(ctx, 35, 380, 16, 3.5, '#a82ee6');
+  drawCross(ctx, 1090, 240, 16, 3.5, '#c842ff');
+  drawCross(ctx, 1150, 610, 16, 3.5, '#e058ff');
+  drawCross(ctx, 280, 830, 14, 3, '#ffffff');
+  drawCross(ctx, 280, 840, 14, 3, '#ffffff');
+  drawCross(ctx, 280, 628, 14, 3, '#c23bff');
+
+  // Dot Grids (:::)
+  ctx.save();
+  ctx.fillStyle = 'rgba(185, 60, 255, 0.5)';
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      ctx.beginPath();
+      ctx.arc(1180 + c * 10, 310 + r * 10, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  // 4. HEADER SECTION ("WELCOME" Title & "✦ TO OUR GROUP ✦" Badge)
+  const headerCenterX = 670;
+
+  // Title: WELCOME
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `italic bold 72px ${FONT_STACK_DISPLAY}`;
+
+  // 3D Extrusion Shadow effect
+  for (let s = 6; s >= 1; s--) {
+    ctx.fillStyle = s === 6 ? 'rgba(10, 1, 25, 0.9)' : '#3b0666';
+    ctx.fillText('WELCOME', headerCenterX + s * 1.5, 78 + s * 1.5);
+  }
+
+  // Neon Outer Glow
+  ctx.shadowColor = '#d942ff';
+  ctx.shadowBlur = 25;
+
+  // Thick outline stroke
+  ctx.strokeStyle = '#3d0263';
+  ctx.lineWidth = 10;
+  ctx.strokeText('WELCOME', headerCenterX, 78);
+
+  // Gradient Text Fill
+  const textGrad = ctx.createLinearGradient(headerCenterX, 45, headerCenterX, 110);
+  textGrad.addColorStop(0, '#ffffff');
+  textGrad.addColorStop(0.5, '#f0c8ff');
+  textGrad.addColorStop(1, '#c875ff');
+  ctx.fillStyle = textGrad;
+  ctx.fillText('WELCOME', headerCenterX, 78);
+  ctx.restore();
+
+  // Subtitle Pill: ✦ TO OUR GROUP ✦
+  ctx.save();
+  const pillY = 132;
+  const pillW = 240;
+  const pillH = 34;
+  const pillX = headerCenterX - pillW / 2;
+
+  // Side lines with diamond terminals
+  ctx.strokeStyle = '#c842ff';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = '#d942ff';
+  ctx.shadowBlur = 10;
+
+  // Left side line
+  ctx.beginPath();
+  ctx.moveTo(headerCenterX - 230, pillY);
+  ctx.lineTo(pillX - 10, pillY);
+  ctx.stroke();
+
+  // Right side line
+  ctx.beginPath();
+  ctx.moveTo(pillX + pillW + 10, pillY);
+  ctx.lineTo(headerCenterX + 230, pillY);
+  ctx.stroke();
+
+  // Side diamonds
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(headerCenterX - 235, pillY, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(headerCenterX + 235, pillY, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pill Box
+  drawRoundedRect(ctx, pillX, pillY - pillH / 2, pillW, pillH, 17);
+  const pillGrad = ctx.createLinearGradient(pillX, pillY - pillH / 2, pillX, pillY + pillH / 2);
+  pillGrad.addColorStop(0, 'rgba(80, 15, 130, 0.85)');
+  pillGrad.addColorStop(1, 'rgba(40, 5, 75, 0.85)');
+  ctx.fillStyle = pillGrad;
+  ctx.fill();
+  ctx.strokeStyle = '#d442ff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Pill Text
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold 16px ${FONT_STACK}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#e882ff';
+  ctx.shadowBlur = 8;
+  ctx.fillText('✦  TO OUR GROUP  ✦', headerCenterX, pillY);
+  ctx.restore();
+
+  // 5. LEFT SECTION: AVATAR FRAME & RIBBON
+  const avatarCX = 245;
+  const avatarCY = 360;
+  const avatarRadius = 130;
+
+  // Outer Glowing Rings
+  ctx.save();
+  // Outer Ring 1
+  ctx.beginPath();
+  ctx.arc(avatarCX, avatarCY, avatarRadius + 24, 0, Math.PI * 2);
+  ctx.strokeStyle = '#b82ee6';
+  ctx.lineWidth = 4;
+  ctx.shadowColor = '#d942ff';
+  ctx.shadowBlur = 20;
+  ctx.stroke();
+
+  // Outer Ring 2 (closer)
+  ctx.beginPath();
+  ctx.arc(avatarCX, avatarCY, avatarRadius + 14, 0, Math.PI * 2);
+  ctx.strokeStyle = '#e058ff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Crosshair Ticks at N, S, E, W
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 3;
+  const ticks = [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2];
+  ticks.forEach(angle => {
+    const x1 = avatarCX + Math.cos(angle) * (avatarRadius + 10);
+    const y1 = avatarCY + Math.sin(angle) * (avatarRadius + 10);
+    const x2 = avatarCX + Math.cos(angle) * (avatarRadius + 28);
+    const y2 = avatarCY + Math.sin(angle) * (avatarRadius + 28);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  });
+  ctx.restore();
+
+  // Avatar Image or Default Silhouette
+  ctx.save();
   let avatarLoaded = false;
-  if (avatarUrl && loadImage) {
+  if (avatarInput) {
     try {
-      const img = await loadImage(avatarUrl);
-      ctx.drawImage(img, avCenterX - avRadius, avCenterY - avRadius, avRadius * 2, avRadius * 2);
-      avatarLoaded = true;
+      let img;
+      if (typeof avatarInput === 'string' || Buffer.isBuffer(avatarInput)) {
+        img = await loadImage(avatarInput);
+      } else {
+        img = avatarInput;
+      }
+      if (img) {
+        ctx.beginPath();
+        ctx.arc(avatarCX, avatarCY, avatarRadius, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(img, avatarCX - avatarRadius, avatarCY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
+        avatarLoaded = true;
+      }
     } catch (err) {
-      // Fallback silhouette
+      avatarLoaded = false;
     }
   }
 
   if (!avatarLoaded) {
-    ctx.fillStyle = "#0a0e1a";
-    ctx.fillRect(avCenterX - avRadius, avCenterY - avRadius, avRadius * 2, avRadius * 2);
-
-    ctx.strokeStyle = theme.primaryGlow;
-    ctx.globalAlpha = 0.2;
-    ctx.lineWidth = 2;
-    for (let i = -avRadius; i < avRadius; i += 24) {
-      ctx.beginPath();
-      ctx.moveTo(avCenterX + i, avCenterY - avRadius);
-      ctx.lineTo(avCenterX + i, avCenterY + avRadius);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1.0;
-
-    ctx.fillStyle = theme.primaryGlow;
-    ctx.shadowColor = theme.primaryGlow;
-    ctx.shadowBlur = 15;
-
-    ctx.beginPath();
-    ctx.moveTo(avCenterX, avCenterY - 90);
-    ctx.lineTo(avCenterX + 70, avCenterY - 20);
-    ctx.lineTo(avCenterX + 50, avCenterY + 50);
-    ctx.lineTo(avCenterX - 50, avCenterY + 50);
-    ctx.lineTo(avCenterX - 70, avCenterY - 20);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "#ffffff";
-    ctx.shadowBlur = 20;
-    ctx.beginPath();
-    ctx.ellipse(avCenterX - 25, avCenterY - 10, 18, 6, -0.2, 0, Math.PI * 2);
-    ctx.ellipse(avCenterX + 25, avCenterY - 10, 18, 6, 0.2, 0, Math.PI * 2);
-    ctx.fill();
+    drawDefaultAvatar(ctx, avatarCX, avatarCY, avatarRadius);
   }
   ctx.restore();
 
+  // Avatar Border Stroke
   ctx.save();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
-  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(avCenterX, avCenterY, avRadius - 2, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-
-  // 3. MAIN TYPOGRAPHY
-  const textX = 610;
-
-  ctx.save();
-  ctx.fillStyle = theme.primaryGlow;
-  ctx.shadowColor = theme.primaryGlow;
-  ctx.shadowBlur = 12;
-  ctx.font = "700 32px 'Arial', sans-serif";
-  ctx.fillText(`❖ ${customTitle.toUpperCase()} ❖`, textX, 230);
-
-  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-  ctx.font = "400 22px sans-serif";
-  ctx.fillText(theme.subtextJapanese, textX + 340, 230);
-  ctx.restore();
-
-  draw3DText(ctx, memberName.toUpperCase(), textX, 350, 110, theme, width - textX - 80);
-
-  ctx.save();
-  ctx.fillStyle = theme.accentColor;
-  ctx.shadowColor = theme.accentColor;
-  ctx.shadowBlur = 22;
-  ctx.font = "italic 900 48px 'Impact', 'Arial Black', sans-serif";
-  ctx.fillText(`${customSubtitle.toUpperCase()} ★ ${groupName.toUpperCase()}`, textX, 430);
-  ctx.restore();
-
-  ctx.save();
-  ctx.shadowColor = theme.primaryGlow;
-  ctx.shadowBlur = 15;
-
-  const lineGrad = ctx.createLinearGradient(textX, 0, width - 100, 0);
-  lineGrad.addColorStop(0, theme.primaryGlow);
-  lineGrad.addColorStop(0.5, theme.secondaryGlow);
-  lineGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-
-  ctx.strokeStyle = lineGrad;
+  ctx.arc(avatarCX, avatarCY, avatarRadius, 0, Math.PI * 2);
+  ctx.strokeStyle = '#e66eff';
   ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.moveTo(textX, 465);
-  ctx.lineTo(width - 120, 465);
+  ctx.shadowColor = '#f07bff';
+  ctx.shadowBlur = 15;
   ctx.stroke();
-
-  ctx.fillStyle = "#ffffff";
-  ctx.beginPath();
-  ctx.arc(textX, 465, 6, 0, Math.PI * 2);
-  ctx.fill();
   ctx.restore();
 
-  // 4. GLASSMORPHISM HUD PANEL
-  const hudX = 90;
-  const hudY = 720;
-  const hudW = width - 180;
-  const hudH = 220;
-  const chamfer = 24;
+  // Overlapping Ribbon Banner ("★ NEW MEMBER ★")
+  ctx.save();
+  const ribbonCY = 520;
+  const ribbonW = 310;
+  const ribbonH = 48;
+  const ribbonX = avatarCX - ribbonW / 2;
+
+  // Ribbon Banner Glow
+  ctx.shadowColor = '#d942ff';
+  ctx.shadowBlur = 20;
+
+  // Folded Ends (Back tails)
+  ctx.fillStyle = '#3c0463';
+  // Left fold tail
+  ctx.beginPath();
+  ctx.moveTo(ribbonX - 15, ribbonCY - 15);
+  ctx.lineTo(ribbonX + 15, ribbonCY - 24);
+  ctx.lineTo(ribbonX + 15, ribbonCY + 24);
+  ctx.lineTo(ribbonX - 15, ribbonCY + 15);
+  ctx.lineTo(ribbonX - 5, ribbonCY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Right fold tail
+  ctx.beginPath();
+  ctx.moveTo(ribbonX + ribbonW + 15, ribbonCY - 15);
+  ctx.lineTo(ribbonX + ribbonW - 15, ribbonCY - 24);
+  ctx.lineTo(ribbonX + ribbonW - 15, ribbonCY + 24);
+  ctx.lineTo(ribbonX + ribbonW + 15, ribbonCY + 15);
+  ctx.lineTo(ribbonX + ribbonW + 5, ribbonCY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Main Ribbon Body
+  drawRoundedRect(ctx, ribbonX, ribbonCY - ribbonH / 2, ribbonW, ribbonH, 12);
+  const ribbonGrad = ctx.createLinearGradient(ribbonX, ribbonCY - ribbonH / 2, ribbonX, ribbonCY + ribbonH / 2);
+  ribbonGrad.addColorStop(0, '#a518e8');
+  ribbonGrad.addColorStop(0.5, '#7b0dc2');
+  ribbonGrad.addColorStop(1, '#53048a');
+  ctx.fillStyle = ribbonGrad;
+  ctx.fill();
+
+  ctx.strokeStyle = '#f2a6ff';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Ribbon Text
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold 22px ${FONT_STACK_DISPLAY}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#210038';
+  ctx.shadowBlur = 6;
+  ctx.fillText('★ NEW MEMBER ★', avatarCX, ribbonCY);
+  ctx.restore();
+
+  // 6. RIGHT SECTION: INFO BOX
+  const boxX = 460;
+  const boxY = 205;
+  const boxW = 680;
+  const boxH = 385;
+  const boxRadius = 24;
 
   ctx.save();
-  drawChamferRect(ctx, hudX, hudY, hudW, hudH, chamfer);
-  ctx.fillStyle = theme.hudBg;
+  // Outer Box Shadow Glow
+  ctx.shadowColor = 'rgba(195, 55, 255, 0.65)';
+  ctx.shadowBlur = 25;
+
+  // Box Background
+  drawRoundedRect(ctx, boxX, boxY, boxW, boxH, boxRadius);
+  const boxGrad = ctx.createLinearGradient(boxX, boxY, boxX, boxY + boxH);
+  boxGrad.addColorStop(0, 'rgba(22, 6, 45, 0.82)');
+  boxGrad.addColorStop(1, 'rgba(10, 2, 24, 0.88)');
+  ctx.fillStyle = boxGrad;
   ctx.fill();
 
-  ctx.shadowColor = theme.hudBorder;
-  ctx.shadowBlur = 25;
-  ctx.strokeStyle = theme.hudBorder;
-  ctx.lineWidth = 3.5;
-  ctx.stroke();
-
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
-  ctx.lineWidth = 1;
-  drawChamferRect(ctx, hudX + 4, hudY + 4, hudW - 8, hudH - 8, chamfer - 2);
+  // Glowing Double Stroke
+  ctx.strokeStyle = '#be3aff';
+  ctx.lineWidth = 3;
   ctx.stroke();
   ctx.restore();
 
-  const cols = [
-    { title: "MEMBER ID", value: memberId, icon: "🪪" },
-    { title: "ADDED BY", value: addedBy, icon: "👑" },
-    { title: "GROUP", value: groupName, icon: "👥" }
+  // Info Box Rows
+  const rows = [
+    { icon: 'person', label: 'Name', value: memberName },
+    { icon: 'id', label: 'User ID', value: userId },
+    { icon: 'group', label: 'Group', value: groupName },
+    { icon: 'addedBy', label: 'Added By', value: addedBy },
+    { icon: 'calendar', label: 'Joined On', value: joinedOn },
+    { icon: 'members', label: 'Total Members', value: totalMembers },
   ];
 
-  const colWidth = hudW / 3;
+  const rowStartY = boxY + 22;
+  const rowHeight = 56;
 
-  cols.forEach((col, idx) => {
-    const colX = hudX + idx * colWidth + colWidth / 2;
+  rows.forEach((row, idx) => {
+    const rowY = rowStartY + idx * rowHeight;
 
-    if (idx > 0) {
+    // Horizontal Row Separator (except last row)
+    if (idx < rows.length - 1) {
       ctx.save();
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(hudX + idx * colWidth, hudY + 30);
-      ctx.lineTo(hudX + idx * colWidth, hudY + hudH - 30);
+      ctx.moveTo(boxX + 25, rowY + rowHeight - 6);
+      ctx.lineTo(boxX + boxW - 25, rowY + rowHeight - 6);
       ctx.stroke();
       ctx.restore();
     }
 
+    // Icon Rounded Square Container
+    const iconBoxX = boxX + 28;
+    const iconBoxY = rowY + 3;
+    const iconBoxSize = 38;
+
     ctx.save();
-    const iconBoxY = hudY + 42;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
-    ctx.strokeStyle = theme.primaryGlow;
-    ctx.lineWidth = 1.5;
-    drawChamferRect(ctx, colX - 28, iconBoxY, 56, 44, 8);
+    drawRoundedRect(ctx, iconBoxX, iconBoxY, iconBoxSize, iconBoxSize, 10);
+    const iconGrad = ctx.createLinearGradient(iconBoxX, iconBoxY, iconBoxX, iconBoxY + iconBoxSize);
+    iconGrad.addColorStop(0, 'rgba(110, 25, 185, 0.85)');
+    iconGrad.addColorStop(1, 'rgba(60, 10, 110, 0.85)');
+    ctx.fillStyle = iconGrad;
     ctx.fill();
+
+    ctx.strokeStyle = '#a830f5';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    ctx.font = "24px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(col.icon, colX, iconBoxY + 22);
+    // Draw Vector Icon Inside
+    drawRowIcon(ctx, row.icon, iconBoxX, iconBoxY, iconBoxSize);
+    ctx.restore();
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
-    ctx.font = "bold 18px 'Arial', sans-serif";
-    ctx.fillText(col.title, colX, hudY + 120);
+    // Label Text
+    ctx.save();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold 18px ${FONT_STACK}`;
+    ctx.fillStyle = '#ffffff';
+    const labelX = boxX + 85;
+    const centerY = iconBoxY + iconBoxSize / 2;
+    ctx.fillText(row.label, labelX, centerY);
 
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = theme.primaryGlow;
-    ctx.shadowBlur = 8;
-    ctx.font = "900 28px 'Impact', 'Arial Black', sans-serif";
+    // Vertical Separator Line |
+    const sepX = boxX + 215;
+    ctx.strokeStyle = 'rgba(210, 160, 255, 0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sepX, centerY - 12);
+    ctx.lineTo(sepX, centerY + 12);
+    ctx.stroke();
 
-    let displayVal = col.value.toString();
-    if (displayVal.length > 18) {
-      displayVal = displayVal.slice(0, 16) + "…";
+    // Value Text (Auto-scaling font size if value is long)
+    const valX = boxX + 240;
+    const maxValWidth = boxW - 265;
+    let valFontSize = 19;
+    ctx.font = `bold ${valFontSize}px ${FONT_STACK}`;
+
+    while (ctx.measureText(row.value).width > maxValWidth && valFontSize > 12) {
+      valFontSize -= 1;
+      ctx.font = `bold ${valFontSize}px ${FONT_STACK}`;
     }
-    ctx.fillText(displayVal, colX, hudY + 165);
 
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = '#e288ff';
+    ctx.shadowBlur = 6;
+    ctx.fillText(row.value, valX, centerY);
     ctx.restore();
   });
 
-  // 5. FOOTER
+  // 7. BOTTOM SECTION ("Thanks For Joining Us!" with Hearts & Lines)
   ctx.save();
-  ctx.shadowColor = theme.primaryGlow;
-  ctx.shadowBlur = 12;
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 20px 'Impact', 'Arial Black', sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("❖ 一緒に、最強になろう ❖ Made By RIYAD BOT ❖", width / 2, height - 36);
+  const bottomY = 648;
+  const thanksText = 'Thanks For Joining Us!';
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold 26px ${FONT_STACK}`;
+  const textWidth = ctx.measureText(thanksText).width;
+
+  // Center Text Fill & Glow
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#d942ff';
+  ctx.shadowBlur = 15;
+  ctx.fillText(thanksText, headerCenterX, bottomY);
+
+  // Side Hearts
+  const heartOffset = textWidth / 2 + 30;
+  drawHeart(ctx, headerCenterX - heartOffset, bottomY - 8, 18, '#bd26ff');
+  drawHeart(ctx, headerCenterX + heartOffset, bottomY - 8, 18, '#bd26ff');
+
+  // Decorative Side Accent Lines with circles
+  ctx.strokeStyle = 'rgba(210, 80, 255, 0.6)';
+  ctx.lineWidth = 2;
+
+  // Left line
+  const leftLineEnd = headerCenterX - heartOffset - 25;
+  const leftLineStart = leftLineEnd - 120;
+  ctx.beginPath();
+  ctx.moveTo(leftLineStart, bottomY);
+  ctx.lineTo(leftLineEnd, bottomY);
+  ctx.stroke();
+
+  // Left line circles
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.arc(leftLineStart + i * 12 - 25, bottomY, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = i === 0 ? '#ffffff' : '#c842ff';
+    ctx.fill();
+  }
+
+  // Right line
+  const rightLineStart = headerCenterX + heartOffset + 25;
+  const rightLineEnd = rightLineStart + 120;
+  ctx.beginPath();
+  ctx.moveTo(rightLineStart, bottomY);
+  ctx.lineTo(rightLineEnd, bottomY);
+  ctx.stroke();
+
+  // Right line circles
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.arc(rightLineEnd + i * 12 + 10, bottomY, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = i === 3 ? '#ffffff' : '#c842ff';
+    ctx.fill();
+  }
+
   ctx.restore();
 
-  if (asDataUrl && canvas.toDataURL) {
-    return canvas.toDataURL("image/png");
-  } else if (canvas.toBuffer) {
-    return canvas.toBuffer("image/png");
-  } else {
-    return canvas;
+  // Return Buffer (PNG)
+  if (typeof canvas.toBuffer === 'function') {
+    return canvas.toBuffer('image/png');
   }
+  return canvas;
 }
 
+// Exports (CommonJS) — supports every way the bot's code loads this module:
+//   const generateWelcomeCard = require('./welcomeCardGenerator');
+//   const { generateWelcomeCard } = require('./welcomeCardGenerator');
 module.exports = generateWelcomeCard;
 module.exports.generateWelcomeCard = generateWelcomeCard;
-module.exports.welcomeCardGenerator = generateWelcomeCard;
-module.exports.THEMES = THEMES;
+module.exports.createWelcomeCard = generateWelcomeCard;
+module.exports.welcomeCard = generateWelcomeCard;
