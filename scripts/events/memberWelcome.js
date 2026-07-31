@@ -117,10 +117,18 @@ module.exports = {
       }
 
       const caption =
-        `🎉 স্বাগতম ${memberName}! 🎉\n\n` +
-        `গ্রুপঃ ${groupName}\n` +
-        `সদস্য সংখ্যাঃ ${memberCount !== null ? memberCount : "N/A"}\n` +
-        `যোগ করেছেনঃ ${addedByName}`;
+`‎      •❅─────── ❖ ───────❅•
+‎◄​🌿🌸 𓆩 𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 𓆪 🌸🌿►
+‎ ◄🌿🌸 𓆩 𝗢𝗨𝗥 𝗚𝗥𝗢𝗨𝗣 𓆪 🌸🌿►
+‎      •❅─────── ❖ ───────❅•
+
+‎​✦ ─ ❖《 ${memberName} 》❖ ─ ✦
+
+‎​🌿 𝐆𝐫𝐨𝐮𝐩:  𓆩 ${groupName} 𓆪
+‎🌿 𝐌𝐞𝐦𝐛𝐞𝐫:  𓆩 ${memberCount !== null ? memberCount : "N/A"} 𓆪
+‎🌿 𝐀𝐝𝐝𝐞𝐝 𝐁𝐘:  𓆩 ${addedByName} 𓆪
+
+‎♛【​•═════════════════•】♛`;
 
       try {
         if (imagePath && fs.existsSync(imagePath)) {
