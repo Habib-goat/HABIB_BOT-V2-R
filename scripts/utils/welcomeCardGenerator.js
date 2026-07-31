@@ -393,6 +393,7 @@ async function generateWelcomeCard(optionsOrAvatar, nameParam, groupParam, membe
 
   // Extract dynamic values with flexible fallbacks
   const avatarInput = opts.avatar || opts.avatarUrl || opts.avatarURL || opts.userAvatar || opts.icon || opts.image;
+  const avatarFallbackInput = opts.avatarFallbackUrl || opts.avatarFallback || null;
   const memberName = String(opts.name || opts.memberName || opts.username || opts.user || opts.member || 'Riyad Ahmed');
   const userId = String(opts.userId || opts.memberId || opts.id || opts.user_id || '100012345678901');
   const groupName = String(opts.groupName || opts.group || opts.guildName || opts.serverName || opts.title || 'CHADER ALO ADDA BOX');
@@ -698,9 +699,10 @@ async function generateWelcomeCard(optionsOrAvatar, nameParam, groupParam, membe
   // Avatar Image or Default Silhouette
   ctx.save();
   let avatarLoaded = false;
-  if (avatarInput) {
+  const avatarCandidates = [avatarInput, avatarFallbackInput].filter(Boolean);
+  for (const candidate of avatarCandidates) {
     try {
-      const img = await loadAvatarImage(avatarInput);
+      const img = await loadAvatarImage(candidate);
       if (img) {
         ctx.beginPath();
         ctx.arc(avatarCX, avatarCY, avatarRadius, 0, Math.PI * 2);
@@ -708,12 +710,13 @@ async function generateWelcomeCard(optionsOrAvatar, nameParam, groupParam, membe
         ctx.clip();
         ctx.drawImage(img, avatarCX - avatarRadius, avatarCY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
         avatarLoaded = true;
+        break;
       }
     } catch (err) {
-      avatarLoaded = false;
       // Previously this failure was swallowed completely, so a broken
       // avatar URL silently fell back to the default silhouette with no
-      // way to tell why. Log it so it's actually diagnosable.
+      // way to tell why. Log it, and try the next candidate (if any)
+      // instead of giving up immediately.
       console.error('[welcomeCardGenerator] Failed to load avatar image:', err?.message || err);
     }
   }
