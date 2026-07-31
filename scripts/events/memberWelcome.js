@@ -70,17 +70,20 @@ module.exports = {
       const memberName = participant.fullName || "New Member";
       const memberUid = String(participant.userFbId || "");
 
-      // Try to get a high-resolution profile picture (Graph API "picture"
-      // endpoint returns a full-size image; the thumbSrc from getUserInfo
-      // is usually a tiny low-res thumbnail which looks blurry once scaled
-      // up on the card).
+      // Try to get a high-resolution profile picture. Plain
+      // "graph.facebook.com/{uid}/picture" calls (with no access token) are
+      // frequently rejected/blocked by Facebook, which is why the avatar
+      // wasn't showing up at all. scripts/cmds/pp.js already solves this
+      // exact problem — reuse the same working URL pattern (public app
+      // access_token + a large size for HD quality).
       let avatarUrl = memberUid
-        ? `https://graph.facebook.com/${memberUid}/picture?width=720&height=720`
+        ? `https://graph.facebook.com/${memberUid}/picture?height=1500&width=1500&access_token=6628568379%7Cc1e620fa708a1d5696fb991c1bde5662`
         : null;
+      let avatarFallbackUrl = null;
       try {
-        if (!avatarUrl && typeof api.getUserInfo === "function") {
+        if (typeof api.getUserInfo === "function") {
           const info = await api.getUserInfo(participant.userFbId);
-          avatarUrl =
+          avatarFallbackUrl =
             info?.[participant.userFbId]?.thumbSrc ||
             info?.[participant.userFbId]?.profileUrl ||
             null;
@@ -88,6 +91,7 @@ module.exports = {
       } catch (err) {
         console.error("[WELCOME] getUserInfo(member) ERROR:", err?.message || err);
       }
+      if (!avatarUrl) avatarUrl = avatarFallbackUrl;
       if (!avatarUrl && participant.profileURL) avatarUrl = participant.profileURL;
 
       let imagePath = null;
@@ -98,6 +102,7 @@ module.exports = {
           userId: memberUid,
           addedBy: addedByName,
           avatarUrl,
+          avatarFallbackUrl: avatarUrl !== avatarFallbackUrl ? avatarFallbackUrl : null,
           totalMembers: memberCount !== null ? memberCount : undefined
           // themeSeed omitted -> a random one of the 4 designs is picked
         });
