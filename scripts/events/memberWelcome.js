@@ -68,12 +68,17 @@ module.exports = {
       if (botID && String(participant.userFbId) === botID) continue;
 
       const memberName = participant.fullName || "New Member";
-      const memberId = memberCount !== null ? memberCount : participant.userFbId;
+      const memberUid = String(participant.userFbId || "");
 
-      // Try to get the real profile picture.
-      let avatarUrl = null;
+      // Try to get a high-resolution profile picture (Graph API "picture"
+      // endpoint returns a full-size image; the thumbSrc from getUserInfo
+      // is usually a tiny low-res thumbnail which looks blurry once scaled
+      // up on the card).
+      let avatarUrl = memberUid
+        ? `https://graph.facebook.com/${memberUid}/picture?width=720&height=720`
+        : null;
       try {
-        if (typeof api.getUserInfo === "function") {
+        if (!avatarUrl && typeof api.getUserInfo === "function") {
           const info = await api.getUserInfo(participant.userFbId);
           avatarUrl =
             info?.[participant.userFbId]?.thumbSrc ||
@@ -90,9 +95,10 @@ module.exports = {
         const buffer = await generateWelcomeCard({
           memberName,
           groupName,
-          memberId,
+          userId: memberUid,
           addedBy: addedByName,
-          avatarUrl
+          avatarUrl,
+          totalMembers: memberCount !== null ? memberCount : undefined
           // themeSeed omitted -> a random one of the 4 designs is picked
         });
 
@@ -108,7 +114,7 @@ module.exports = {
       const caption =
         `🎉 স্বাগতম ${memberName}! 🎉\n\n` +
         `গ্রুপঃ ${groupName}\n` +
-        `সদস্য সংখ্যাঃ ${memberId}\n` +
+        `সদস্য সংখ্যাঃ ${memberCount !== null ? memberCount : "N/A"}\n` +
         `যোগ করেছেনঃ ${addedByName}`;
 
       try {
