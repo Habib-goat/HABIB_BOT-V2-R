@@ -13,38 +13,14 @@ module.exports = {
 		author: "MahMUD",
 		countDown: 10,
 		role: 0,
-		description: {
-			bn: "AI এর মাধ্যমে ছবির কোয়ালিটি 4K বা HD করুন",
-			en: "Enhance or restore image quality to 4K using AI",
-			vi: "Nâng cao chất lượng hình ảnh lên 4K bằng AI"
-		},
+		description: "Enhance or restore image quality to 4K using AI",
 		category: "tools",
-		guide: {
-			bn: '   {pn} [url]: ছবির লিংকের মাধ্যমে HD করুন\n   অথবা ছবির রিপ্লাইয়ে {pn} লিখুন',
-			en: '   {pn} [url]: Upscale image via URL\n   Or reply to an image with {pn}',
-			vi: '   {pn} [url]: Nâng cấp ảnh qua URL\n   Hoặc phản hồi ảnh bằng {pn}'
-		}
+		guide: "{pn} [url]: Upscale image via URL\n   Or reply to an image with {pn}"
 	},
 
-	langs: {
-		bn: {
-			noImage: "• বেবি, একটি ছবিতে রিপ্লাই দাও অথবা ছবির লিংক দাও! 😘",
-			success: "✅ | 𝐇𝐞𝐫𝐞'𝐬 𝐲𝐨𝐮𝐫 𝟒𝐤 𝐢𝐦𝐚𝐠𝐞 𝐛𝐚𝐛𝐲",
-			error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।\n•WhatsApp: 01836298139"
-		},
-		en: {
-			noImage: "• Baby, please reply to an image or provide a link! 😘",
-			success: "✅ | 𝐇𝐞𝐫𝐞'𝐬 𝐲𝐨𝐮𝐫 𝟒𝐤 𝐢𝐦𝐚𝐠𝐞 𝐛𝐚𝐛𝐲",
-			error: "× API error: %1. Contact MahMUD for help.\n•WhatsApp: 01836298139"
-		},
-		vi: {
-			noImage: "• Cưng ơi, hãy phản hồi một bức ảnh hoặc gửi link! 😘",
-			success: "✅ | 𝐇𝐞𝐫𝐞'𝐬 𝐲𝐨𝐮𝐫 𝟒𝐤 𝐢𝐦𝐚𝐠𝐞 𝐛𝐚̵𝐲",
-			error: "× Lỗi: %1. Liên hệ MahMUD để được hỗ trợ.\n•WhatsApp: 01836298139"
-		}
-	},
+	onStart: async function ({ api, event, args }) {
+		const { threadID, messageID } = event;
 
-	onStart: async function ({ api, message, args, event, getLang }) {
 		let imgUrl;
 		if (event.messageReply?.attachments?.[0]?.type === "photo") {
 			imgUrl = event.messageReply.attachments[0].url;
@@ -52,9 +28,13 @@ module.exports = {
 			imgUrl = args.join(" ");
 		}
 
-		if (!imgUrl) return api.sendMessage(getLang("noImage"), event.threadID, event.messageID);
+		if (!imgUrl) {
+			return api.sendMessage("• Baby, please reply to an image or provide a link! 😘", threadID, messageID);
+		}
 
-		api.setMessageReaction("😘", event.messageID, () => {}, true);
+		if (typeof api.setMessageReaction === "function") {
+			api.setMessageReaction("😘", messageID, () => {}, true);
+		}
 
 		try {
 			const response = await axios.get(`${await baseApiUrl()}/api/hd/mahmud?imgUrl=${encodeURIComponent(imgUrl)}`, {
@@ -63,17 +43,21 @@ module.exports = {
 				headers: { 'User-Agent': 'Mozilla/5.0' }
 			});
 
-			api.setMessageReaction("🪽", event.messageID, () => {}, true);
+			if (typeof api.setMessageReaction === "function") {
+				api.setMessageReaction("🪽", messageID, () => {}, true);
+			}
 
 			return api.sendMessage({
-				body: getLang("success"),
+				body: "✅ | 𝐇𝐞𝐫𝐞'𝐬 𝐲𝐨𝐮𝐫 𝟒𝐤 𝐢𝐦𝐚𝐠𝐞 𝐛𝐚𝐛𝐲",
 				attachment: response.data
-			}, event.threadID, event.messageID);
+			}, threadID, messageID);
 
 		} catch (err) {
 			console.error("Error in 4k command:", err);
-			api.setMessageReaction("❌", event.messageID, () => {}, true);
-			return api.sendMessage(getLang("error", err.message), event.threadID, event.messageID);
+			if (typeof api.setMessageReaction === "function") {
+				api.setMessageReaction("❌", messageID, () => {}, true);
+			}
+			return api.sendMessage(`× API error: ${err.message}. Contact MahMUD for help.\n•WhatsApp: 01836298139`, threadID, messageID);
 		}
 	}
 };
