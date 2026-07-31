@@ -33,6 +33,36 @@ let reconnectTimer = null;
 let doConnectRef = null;
 let currentAdaptedApi = null;
 
+// ── Duplicate-event guard ───────────────────────────────────────────────────
+// fca-eryxenx's MQTT stream occasionally redelivers the exact same message
+// event (e.g. right after a reconnect, or when Facebook resends on the
+// socket). Without this guard, the same incoming command message gets
+// processed twice, which is why users would see every command's reply sent
+// twice. We remember recently-seen messageIDs for a short window and skip
+// anything we've already handled.
+const recentlyProcessedMessageIds = new Map(); // messageID -> timestamp
+const DEDUPE_WINDOW_MS = 60 * 1000;
+
+function isDuplicateEvent(messageID) {
+  if (!messageID) return false;
+
+  const now = Date.now();
+
+  // Opportunistic cleanup so this map never grows unbounded.
+  if (recentlyProcessedMessageIds.size > 1000) {
+    for (const [id, ts] of recentlyProcessedMessageIds) {
+      if (now - ts > DEDUPE_WINDOW_MS) recentlyProcessedMessageIds.delete(id);
+    }
+  }
+
+  if (recentlyProcessedMessageIds.has(messageID)) {
+    return true;
+  }
+
+  recentlyProcessedMessageIds.set(messageID, now);
+  return false;
+}
+
 function stopCurrentListener() {
   if (!stopListener) return;
   try {
@@ -281,6 +311,16 @@ stopListener = api.listenMqtt(async (listenErr, event) => {
   event.senderID = String(event.senderID || "");
   event.threadID = String(event.threadID || "");
   event.messageID = String(event.messageID || "");
+
+  // Drop redelivered duplicates of the same message/reply event so commands
+  // (and their replies) don't run/send twice.
+  if (
+    (event.type === "message" || event.type === "message_reply") &&
+    isDuplicateEvent(event.messageID)
+  ) {
+    logger.warn(`[Dedupe] Skipped duplicate message event: ${event.messageID}`);
+    return;
+  }
 
   console.log("================");
 console.log(JSON.stringify(event, null, 2));
