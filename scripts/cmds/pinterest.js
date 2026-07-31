@@ -4,49 +4,55 @@ const path = require("path");
 
 module.exports = {
   config: {
-    name: "pinterest",
-    aliases: ["pin", "pint"],
-    version: "1.1.0",
-    author: "nexo_here (Optimized)",
+    name: "pin",
+    aliases: ["pinterest", "pint"],
+    version: "1.1.1",
+    author: "Riyad",
     countDown: 5,
     role: 0,
-    description: "Search Pinterest and return the top 5 image results.",
+    description: "Search Pinterest and return image results.",
     category: "image",
-    guide: "{pn} [keyword] (e.g. {pn} Naruto)"
+    guide: "{pn} [keyword]-[count] (e.g. {pn} Naruto-10)"
   },
 
   onStart: async function ({ api, event, args }) {
-    const { threadID, messageID } = event;
-    const query = args.join(" ");
-    if (!query) {
-      return api.sendMessage("⚠️ Please provide a search keyword.\nExample: pinterest Naruto", threadID, messageID);
+    const { threadID, messageID, senderID } = event;
+    const keySearch = args.join(" ");
+
+    if (!keySearch || keySearch.includes("-") === false) {
+      return api.sendMessage("❌ Example: pin Riyad-10", threadID, messageID);
     }
+
+    const keySearchs = keySearch.substr(0, keySearch.indexOf("-"));
+    const numberSearch = Math.max(1, parseInt(keySearch.split("-").pop()) || 6);
 
     const cacheDir = path.join(__dirname, "cache");
     await fs.ensureDir(cacheDir);
 
     const statusMsg = await new Promise((resolve) => {
-      api.sendMessage(`🔍 Searching Pinterest for "${query}"... Downloading top images... `, threadID, (err, info) => resolve(info), messageID);
+      api.sendMessage(`🔍 Searching Pinterest for "${keySearchs}"... Downloading ${numberSearch} image(s)...`, threadID, (err, info) => resolve(info), messageID);
     });
 
     const tempFiles = [];
 
     try {
-      const count = 5;
-      const apiUrl = `https://betadash-api-swordslush-production.up.railway.app/pinterest?search=${encodeURIComponent(query)}&count=${count}`;
-      const response = await axios.get(apiUrl, { timeout: 12000 });
+      const apis = await axios.get("https://raw.githubusercontent.com/shaonproject/Shaon/main/api.json", { timeout: 12000 });
+      const Shaon = apis.data.api;
 
-      const imageList = response.data?.data;
-      if (!Array.isArray(imageList) || imageList.length === 0) {
-        if (statusMsg) try { await api.unsendMessage(statusMsg.messageID); } catch(e) {}
+      const res = await axios.get(`${Shaon}/pinterest?search=${encodeURIComponent(keySearchs)}`, { timeout: 12000 });
+      const data = res.data.data;
+
+      if (!Array.isArray(data) || data.length === 0) {
+        if (statusMsg) try { await api.unsendMessage(statusMsg.messageID); } catch (e) {}
         return api.sendMessage("❌ No Pinterest results found for your search.", threadID, messageID);
       }
 
+      const count = Math.min(numberSearch, data.length);
       const attachments = [];
 
-      const downloadPromises = imageList.slice(0, 5).map(async (imageUrl, idx) => {
+      const downloadPromises = data.slice(0, count).map(async (imageUrl, idx) => {
         try {
-          const fileId = `pin_${event.senderID}_${Date.now()}_${idx}.jpg`;
+          const fileId = `pin_${senderID}_${Date.now()}_${idx}.jpg`;
           const imagePath = path.join(cacheDir, fileId);
 
           const imgResponse = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 10000 });
@@ -62,7 +68,7 @@ module.exports = {
       await Promise.all(downloadPromises);
 
       if (statusMsg) {
-        try { await api.unsendMessage(statusMsg.messageID); } catch(e) {}
+        try { await api.unsendMessage(statusMsg.messageID); } catch (e) {}
       }
 
       if (attachments.length === 0) {
@@ -70,7 +76,7 @@ module.exports = {
       }
 
       return api.sendMessage({
-        body: `📌 Pinterest search results for: "${query}"`,
+        body: `📌 ${attachments.length} Pinterest results for: "${keySearchs}"`,
         attachment: attachments
       }, threadID, async () => {
         for (const filePath of tempFiles) {
@@ -83,9 +89,9 @@ module.exports = {
       }, messageID);
 
     } catch (err) {
-      console.error("Pinterest command error:", err);
+      console.error("Pin command error:", err);
       if (statusMsg) {
-        try { await api.unsendMessage(statusMsg.messageID); } catch(e) {}
+        try { await api.unsendMessage(statusMsg.messageID); } catch (e) {}
       }
       for (const filePath of tempFiles) {
         try { await fs.remove(filePath); } catch (e) {}
