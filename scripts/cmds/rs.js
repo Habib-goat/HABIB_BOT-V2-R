@@ -445,57 +445,39 @@ module.exports = {
       }
     }
 
-    // --- 8. MANUAL SYNC ---
+    // --- 8. MANUAL SYNC (confirm-before-replace) ---
     if (subCommand === "sync") {
-      const renderSyncFrame = (current, total, fileName) => {
-        const pct = total ? Math.round((current / total) * 100) : 0;
-        const filled = Math.round(pct / 10);
-        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
-        return `📦 Syncing with Riyad Store...\n\n[${bar}] ${pct}% (${current}/${total})\n🔄 ${fileName || "Starting..."}`;
-      };
+      const pending = StoreSync.getPendingChanges();
 
-      const syncMsg = await send(renderSyncFrame(0, 0, "Preparing..."));
-      const msgID = syncMsg?.messageID || syncMsg;
-
-      let lastEditTime = 0;
-      const throttledEdit = async (current, total, fileName) => {
-        const now = Date.now();
-        if (now - lastEditTime < 1500) return;
-        lastEditTime = now;
-        if (msgID) {
-          try { await edit(renderSyncFrame(current, total, fileName), msgID); } catch (_) {}
-        }
-      };
-
-      try {
-        const res = await StoreSync.syncAll((current, total, fileName) => {
-          throttledEdit(current, total, fileName);
-        });
-
-        await edit(renderSyncFrame(res.syncedCount + res.skippedCount + (res.failedFiles?.length || 0), res.syncedCount + res.skippedCount + (res.failedFiles?.length || 0), "✅ Done"), msgID);
-
-        const msg =
-  `✅ [ STORE AUTO-SYNC COMPLETE ]\n` +
-  `╭─────────────◊\n` +
-  `├‣ Auto-Uploaded : ${res.syncedCount} new file(s)\n` +
-  `├‣ Already Synced: ${res.skippedCount} file(s)\n` +
-  `╰─────────────◊\n` +
-  `💡 Local command hashes verified.`;
-
-if (res.failedFiles && res.failedFiles.length > 0) {
-  const failList = res.failedFiles
-    .map(f => `• ${f.file}: ${f.reason}`)
-    .join("\n");
-
-  await send(
-    `⚠️ [ SYNC WARNINGS - ${res.failedFiles.length} file(s) skipped ]\n${failList}`
-  );
-}
-
-        return await edit(msg, msgID);
-      } catch (err) {
-        return await edit(`❌ Sync Error: ${err.message}`, msgID);
+      if (pending.length === 0) {
+        return await send(
+          `✅ [ STORE SYNC ]\n╭─────────────◊\n├‣ Everything is already up to date.\n╰─────────────◊`
+        );
       }
+
+      const list = pending
+        .map(p => `• ${p.file} ${p.isNew ? "(new)" : `→ v${p.version}`}`)
+        .join("\n");
+
+      const confirmCard =
+        `📦 [ STORE SYNC - CONFIRM REPLACE ]\n` +
+        `╭─────────────◊\n` +
+        `${list}\n` +
+        `╰─────────────◊\n` +
+        `The version on the store will be replaced with your local copy for ${pending.length} file(s).\n\n` +
+        `👉 React to this message with anything to confirm.`;
+
+      const confirmMsg = await send(confirmCard);
+      const confirmMsgID = confirmMsg?.messageID || confirmMsg;
+
+      if (confirmMsgID) {
+        reactionManager.register(confirmMsgID, {
+          commandName: "rs",
+          type: "sync_confirm",
+          files: pending.map(p => p.file)
+        });
+      }
+      return;
     }
 
     // --- 9. DIRECT LOOKUP BY ID / NAME (/rs <id> or /rs <name>) ---
@@ -510,13 +492,73 @@ if (res.failedFiles && res.failedFiles.length > 0) {
   },
 
   async onReaction({ api, event, reactionData }) {
-    if (!reactionData || reactionData.type !== "list_pagination") return;
+    if (!reactionData) return;
 
-    const reaction = event.reaction;
-    if (reaction !== "❤️" && reaction !== "💝") return;
+    if (reactionData.type === "list_pagination") {
+      const reaction = event.reaction;
+      if (reaction !== "❤️" && reaction !== "💝") return;
 
-    const nextPage = (reactionData.page || 1) + 1;
-    await sendListPage(api, event.threadID, nextPage, reactionData.limit || 5, event.messageID);
+      const nextPage = (reactionData.page || 1) + 1;
+      return await sendListPage(api, event.threadID, nextPage, reactionData.limit || 5, event.messageID);
+    }
+
+    if (reactionData.type === "sync_confirm") {
+      // Any reaction confirms — consume it once so a second reaction can't re-trigger.
+      reactionManager.delete(event.messageID);
+
+      const edit = async (msg, messageID) => {
+        if (messageID && typeof api.editMessage === "function") {
+          try { return await api.editMessage(msg, messageID); } catch (_) {}
+        }
+        return api.sendMessage(msg, event.threadID);
+      };
+
+      const files = reactionData.files || [];
+      const renderSyncFrame = (current, total, fileName) => {
+        const pct = total ? Math.round((current / total) * 100) : 0;
+        const filled = Math.round(pct / 10);
+        const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+        return `📦 Syncing with Riyad Store...\n\n[${bar}] ${pct}% (${current}/${total})\n🔄 ${fileName || "Starting..."}`;
+      };
+
+      const progressMsg = await api.sendMessage(renderSyncFrame(0, files.length, "Starting..."), event.threadID);
+      const progressMsgID = progressMsg?.messageID || progressMsg;
+
+      let lastEditTime = 0;
+      const throttledEdit = async (current, total, fileName) => {
+        const now = Date.now();
+        if (now - lastEditTime < 1500) return;
+        lastEditTime = now;
+        if (progressMsgID) {
+          try { await edit(renderSyncFrame(current, total, fileName), progressMsgID); } catch (_) {}
+        }
+      };
+
+      try {
+        const res = await StoreSync.syncAll((current, total, fileName) => {
+          throttledEdit(current, total, fileName);
+        }, files);
+
+        if (res.busy) {
+          return await edit("⏳ A sync is already running — try again in a moment.", progressMsgID);
+        }
+
+        const stillPending = res.failedFiles?.length || 0;
+        const msg =
+          `✅ [ STORE SYNC COMPLETE ]\n` +
+          `╭─────────────◊\n` +
+          `├‣ Replaced   : ${res.syncedCount} file(s)\n` +
+          `├‣ Up to date : ${res.skippedCount} file(s)\n` +
+          (stillPending
+            ? `├‣ Retry later: ${stillPending} file(s) (store was busy, will retry next sync)\n`
+            : "") +
+          `╰─────────────◊`;
+
+        return await edit(msg, progressMsgID);
+      } catch (err) {
+        return await edit("⚠️ Sync couldn't finish — it'll pick back up on the next `/rs sync`.", progressMsgID);
+      }
+    }
   },
 
   async onReply({ api, event, replyData }) {
