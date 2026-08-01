@@ -114,6 +114,27 @@ function hasBangla(str) {
 }
 
 /**
+ * Strips invisible / zero-advance-but-not-zero-width "filler" characters
+ * that some Facebook display names contain (used as a name-styling trick).
+ * The worst offenders are the Hangul filler jamo (U+115F, U+1160, U+3164,
+ * U+FFA0) — these render as *nothing* in most fonts but still reserve a
+ * full glyph cell, so a name padded with them measures much wider than it
+ * looks and blows a huge blank gap into the row. Also strips genuinely
+ * zero-width characters (ZWSP/ZWNJ/ZWJ/word-joiner/BOM, soft hyphen,
+ * Mongolian vowel separator) and collapses any leftover run of whitespace
+ * so trimming still behaves as expected.
+ */
+const INVISIBLE_CHARS_RE =
+  /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\u00AD\u180E\u115F\u1160\u3164\uFFA0]/g;
+function sanitizeDisplayText(str) {
+  if (!str) return str;
+  return String(str)
+    .replace(INVISIBLE_CHARS_RE, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/**
  * Splits text into runs of consecutive Bangla / non-Bangla characters so a
  * single line can mix "English নাম Bangla" and have each run rendered with
  * the correct font.
@@ -335,9 +356,9 @@ function drawImageFit(ctx, img, x, y, w, h) {
 /**
  * Returns an amber-tinted copy of a (mostly-white/monochrome-ring) source
  * image, drawn onto an offscreen canvas with `source-atop` compositing.
- * Used to recolor the purple "frame_001" ring asset into the amber ring
- * used by the "Added By" row, since only one ring color was exported from
- * the Canva SVG (see CHANGES.md).
+ * Used to recolor the fixed member-ring asset (see `punchRingHole`) into
+ * the purple/amber rings used by the "Group" and "Added By" rows, since
+ * only one ring shape was exported from the Canva SVG (see CHANGES.md).
  */
 function tintImage(img, color) {
   if (!img) return null;
@@ -347,6 +368,37 @@ function tintImage(img, color) {
   octx.globalCompositeOperation = 'source-atop';
   octx.fillStyle = color;
   octx.fillRect(0, 0, img.width, img.height);
+  return off;
+}
+
+/**
+ * `frames/frame_002.png` (the avatar ring/glow asset) was exported with an
+ * opaque dark disc + glow baked into its own center — fine as a standalone
+ * graphic, but fatal when drawn on top of an avatar, since it blots out
+ * the whole face instead of just framing it. This clears that center out
+ * with a `destination-out` radial mask, leaving only the glowing ring
+ * itself, so the avatar underneath shows through. `innerRatio` is where
+ * the erase is 100% (relative to the image's half-width/height); it fades
+ * to 0% by `featherRatio` so the ring's own soft glow survives intact.
+ */
+function punchRingHole(img, innerRatio = 0.8, featherRatio = 0.92) {
+  if (!img) return null;
+  const off = createCanvas(img.width, img.height);
+  const octx = off.getContext('2d');
+  octx.drawImage(img, 0, 0);
+  const cx = img.width / 2;
+  const cy = img.height / 2;
+  const maxR = Math.min(cx, cy);
+  octx.globalCompositeOperation = 'destination-out';
+  const grad = octx.createRadialGradient(cx, cy, 0, cx, cy, maxR * featherRatio);
+  grad.addColorStop(0, 'rgba(0,0,0,1)');
+  grad.addColorStop(innerRatio / featherRatio, 'rgba(0,0,0,1)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  octx.fillStyle = grad;
+  octx.beginPath();
+  octx.arc(cx, cy, maxR, 0, Math.PI * 2);
+  octx.fill();
+  octx.globalCompositeOperation = 'source-over';
   return off;
 }
 
@@ -390,9 +442,9 @@ const LEN = (v) => v * SCALE;
 async function generateWelcomeCard(opts = {}) {
   ensureFontsRegistered();
 
-  const memberName = String(opts.memberName || 'New Member').trim() || 'New Member';
-  const groupName = String(opts.groupName || 'Group Chat').trim() || 'Group Chat';
-  const addedBy = String(opts.addedBy || 'Unknown').trim() || 'Unknown';
+  const memberName = sanitizeDisplayText(opts.memberName) || 'New Member';
+  const groupName = sanitizeDisplayText(opts.groupName) || 'Group Chat';
+  const addedBy = sanitizeDisplayText(opts.addedBy) || 'Unknown';
   const totalMembers =
     opts.totalMembers === undefined || opts.totalMembers === null || opts.totalMembers === ''
       ? '—'
@@ -405,8 +457,7 @@ async function generateWelcomeCard(opts = {}) {
     addedByAvatarImg,
     bgFull,
     bgLeft,
-    ringMember,
-    ringGroupRaw,
+    ringRaw,
     panelOuter,
     panelCorner,
     panelGroupRow,
@@ -426,7 +477,6 @@ async function generateWelcomeCard(opts = {}) {
     loadAsset('backgrounds/background_001.png'),
     loadAsset('backgrounds/background_002.png'),
     loadAsset('frames/frame_002.png'),
-    loadAsset('frames/frame_001.png'),
     loadAsset('panels/panel_001.png'),
     loadAsset('panels/panel_004.png'),
     loadAsset('panels/panel_005.png'),
@@ -441,9 +491,16 @@ async function generateWelcomeCard(opts = {}) {
     loadAsset('icons/icon_008.png'),
   ]);
 
-  // The amber "Added By" ring is a recolor of the purple ring asset — only
-  // one ring color exists in the extracted SVG assets (see CHANGES.md).
-  const ringAddedBy = tintImage(ringGroupRaw, '#f5a623');
+  // `frame_001.png` used to be (wrongly) pressed into service as the ring
+  // for the Group/Added-By avatars — it's actually a sparse dot-grid
+  // pattern, not a ring, which is why those avatars showed a dot-pattern
+  // blob instead of a glowing circle. The only real ring asset is
+  // frame_002.png, so every ring (member/group/added-by) is now derived
+  // from one punched-open copy of it, tinted per row (see CHANGES.md).
+  const ringBase = punchRingHole(ringRaw);
+  const ringMember = ringBase;
+  const ringGroup = tintImage(ringBase, '#a63bff');
+  const ringAddedBy = tintImage(ringBase, '#f5a623');
 
   const canvas = createCanvas(CANVAS_W, CANVAS_H);
   const ctx = canvas.getContext('2d');
@@ -684,7 +741,11 @@ async function generateWelcomeCard(opts = {}) {
     labelText, labelColor, valueText, valuePrefix,
   }) {
     const rowX = 700;
-    const rowW = 1000;
+    // 990, not 1000: the outer glass panel spans ref-x 690–1700 (see
+    // panelOuter above), so a row starting at 700 needs to end at 1690 to
+    // get a matching 10px inset on the right — at 1000 wide it ran flush
+    // to 1700, giving no right-side border while the left had one.
+    const rowW = 990;
 
     if (panelImg) {
       drawImageFit(ctx, panelImg, X(rowX), Y(y), LEN(rowW), LEN(h));
@@ -708,22 +769,25 @@ async function generateWelcomeCard(opts = {}) {
       ctx.drawImage(iconImg, X(tabCX) - iw / 2, Y(tabCY) - ih / 2, iw, ih);
     }
 
-    // Label
-    drawAutoFitText(ctx, labelText, X(rowX + 130), Y(y + h * 0.28), {
-      maxSize: LEN(22),
-      minSize: LEN(14),
-      maxWidth: LEN(260),
-      weight: 'normal',
-      family: F_LABEL,
-      align: 'left',
-      color: labelColor,
-    });
-
     // Avatar
     const avCX2 = rowX + 175;
     const avCY2 = y + h / 2;
     const avR2 = h * 0.32;
     drawCircleAvatar(ctx, avatarImg, X(avCX2), Y(avCY2), LEN(avR2 * 0.92));
+
+    // Label — stacked directly above the value/name text (same left edge,
+    // rowX + 270) so it clears the avatar circle instead of sitting on
+    // top of it (avatar right edge lands at ~rowX + 240, well short of
+    // this X).
+    drawAutoFitText(ctx, labelText, X(rowX + 270), Y(y + h * 0.28), {
+      maxSize: LEN(22),
+      minSize: LEN(14),
+      maxWidth: LEN(rowW - 300),
+      weight: 'normal',
+      family: F_LABEL,
+      align: 'left',
+      color: labelColor,
+    });
     if (avatarRingImg) {
       const s = avR2 * 2 * 1.12;
       ctx.drawImage(avatarRingImg, X(avCX2) - LEN(s) / 2, Y(avCY2) - LEN(s) / 2, LEN(s), LEN(s));
@@ -757,7 +821,7 @@ async function generateWelcomeCard(opts = {}) {
     tint: '#a63bff',
     iconImg: iconGroup,
     iconRefSize: [46, 46],
-    avatarRingImg: ringGroupRaw,
+    avatarRingImg: ringGroup,
     avatarImg: groupAvatarImg,
     labelText: 'GROUP',
     labelColor: '#c98bff',
@@ -784,18 +848,23 @@ async function generateWelcomeCard(opts = {}) {
   const madeByH = 147;
   const madeByCX = 1200;
   if (panelMadeByRow) {
-    drawImageFit(ctx, panelMadeByRow, X(700), Y(madeByY), LEN(1000), LEN(madeByH));
+    drawImageFit(ctx, panelMadeByRow, X(700), Y(madeByY), LEN(990), LEN(madeByH));
   }
-  if (dotGrid) {
+  // decoration_001.png ("dotGrid") is ~78% opaque pixel fill — a dense
+  // corner-flourish graphic, not a sparse dot pattern despite its name.
+  // Stretched into a small 75x90 box it reads as a solid silhouette/blob,
+  // so it's kept for the actual corner accent (left panel) only; here it's
+  // replaced with the same small vector sparkle used next to "RIYAD" below.
+  if (sparkleAsset) {
+    const s = LEN(22);
     ctx.save();
     ctx.globalAlpha = 0.85;
-    ctx.drawImage(dotGrid, X(715), Y(madeByY + 25), LEN(75), LEN(90));
-    ctx.save();
-    ctx.translate(X(1685), Y(madeByY + 25));
-    ctx.scale(-1, 1);
-    ctx.drawImage(dotGrid, 0, 0, LEN(75), LEN(90));
+    ctx.drawImage(sparkleAsset, X(750) - s / 2, Y(madeByY + 40) - s / 2, s, s);
+    ctx.drawImage(sparkleAsset, X(1650) - s / 2, Y(madeByY + 40) - s / 2, s, s);
     ctx.restore();
-    ctx.restore();
+  } else {
+    drawSparkle(ctx, X(750), Y(madeByY + 40), LEN(9), '#c98bff');
+    drawSparkle(ctx, X(1650), Y(madeByY + 40), LEN(9), '#c98bff');
   }
 
   drawAutoFitText(ctx, 'M A D E   B Y', X(madeByCX), Y(madeByY + 35), {
