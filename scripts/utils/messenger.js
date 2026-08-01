@@ -11,18 +11,18 @@ const { MessengerAdapterFactory } = require('./messengerAdapter');
 let loginLib;
 
 try {
-  const libName = config.messengerLib || "fca-eryxenx";
+  const libName = config.messengerLib || "fca-riyad";
   loginLib = require(libName);
 } catch (err) {
   logger.warn(
-    `[Messenger] Selected library "${config.messengerLib || "fca-eryxenx"}" not found, falling back to "fca-eryxenx"`
+    `[Messenger] Selected library "${config.messengerLib || "fca-riyad"}" not found, falling back to "fca-riyad"`
   );
 
   try {
-    loginLib = require("fca-eryxenx");
+    loginLib = require("fca-riyad");
   } catch (e) {
     logger.error(
-      "[Messenger] Failed to load 'fca-eryxenx'. Running in simulated dashboard mode only."
+      "[Messenger] Failed to load 'fca-riyad'. Running in simulated dashboard mode only."
     );
   }
 }
@@ -267,7 +267,7 @@ function startMessenger(app, wsServer) {
 
       // Wrap standard API with our custom promise-based adapter
       const adaptedApi = MessengerAdapterFactory.create(
-  config.messengerLib || "fca-eryxenx",
+  config.messengerLib || "fca-riyad",
   api,
   wsServer
 );
