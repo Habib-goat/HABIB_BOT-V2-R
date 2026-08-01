@@ -31,7 +31,7 @@ module.exports = {
   config: {
     name: "catbox",
     version: "1.2.0",
-    author: "EryXenX & Kshitiz",
+    author: "Riyad & Kshitiz",
     role: 0,
     shortDescription: "Upload media to Catbox.",
     longDescription: "Reply to any image, video, audio, or attachment file to upload it directly to Catbox.",
