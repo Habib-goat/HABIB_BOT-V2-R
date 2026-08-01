@@ -1,3 +1,4 @@
+
 /**
  * welcomeCardGenerator.js
  * High-Quality Node.js Canvas Welcome Card Generator — RIYAD BOT
