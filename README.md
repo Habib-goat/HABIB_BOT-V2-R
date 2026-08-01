@@ -20,7 +20,7 @@
   <img src="https://img.shields.io/badge/database-MongoDB-F5D2B3?style=for-the-badge&labelColor=7A0010" alt="database"/>
 </p>
 <p>
-  <img src="https://img.shields.io/badge/FCA-fca--eryxenx%20v37-7A0010?style=flat-square&labelColor=F5D2B3" alt="fca"/>
+  <img src="https://img.shields.io/badge/FCA-fca--riyad%20v37-7A0010?style=flat-square&labelColor=F5D2B3" alt="fca"/>
   <img src="https://img.shields.io/badge/AI-Gemini%20Powered-7A0010?style=flat-square&labelColor=F5D2B3" alt="ai"/>
   <img src="https://img.shields.io/badge/dashboard-Live%20WebSocket-7A0010?style=flat-square&labelColor=F5D2B3" alt="dashboard"/>
   <img src="https://img.shields.io/badge/commands-40%2B-7A0010?style=flat-square&labelColor=F5D2B3" alt="commands"/>
@@ -73,7 +73,7 @@
 │            │                        │                   │        │
 │            ▼                        ▼                   ▼        │
 │   ┌────────────────────────────────────────────────────────────┐ │
-│   │              FCA Core  (fca-eryxenx v37)                   │ │
+│   │              FCA Core  (fca-riyad v37)                   │ │
 │   └────────────────────────────┬───────────────────────────────┘ │
 │                                 ▼                                 │
 │                   ┌──────────────────────────┐                    │
@@ -85,7 +85,7 @@
 
 #### Why developers choose it
 * **True isolation** — every command in `scripts/cmds/` is a self-contained module with its own `config`, `onStart`, and cooldown lifecycle.
-* **Resilient sessions** — powered by `fca-eryxenx v37` with automatic re-login and session-state preservation.
+* **Resilient sessions** — powered by `fca-riyad v37` with automatic re-login and session-state preservation.
 * **Hot-loadable everything** — commands, events, and plugins are discovered and bound dynamically, no manual index files to maintain.
 
 ---
@@ -113,7 +113,7 @@
 <td>
 <b>Node.js 18+</b><br/>Modern LTS runtime, V8-optimized.<br/><br/>
 <b>CommonJS Core</b><br/>Familiar, dependency-light module system.<br/><br/>
-<b>fca-eryxenx v37</b><br/>Stable, actively maintained FCA transport.<br/><br/>
+<b>fca-riyad v37</b><br/>Stable, actively maintained FCA transport.<br/><br/>
 <b>Express + WebSocket</b><br/>REST API and a real-time live dashboard.
 </td>
 <td>
@@ -546,7 +546,7 @@ Mongoose gives schema validation, indexing, and safe concurrent writes — all t
 Add a file to <code>scripts/cmds/</code> following the standard command structure above, then restart (or hot-reload from the dashboard, if enabled).
 </details>
 
-<details><summary><b>Is fca-eryxenx safe to use?</b></summary><br/>
+<details><summary><b>Is fca-riyad safe to use?</b></summary><br/>
 It's an actively maintained fork of the original Facebook Chat API, but any unofficial FCA library carries some risk of account action from Meta — use a secondary/developer account, not your personal one.
 </details>
 
@@ -587,7 +587,7 @@ We recommend a dedicated secondary account, sensible cooldowns, and avoiding mas
 ## 🎗️ Credits & Dedications
 
 * **Riyad Hasan** — creator, architect, and maintainer.
-* **fca-eryxenx developers** — for the transport layer this framework relies on.
+* **fca-riyad developers** — for the transport layer this framework relies on.
 * **Open-source community** — for feedback and contributions.
 
 ---
