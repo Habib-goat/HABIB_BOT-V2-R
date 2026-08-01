@@ -1,4 +1,5 @@
 "use strict";
+console.log("[PATCHED-SENDMESSAGE] fca-riyad sendMessage.js patched version loaded (v2) ✅");
 
 var utils = require("../../utils/nexca-utils");
 var logger = require("../../utils/nexca-logger");
