@@ -2,7 +2,7 @@ module.exports = {
 	config: {
 		name: "inbox",
 		aliases: ["in", "ইনবক্স"],
-		version: "2.0",
+		version: "2.1",
 		author: "Riyad",
 		countDown: 5,
 		role: 0,
@@ -17,13 +17,15 @@ module.exports = {
 
 		const trySend = () => new Promise((resolve) => {
 			api.sendMessage("Hi baby 😘", senderID, (err, info) => {
-				// Some fca-eryxenx MQTT puback bugs cause err=null but info
-				// missing/empty even though the message never really sent.
-				// Only trust it as a real success if we got a messageID back.
-				if (!err && info && info.messageID) {
+				console.log("Inbox DM raw result:", JSON.stringify({ err, info }));
+				// Some MQTT puback quirks cause err=null but info missing/empty
+				// even though the message never really sent. Trust it if we got
+				// a messageID back, OR a threadID back (first-time DMs / message
+				// request threads sometimes don't echo a messageID but did send).
+				if (!err && info && (info.messageID || info.threadID)) {
 					resolve({ ok: true });
 				} else {
-					resolve({ ok: false, err: err || new Error("No messageID returned (likely MQTT puback issue)") });
+					resolve({ ok: false, err: err || new Error("No messageID/threadID returned (check server logs for raw ls_resp payload)") });
 				}
 			});
 		});
