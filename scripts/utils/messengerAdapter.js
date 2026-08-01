@@ -569,6 +569,7 @@ class MessengerAdapterFactory {
     
     switch (normalizedProvider) {
       case 'fca-unofficial':
+      case 'fca-riyad':
       case 'fca-eryxenx':
       case 'facebook-chat-api':
       case 'fca':
