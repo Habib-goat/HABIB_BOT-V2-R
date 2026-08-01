@@ -63,11 +63,14 @@ function parseCommandMetadata(code) {
   const name = match("name");
   if (!name) return null;
 
+  const roleMatch = configBlock.match(/role\s*:\s*(\d+)/i);
+
   return {
     name: name.toLowerCase(),
     version: match("version") || "1.0.0",
     author: match("author") || match("credits") || "Unknown",
     category: match("commandCategory") || match("category") || "Uncategorized",
+    role: roleMatch ? parseInt(roleMatch[1], 10) : 0,
     shortDescription:
       match("shortDescription") ||
       match("description") ||
