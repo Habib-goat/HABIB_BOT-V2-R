@@ -12,7 +12,8 @@
     "start": "node app.js",
     "dev": "node app.js",
     "build": "echo \"Done\"",
-    "lint": "echo \"Done\""
+    "lint": "echo \"Done\"",
+    "postinstall": "node scripts/apply-patches.js"
   },
   "dependencies": {
     "request": "^2.88.2",
