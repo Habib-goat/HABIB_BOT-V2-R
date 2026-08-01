@@ -17,6 +17,7 @@ class StoreUploader {
       version: meta.version,
       author: meta.author,
       category: meta.category,
+      role: meta.role,
       guide: meta.guide,
       description: meta.shortDescription,
       longDescription: meta.longDescription,
