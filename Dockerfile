@@ -17,6 +17,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
+# Cache-busting: forces Docker to invalidate everything below this line
+# on every build, so source code changes always get picked up.
+ARG CACHEBUST=1
 COPY . .
 
 EXPOSE 8080
