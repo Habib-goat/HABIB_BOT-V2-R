@@ -2,7 +2,7 @@
  * RIYAD BOT FRAMEWORK - MAIN APP ENTRY POINT
  * Written in production-grade Node.js (CommonJS)
  */
-console.log("###### DEPLOY-TEST-MARKER-999 ######");
+
 require('dotenv').config();
 require("./scripts/applyFcaPatch")();
 const express = require('express');
