@@ -17,11 +17,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Cache-busting: forces Docker to invalidate everything below this line
-# on every build, so source code changes always get picked up.
 ARG CACHEBUST=1
 COPY . .
 
 EXPOSE 8080
 
-CMD ["npm", "start"]
+CMD echo "===CHECK-START===" && date && echo "--- app.js top ---" && head -n 6 app.js && echo "--- sendMessage.js top ---" && head -n 5 node_modules/fca-riyad/src/api/socket/sendMessage.js && echo "--- applyFcaPatch exists? ---" && ls -la scripts/applyFcaPatch.js && echo "===CHECK-END===" && npm start
