@@ -18,7 +18,7 @@ module.exports = {
 			return api.sendMessage("❌ | Please enter the message you want to send to all groups.", threadID, messageID);
 		}
 
-		const body = `📢 Notification from admin bot to all chat groups (do not reply to this message)\n────────────────\n${args.join(" ")}`;
+		const body = `˗ˏˋ⎯୧ 𝗔𝗗𝗠𝗜𝗡⚡𝗠𝗘𝗦𝗦𝗔𝗚𝗘 ୨⎯ˎˊ˗\n︵‿︵‿╰⊱ 𝗕𝗢𝗧⚡𝗥𝗜𝗬𝗔𝗗 ⊰╯‿︵‿︵\n${args.join(" ")}`;
 
 		// Pull every known group thread from the database
 		const allThreads = await threadsData.getAllThreads();
