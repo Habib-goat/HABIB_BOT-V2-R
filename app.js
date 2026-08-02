@@ -25,9 +25,9 @@ const autoTimerService = require('./scripts/services/autotimerService');
 function printBanner() {
   const c = "\x1b[36m"; // cyan — change to 31=red, 32=green, 33=yellow, 35=magenta
   const reset = "\x1b[0m";
-  console.log(c + "╔══════════════════════════════╗" + reset);
-  console.log(c + "║   ⚡ Made by RIYAD BOT ⚡   ║" + reset);
-  console.log(c + "╚══════════════════════════════╝" + reset);
+  console.log(c + "╔════════════════════════╗" + reset);
+  console.log(c + "║   ⚡ Made by RIYAD BOT ⚡  ║" + reset);
+  console.log(c + "╚════════════════════════╝" + reset);
 }
 
 async function startBot() {
