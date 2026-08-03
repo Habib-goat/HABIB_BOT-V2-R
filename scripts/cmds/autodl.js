@@ -15,6 +15,15 @@ function detectPlatform(url) {
   if (urlLower.includes("snapchat.com")) return "𝙎𝙣𝙖𝙥𝙘𝙝𝙖𝙩";
   if (urlLower.includes("vimeo.com")) return "𝙑𝙞𝙢𝙚𝙤";
   if (urlLower.includes("dailymotion.com") || urlLower.includes("dai.ly")) return "𝘿𝙖𝙞𝙡𝙮𝙢𝙤𝙩𝙞𝙤𝙣";
+  if (urlLower.includes("spotify.com")) return "𝙎𝙥𝙤𝙩𝙞𝙛𝙮";
+  if (urlLower.includes("soundcloud.com")) return "𝙎𝙤𝙪𝙣𝙙𝘾𝙡𝙤𝙪𝙙";
+  if (urlLower.includes("reddit.com")) return "𝙍𝙚𝙙𝙙𝙞𝙩";
+  if (urlLower.includes("linkedin.com")) return "𝙇𝙞𝙣𝙠𝙚𝙙𝙄𝙣";
+  if (urlLower.includes("capcut.com")) return "𝘾𝙖𝙥𝘾𝙪𝙩";
+  if (urlLower.includes("kuaishou.com") || urlLower.includes("kwai.com")) return "𝙆𝙬𝙖𝙞 / 𝙆𝙪𝙖𝙞𝙨𝙝𝙤𝙪";
+  if (urlLower.includes("douyin.com")) return "𝘿𝙤𝙪𝙮𝙞𝙣";
+  if (urlLower.includes("bsky.app")) return "𝘽𝙡𝙪𝙚𝙨𝙠𝙮";
+  if (urlLower.includes("tumblr.com")) return "𝙏𝙪𝙢𝙗𝙡𝙧";
 
   // Check direct file extensions
   const directExtensions = [".mp4", ".mp3", ".wav", ".m4a", ".mov", ".gif", ".png", ".jpg", ".jpeg", ".pdf", ".zip", ".docx", ".txt"];
@@ -56,7 +65,9 @@ function isSupportedDomain(url) {
   const domains = [
     "tiktok.com", "fb.watch", "facebook.com", "fb.com", "instagram.com", "instagr.am",
     "youtube.com", "youtu.be", "x.com", "twitter.com", "pin.it", "pinterest.com",
-    "threads.net", "snapchat.com", "vimeo.com", "dailymotion.com", "dai.ly"
+    "threads.net", "snapchat.com", "vimeo.com", "dailymotion.com", "dai.ly",
+    "spotify.com", "soundcloud.com", "reddit.com", "linkedin.com", "capcut.com",
+    "kuaishou.com", "kwai.com", "douyin.com", "bsky.app", "tumblr.com"
   ];
 
   return domains.some(domain => urlLower.includes(domain));
@@ -164,8 +175,8 @@ function formatSize(bytes) {
 module.exports = {
   config: {
     name: "autodl",
-    aliases: ["fb", "tiktok", "ig", "yt", "alldl"],
-    version: "1.0.2",
+    aliases: ["fb", "tiktok", "ig", "yt", "alldl", "dl", "download"],
+    version: "1.1.0",
     author: "Riyad",
     countDown: 5,
     role: 0,
@@ -174,7 +185,7 @@ module.exports = {
 
   onStart: async function({ api, event }) {
     return api.sendMessage(
-      "🤖 Auto-Download Bot is active!\n\nJust send any supported media link (TikTok, Facebook, Instagram, YouTube, X, Pinterest, Threads, Snapchat, Vimeo, Dailymotion, or direct files) directly in the chat, and I will download it for you automatically without any commands or prefix!",
+      "🤖 Auto-Download Bot is active!\n\nJust send any supported media link directly in the chat, and I will download it for you automatically without any commands or prefix!\n\nSupported Platforms:\n• TikTok\n• YouTube / Shorts\n• Facebook / FB Watch\n• Instagram / Reels\n• Twitter (X)\n• Threads\n• Snapchat\n• Pinterest\n• Spotify\n• SoundCloud\n• Reddit\n• LinkedIn\n• CapCut\n• Dailymotion\n• Kwai / Kuaishou\n• Douyin\n• Bluesky\n• Tumblr\n• Vimeo\n• Direct file links",
       event.threadID,
       event.messageID
     );
