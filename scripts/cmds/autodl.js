@@ -55,18 +55,46 @@ function detectPlatform(url) {
 }
 
 // ================= VIDEO EXTRACT =================
+function firstString(...vals) {
+  for (const v of vals) {
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
 function extractVideo(data) {
   if (!data) return null;
-  const r = data.result || {};
-  return (
-    r.high_quality ||
-    r.video ||
-    r.url ||
-    data.high_quality ||
-    data.video ||
-    data.url ||
-    null
+  const r = data.result || data.data || {};
+
+  // direct known fields (video-first, then generic media/image fields —
+  // Pinterest and some other providers only return an image, not a video)
+  let found = firstString(
+    r.high_quality, r.video, r.url, r.download, r.download_url,
+    r.media, r.media_url, r.image, r.image_url, r.thumbnail,
+    data.high_quality, data.video, data.url, data.download, data.download_url,
+    data.media, data.media_url, data.image, data.image_url
   );
+  if (found) return found;
+
+  // array-shaped fields: medias / formats / links / urls / images —
+  // pick the first usable url in the array
+  const arrayCandidates = [
+    r.medias, r.formats, r.links, r.urls, r.images, r.data,
+    data.medias, data.formats, data.links, data.urls, data.images
+  ];
+  for (const arr of arrayCandidates) {
+    if (Array.isArray(arr) && arr.length) {
+      for (const item of arr) {
+        if (typeof item === "string" && item.trim()) return item.trim();
+        if (item && typeof item === "object") {
+          const u = firstString(item.url, item.download_url, item.link, item.src);
+          if (u) return u;
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 // ================= SUPPORTED DOMAIN ONLY CHECK (strict) =================
@@ -188,7 +216,7 @@ module.exports = {
   config: {
     name: "autodl",
     aliases: ["fb", "tiktok", "ig", "yt", "alldl", "dl", "download"],
-    version: "1.2.0",
+    version: "1.1.0",
     author: "Riyad",
     countDown: 5,
     role: 0,
@@ -256,6 +284,23 @@ module.exports = {
       const cacheDir = path.join(__dirname, "cache");
       await fs.ensureDir(cacheDir);
 
+      // Resolve shortened links (pin.it, fb.watch, dai.ly, etc.) to their
+      // final URL — many downloader APIs fail on the short redirect form.
+      const shortDomains = ["pin.it", "fb.watch", "dai.ly", "youtu.be"];
+      if (shortDomains.some(d => finalUrl.toLowerCase().includes(d))) {
+        try {
+          const headRes = await axios.get(finalUrl, {
+            maxRedirects: 5,
+            timeout: 10000,
+            validateStatus: () => true
+          });
+          const resolved = headRes.request?.res?.responseUrl;
+          if (resolved) finalUrl = resolved;
+        } catch (e) {
+          console.error("Redirect resolve failed:", e.message);
+        }
+      }
+
       let downloadUrl = null;
       let info = { title: "Direct File", author: "Direct Link" };
       let isDirect = false;
@@ -309,7 +354,7 @@ module.exports = {
               { timeout: 30000 }
             );
             data = fallbackRes.data;
-            downloadUrl = data.result || extractVideo(data);
+            downloadUrl = (typeof data.result === "string" ? data.result : null) || extractVideo(data);
           } catch (fallbackErr) {
             console.error("Fallback API failed:", fallbackErr.message);
           }
@@ -426,8 +471,8 @@ module.exports = {
       const errorMsg = `╭━━━〔 ❌ DOWNLOAD FAILED 〕━━━╮
 ┃ 📌 Error : ${err.message || "Unknown error occurred"}
 ┃ 🌍 URL   : ${finalUrl}
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━╯
-🤖 Powered By RIYAD BOT`;
+╰━━━━━━━━━━━━━━━━━━━━━╯
+🤖 Powered By RIYAD⚡BOT`;
 
       api.sendMessage(errorMsg, event.threadID, event.messageID);
 
