@@ -1,0 +1,40 @@
+diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs b/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
+index 0000000..0000000 100644
+--- a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
++++ b/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
+@@ -3543,15 +3543,26 @@
+     const fb_dtsg = api.fb_dtsg;
+     const userId = api.getCurrentUserID();
+     logger.debug("FacebookGatewayService", "Fetching CAT via GraphQL...");
+-    const resText = await api.httpPost("https://www.facebook.com/api/graphql/", {
+-      fb_dtsg,
+-      variables: "{}",
+-      doc_id: "23999698219677129",
+-      __user: userId,
+-      __a: "1",
+-      __jssesw: "1",
+-      server_timestamps: "true"
+-    });
++    console.error("[E2EE DEBUG] fb_dtsg:", fb_dtsg, "| userId:", userId, "| typeof api.httpPost:", typeof api.httpPost);
++    let resText;
++    try {
++      resText = await api.httpPost("https://www.facebook.com/api/graphql/", {
++        fb_dtsg,
++        variables: "{}",
++        doc_id: "23999698219677129",
++        __user: userId,
++        __a: "1",
++        __jssesw: "1",
++        server_timestamps: "true"
++      });
++    } catch (httpErr) {
++      console.error("[E2EE DEBUG] httpPost threw:", httpErr && httpErr.stack ? httpErr.stack : httpErr);
++      throw httpErr;
++    }
++    console.error("[E2EE DEBUG] resText type:", typeof resText, "| value (first 500 chars):", typeof resText === "string" ? resText.slice(0, 500) : resText);
++    if (typeof resText !== "string") {
++      throw new Error("CAT fetch: httpPost returned non-string response, see [E2EE DEBUG] logs above");
++    }
+     const cleanText = resText.replace("for (;;);", "").trim();
+     let data;
+     try {
