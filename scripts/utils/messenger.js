@@ -293,35 +293,18 @@ autoTimerService.setApi(adaptedApi);
       app.set('messengerApi', adaptedApi);
 
       // ─── E2EE (Signal/Noise) bridge ────────────────────────────────────
-      // fca-riyad ships its own native E2EE engine (src/api/socket/e2ee).
-      // We just need to open the bridge before we start listening so
-      // listenE2EE() can pick up encrypted events too.
+      // fca-riyad already auto-connects E2EE itself right after login
+      // (module/loginHelper.js calls api.connectE2EE() internally, fire-
+      // and-forget). Its internal guard makes a second api.connectE2EE()
+      // call (with NO arguments) simply return/await that SAME in-flight
+      // promise — so we just await it here instead of racing it or passing
+      // a callback where the real signature expects a deviceStorePath
+      // string. Only once it resolves do we switch to listenE2EE(), since
+      // listenE2EE() checks e2ee.isConnected() a single time when called —
+      // calling it too early permanently misses the encrypted stream.
       const e2eeEnabled = !!(config.e2ee && config.e2ee.enable);
-      if (e2eeEnabled && typeof api.connectE2EE === "function") {
-        logger.info("Connecting to E2EE (Signal/Noise) bridge...");
-        api.connectE2EE(function (e2eeErr, evt) {
-          if (e2eeErr) {
-            logger.warn("E2EE connect failed:", e2eeErr.message || e2eeErr);
-            return;
-          }
-          if (evt && evt.type === "e2ee_fully_ready") {
-            logger.success("🔒 E2EE bridge fully ready — encrypted messaging active.");
-          } else if (evt && evt.type === "e2ee_disconnected") {
-            logger.warn("⚠️ E2EE bridge disconnected — will retry on next reconnect.");
-          }
-        });
-      } else if (e2eeEnabled) {
-        logger.warn("api.connectE2EE not available in this fca-riyad build — E2EE disabled for this session.");
-      }
 
-      // Listen to incoming messages and events
-      logger.info("Messenger live message broker successfully engaged. Listening for events...");
-
-      const startListening = (e2eeEnabled && typeof api.listenE2EE === "function")
-        ? api.listenE2EE
-        : api.listenMqtt;
-
-stopListener = startListening(async (listenErr, event) => {
+      const handleEvent = async (listenErr, event) => {
   if (listenErr) {
     logger.error("Broker connection encountered error:", listenErr);
     isConnected = false;
@@ -429,7 +412,30 @@ try {
 } catch (procErr) {
   logger.error("Error processing incoming Messenger broker event:", procErr);
 }
-      });
+      };
+
+      (async function beginListening() {
+        if (e2eeEnabled && typeof api.connectE2EE === "function") {
+          try {
+            logger.info("Waiting for E2EE (Signal/Noise) bridge...");
+            await api.connectE2EE();
+            logger.success("🔒 E2EE bridge ready — encrypted messaging active.");
+          } catch (e2eeErr) {
+            logger.warn(
+              "E2EE bridge unavailable, continuing with MQTT only:",
+              e2eeErr && e2eeErr.message ? e2eeErr.message : e2eeErr
+            );
+          }
+        } else if (e2eeEnabled) {
+          logger.warn("api.connectE2EE not available in this fca-riyad build — E2EE disabled for this session.");
+        }
+
+        logger.info("Messenger live message broker successfully engaged. Listening for events...");
+        const listenFn = (e2eeEnabled && typeof api.listenE2EE === "function")
+          ? api.listenE2EE
+          : api.listenMqtt;
+        stopListener = listenFn(handleEvent);
+      })();
     });
   }
 
