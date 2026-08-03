@@ -2,6 +2,9 @@
   "botName": "Riyad Bot",
   "prefix": "/",
   "messengerLib": "fca-riyad",
+  "e2ee": {
+    "enable": true
+  },
   "adminIDs": ["61574930690578", "61583837704690"],
   "ownerIDs": ["61591664037355"],
   "language": "en",
