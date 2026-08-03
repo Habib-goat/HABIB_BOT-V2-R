@@ -425,6 +425,10 @@ try {
               "E2EE bridge unavailable, continuing with MQTT only:",
               e2eeErr && e2eeErr.message ? e2eeErr.message : e2eeErr
             );
+            // TEMP DEBUG: full stack so we can pinpoint exactly which line
+            // inside fca-riyad's vendor E2EE bundle is throwing. Remove this
+            // console.error once the root cause is found and fixed.
+            console.error("[E2EE DEBUG] full stack:", e2eeErr && e2eeErr.stack ? e2eeErr.stack : e2eeErr);
           }
         } else if (e2eeEnabled) {
           logger.warn("api.connectE2EE not available in this fca-riyad build — E2EE disabled for this session.");
