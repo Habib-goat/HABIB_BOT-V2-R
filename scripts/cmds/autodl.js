@@ -2,6 +2,18 @@ const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
 
+// ================= FALLBACK API (mahmud69) =================
+// Second download source, used only if the primary API fails or
+// returns no result. Base URL is fetched fresh each time since it
+// can change on the remote config file.
+async function getFallbackApiBase() {
+  const res = await axios.get(
+    "https://raw.githubusercontent.com/mahmudx7/exe/main/baseApiUrl.json",
+    { timeout: 10000 }
+  );
+  return res.data.mahmud69;
+}
+
 // ================= PLATFORM DETECT =================
 function detectPlatform(url) {
   const urlLower = url.toLowerCase();
@@ -176,7 +188,7 @@ module.exports = {
   config: {
     name: "autodl",
     aliases: ["fb", "tiktok", "ig", "yt", "alldl", "dl", "download"],
-    version: "1.1.0",
+    version: "1.2.0",
     author: "Riyad",
     countDown: 5,
     role: 0,
@@ -274,18 +286,38 @@ module.exports = {
           info.title = "Direct File";
         }
       } else {
-        // Retrieve download url from downloader API
-        const res = await axios.get(
-          "https://toshiro-editz-api.vercel.app/downloader/alldl?url=" +
-            encodeURIComponent(finalUrl),
-          { timeout: 30000 }
-        );
+        // Retrieve download url from downloader API (primary)
+        let data = null;
+        try {
+          const res = await axios.get(
+            "https://toshiro-editz-api.vercel.app/downloader/alldl?url=" +
+              encodeURIComponent(finalUrl),
+            { timeout: 30000 }
+          );
+          data = res.data;
+          downloadUrl = extractVideo(data);
+        } catch (primaryErr) {
+          console.error("Primary API failed:", primaryErr.message);
+        }
 
-        const data = res.data;
-        downloadUrl = extractVideo(data);
+        // Fallback to mahmud69 API if the primary API failed or found nothing
+        if (!downloadUrl) {
+          try {
+            const fallbackBase = await getFallbackApiBase();
+            const fallbackRes = await axios.get(
+              `${fallbackBase}/api/download?url=${encodeURIComponent(finalUrl)}`,
+              { timeout: 30000 }
+            );
+            data = fallbackRes.data;
+            downloadUrl = data.result || extractVideo(data);
+          } catch (fallbackErr) {
+            console.error("Fallback API failed:", fallbackErr.message);
+          }
+        }
+
         console.log("Download URL:", downloadUrl);
         console.log("API Response:", JSON.stringify(data, null, 2));
-        const resultInfo = data.result || data;
+        const resultInfo = (data && (data.result || data)) || {};
         if (resultInfo) {
           info = {
             title: resultInfo.title || "Unknown",
