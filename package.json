@@ -1,7 +1,7 @@
 {
   "name": "riyad-bot",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Riyad Bot Framework - Facebook Messenger Bot",
   "main": "app.js",
   "engines": {
