@@ -21,7 +21,7 @@ index 147160b..a21e49e 100644
              // listenMqtt — fb-e2ee.cjs calls this to route non-E2EE MQTT events.
              // NEXCA has its own separate MQTT listener so we provide a no-op stub
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs b/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
-index cc4ed24..cb0a979 100644
+index cc4ed24..f5b7e15 100644
 --- a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
 +++ b/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
 @@ -3552,6 +3552,10 @@ var FacebookGatewayService = class {
@@ -35,11 +35,19 @@ index cc4ed24..cb0a979 100644
      const cleanText = resText.replace("for (;;);", "").trim();
      let data;
      try {
-@@ -8118,6 +8122,7 @@ var ClientController = class {
+@@ -8118,6 +8122,15 @@ var ClientController = class {
          } else if (node.tag === "failure") {
            noiseSocket.off("frame", onFrame);
            clearTimeout(timeout);
 +          logger.error("E2EE", "Full failure node attrs:", JSON.stringify(node.attrs), "children:", JSON.stringify(node.content || node.children || null));
++          try {
++            if (ds.path && require("fs").existsSync(ds.path)) {
++              require("fs").unlinkSync(ds.path);
++              logger.warn("E2EE", "Deleted stale device store after login failure - will re-register fresh device on next attempt.");
++            }
++          } catch (delErr) {
++            logger.error("E2EE", "Failed to delete stale device store:", delErr && delErr.message);
++          }
            reject(new Error(`Login failure: ${node.attrs.reason}`));
          }
        };
