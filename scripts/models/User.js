@@ -47,6 +47,13 @@ const userSchema = new mongoose.Schema(
     inventory: {
       type: [mongoose.Schema.Types.Mixed],
       default: []
+    },
+
+    // Used by scripts/cmds/sendnoti.js to store each user's
+    // notification groups (list of thread IDs they broadcast to).
+    groupsSendNoti: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: []
     }
   },
   {
