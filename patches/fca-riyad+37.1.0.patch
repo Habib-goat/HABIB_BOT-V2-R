@@ -1,8 +1,19 @@
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs b/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
-index cc4ed24..e9cd475 100644
+index cc4ed24..cb0a979 100644
 --- a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
 +++ b/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
-@@ -8118,6 +8118,7 @@ var ClientController = class {
+@@ -3552,6 +3552,10 @@ var FacebookGatewayService = class {
+       __jssesw: "1",
+       server_timestamps: "true"
+     });
++    if (typeof resText !== "string") {
++      logger.error("FacebookGatewayService", "CAT fetch got no usable response from api.httpPost. Type:", typeof resText, "Value:", JSON.stringify(resText));
++      throw new Error("CAT fetch failed: api.httpPost returned " + typeof resText + " instead of a response string (session/cookies may be stale, or request was rate-limited/blocked)");
++    }
+     const cleanText = resText.replace("for (;;);", "").trim();
+     let data;
+     try {
+@@ -8118,6 +8122,7 @@ var ClientController = class {
          } else if (node.tag === "failure") {
            noiseSocket.off("frame", onFrame);
            clearTimeout(timeout);
