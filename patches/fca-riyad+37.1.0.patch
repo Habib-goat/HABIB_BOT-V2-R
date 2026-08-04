@@ -1,3 +1,25 @@
+diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/index.js b/node_modules/fca-riyad/src/api/socket/e2ee/index.js
+index 147160b..a21e49e 100644
+--- a/node_modules/fca-riyad/src/api/socket/e2ee/index.js
++++ b/node_modules/fca-riyad/src/api/socket/e2ee/index.js
+@@ -108,12 +108,15 @@ class E2EEBridge {
+                 if (!merged.fb_dtsg && _ctx.fb_dtsg) merged.fb_dtsg = _ctx.fb_dtsg;
+                 if (!merged.__user) merged.__user = _ctx.userID;
+                 const res = _defaultFuncs
+-                    ? await _defaultFuncs.post(url, _ctx.jar, merged)
++                    ? await _defaultFuncs.post(url, _ctx.jar, merged, undefined, _ctx)
+                     : await new Promise(function (resolve, reject) {
+                         require("request")({ method: "POST", url: url, jar: _ctx.jar, form: merged, gzip: true },
+                             function (err, r) { if (err) return reject(err); resolve(r); });
+                     });
+-                return res && res.body;
++                if (!res) return res;
++                let body = res.body !== undefined ? res.body : (res.data !== undefined ? res.data : res);
++                if (body !== null && typeof body === "object") body = JSON.stringify(body);
++                return body;
+             },
+             // listenMqtt — fb-e2ee.cjs calls this to route non-E2EE MQTT events.
+             // NEXCA has its own separate MQTT listener so we provide a no-op stub
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs b/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
 index cc4ed24..cb0a979 100644
 --- a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
