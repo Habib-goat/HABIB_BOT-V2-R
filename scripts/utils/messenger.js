@@ -13,6 +13,22 @@ let loginLib;
 try {
   const libName = config.messengerLib || "fca-riyad";
   loginLib = require(libName);
+
+  try {
+    const fs2 = require("fs");
+    const path2 = require("path");
+    const pkgMain = require.resolve(libName);
+    const loginHelperPath = path2.join(path2.dirname(pkgMain), "module", "loginHelper.js");
+    const c2 = fs2.readFileSync(loginHelperPath, "utf8");
+    const lines = c2.split("\n");
+    const target = lines.findIndex((l) => l.includes("e2eeModule = require"));
+    console.log("[DEBUG] loginHelper.js path:", loginHelperPath);
+    console.log("[DEBUG] e2ee require line (" + (target + 1) + "):", lines[target]);
+    console.log("[DEBUG] nativeBridge.js exists:", fs2.existsSync(path2.join(path2.dirname(pkgMain), "src/api/socket/e2ee/nativeBridge.js")));
+    console.log("[DEBUG] messagix.so exists:", fs2.existsSync(path2.join(path2.dirname(pkgMain), "src/api/socket/e2ee/native/build/messagix.so")));
+  } catch (dbgErr) {
+    console.log("[DEBUG] failed to inspect loginHelper.js:", dbgErr.message);
+  }
 } catch (err) {
   logger.warn(
     `[Messenger] Selected library "${config.messengerLib || "fca-riyad"}" not found, falling back to "fca-riyad"`
