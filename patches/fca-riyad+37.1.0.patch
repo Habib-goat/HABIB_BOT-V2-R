@@ -11,28 +11,6 @@ index 603691e..51e0be9 100644
            api.e2ee = new e2eeModule.E2EEBridge(ctxMain, api, defaultFuncs);
            ctxMain.e2ee = api.e2ee;
            api.connectE2EE = (deviceStorePath) => api.e2ee.connect(deviceStorePath, ctxMain.userID);
-diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/index.js b/node_modules/fca-riyad/src/api/socket/e2ee/index.js
-index 147160b..a21e49e 100644
---- a/node_modules/fca-riyad/src/api/socket/e2ee/index.js
-+++ b/node_modules/fca-riyad/src/api/socket/e2ee/index.js
-@@ -108,12 +108,15 @@ class E2EEBridge {
-                 if (!merged.fb_dtsg && _ctx.fb_dtsg) merged.fb_dtsg = _ctx.fb_dtsg;
-                 if (!merged.__user) merged.__user = _ctx.userID;
-                 const res = _defaultFuncs
--                    ? await _defaultFuncs.post(url, _ctx.jar, merged)
-+                    ? await _defaultFuncs.post(url, _ctx.jar, merged, undefined, _ctx)
-                     : await new Promise(function (resolve, reject) {
-                         require("request")({ method: "POST", url: url, jar: _ctx.jar, form: merged, gzip: true },
-                             function (err, r) { if (err) return reject(err); resolve(r); });
-                     });
--                return res && res.body;
-+                if (!res) return res;
-+                let body = res.body !== undefined ? res.body : (res.data !== undefined ? res.data : res);
-+                if (body !== null && typeof body === "object") body = JSON.stringify(body);
-+                return body;
-             },
-             // listenMqtt — fb-e2ee.cjs calls this to route non-E2EE MQTT events.
-             // NEXCA has its own separate MQTT listener so we provide a no-op stub
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/native/lib/index.mjs b/node_modules/fca-riyad/src/api/socket/e2ee/native/lib/index.mjs
 new file mode 100644
 index 0000000..f4c0fab
@@ -1676,34 +1654,3 @@ index 0000000..c00bffd
 +}
 +
 +module.exports = { E2EEBridge: NativeE2EEBridge, NativeE2EEBridge };
-diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs b/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
-index cc4ed24..f5b7e15 100644
---- a/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
-+++ b/node_modules/fca-riyad/src/api/socket/e2ee/vendor/fb-e2ee.cjs
-@@ -3552,6 +3552,10 @@ var FacebookGatewayService = class {
-       __jssesw: "1",
-       server_timestamps: "true"
-     });
-+    if (typeof resText !== "string") {
-+      logger.error("FacebookGatewayService", "CAT fetch got no usable response from api.httpPost. Type:", typeof resText, "Value:", JSON.stringify(resText));
-+      throw new Error("CAT fetch failed: api.httpPost returned " + typeof resText + " instead of a response string (session/cookies may be stale, or request was rate-limited/blocked)");
-+    }
-     const cleanText = resText.replace("for (;;);", "").trim();
-     let data;
-     try {
-@@ -8118,6 +8122,15 @@ var ClientController = class {
-         } else if (node.tag === "failure") {
-           noiseSocket.off("frame", onFrame);
-           clearTimeout(timeout);
-+          logger.error("E2EE", "Full failure node attrs:", JSON.stringify(node.attrs), "children:", JSON.stringify(node.content || node.children || null));
-+          try {
-+            if (ds.path && require("fs").existsSync(ds.path)) {
-+              require("fs").unlinkSync(ds.path);
-+              logger.warn("E2EE", "Deleted stale device store after login failure - will re-register fresh device on next attempt.");
-+            }
-+          } catch (delErr) {
-+            logger.error("E2EE", "Failed to delete stale device store:", delErr && delErr.message);
-+          }
-           reject(new Error(`Login failure: ${node.attrs.reason}`));
-         }
-       };
