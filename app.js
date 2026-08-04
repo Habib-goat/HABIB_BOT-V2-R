@@ -12,6 +12,15 @@ if (typeof globalThis.WebSocket === 'undefined') {
   globalThis.WebSocket = require('ws');
 }
 
+// Copy native E2EE binary assets into node_modules on every boot (moved out
+// of postinstall because the Dockerfile runs `npm install` before COPY . .,
+// so scripts/ is not present yet at postinstall time).
+try {
+  require('./scripts/copy-native-e2ee.js');
+} catch (e) {
+  console.error('[startup] copy-native-e2ee failed:', e.message);
+}
+
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
