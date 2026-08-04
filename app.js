@@ -3,6 +3,15 @@
  * Written in production-grade Node.js (CommonJS)
  */
 
+// Polyfill global.WebSocket for Node 18 (native WebSocket only lands in
+// Node 22+). fca-riyad's E2EE engine opens its Noise-protocol handshake
+// via `new WebSocket(...)` assuming a browser-style global, which Node 18
+// doesn't provide. `ws` is already a dependency, so just expose it globally
+// — this MUST run before anything that might touch WebSocket is required.
+if (typeof globalThis.WebSocket === 'undefined') {
+  globalThis.WebSocket = require('ws');
+}
+
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
