@@ -38,3 +38,25 @@ index 0000000..0000000 100644
      const cleanText = resText.replace("for (;;);", "").trim();
      let data;
      try {
+diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/index.js b/node_modules/fca-riyad/src/api/socket/e2ee/index.js
+index 0000000..0000000 100644
+--- a/node_modules/fca-riyad/src/api/socket/e2ee/index.js
++++ b/node_modules/fca-riyad/src/api/socket/e2ee/index.js
+@@ -113,7 +113,16 @@
+                         require("request")({ method: "POST", url: url, jar: _ctx.jar, form: merged, gzip: true },
+                             function (err, r) { if (err) return reject(err); resolve(r); });
+                     });
+-                return res && res.body;
++                // NEXCA's request layer (src/utils/request/methods.js) uses axios,
++                // whose response body lives in `.data`, not `.body` (that's the
++                // classic `request`-library convention this adapter was written
++                // against). Without this fallback, res.body is always undefined
++                // and every E2EE bootstrap call (fetchCAT, ICDC, etc.) silently
++                // fails with no usable response text.
++                if (!res) return res;
++                if (res.body !== undefined) return res.body;
++                if (res.data !== undefined) return res.data;
++                return res;
+             },
+             // listenMqtt — fb-e2ee.cjs calls this to route non-E2EE MQTT events.
+             // NEXCA has its own separate MQTT listener so we provide a no-op stub
