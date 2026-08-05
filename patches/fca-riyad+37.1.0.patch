@@ -1432,10 +1432,10 @@ index 0000000..f4c0fab
 \ No newline at end of file
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 new file mode 100644
-index 0000000..9bfea02
+index 0000000..365370a
 --- /dev/null
 +++ b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,222 @@
 +"use strict";
 +
 +/**
@@ -1548,6 +1548,10 @@ index 0000000..9bfea02
 +
 +    onMessage(callback) {
 +        this._messageCallback = callback;
++    }
++
++    isConnected() {
++        return !!this.connected;
 +    }
 +
 +    async connect(deviceStorePath, userId) {
