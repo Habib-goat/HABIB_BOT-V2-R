@@ -12,6 +12,21 @@ if (typeof globalThis.WebSocket === 'undefined') {
   globalThis.WebSocket = require('ws');
 }
 
+// TEMP: print the real reason on any crash/exit so Railway logs show it
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaughtException:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] unhandledRejection:', reason && reason.stack ? reason.stack : reason);
+});
+process.on('exit', (code) => {
+  console.error('[FATAL] process exiting with code:', code);
+});
+setInterval(() => {
+  const mem = process.memoryUsage();
+  console.log('[MEM]', 'rss=' + Math.round(mem.rss / 1024 / 1024) + 'MB', 'heapUsed=' + Math.round(mem.heapUsed / 1024 / 1024) + 'MB');
+}, 30000);
+
 // Copy native E2EE binary assets into node_modules on every boot (moved out
 // of postinstall because the Dockerfile runs `npm install` before COPY . .,
 // so scripts/ is not present yet at postinstall time).
