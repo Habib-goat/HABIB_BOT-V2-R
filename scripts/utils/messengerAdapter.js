@@ -105,7 +105,10 @@ class FcaMessengerAdapter extends BaseMessengerAdapter {
   }
 
   markE2EEThread(threadID) {
-    if (threadID != null) this.e2eeThreads.add(String(threadID));
+    if (threadID != null) {
+      this.e2eeThreads.add(String(threadID));
+      console.log('[E2EE-SEND-DEBUG] marked thread as E2EE:', String(threadID));
+    }
   }
   
 async reply(message, event) {
@@ -139,6 +142,7 @@ async react(emoji, messageID) {
         replyMessageID = callbackOrReply;
       }
       // Handle cases where the underlying API is not initialized or is missing methods
+      console.log('[E2EE-SEND-DEBUG] sendMessage called for threadID:', String(threadID), 'isE2EEThread:', this.e2eeThreads ? this.e2eeThreads.has(String(threadID)) : 'no-set', 'hasApiE2ee:', !!this.api.e2ee, 'hasSendFn:', !!(this.api.e2ee && typeof this.api.e2ee.sendE2EEMessage === 'function'));
       if (this.e2eeThreads && this.e2eeThreads.has(String(threadID)) && this.api.e2ee && typeof this.api.e2ee.sendE2EEMessage === 'function') {
         const text = typeof message === 'object' ? (message.body || '') : String(message);
         this.api.e2ee.sendE2EEMessage(threadID, text, replyMessageID)
