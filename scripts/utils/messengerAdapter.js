@@ -167,7 +167,24 @@ async react(emoji, messageID) {
               const filename = filePath.split('/').pop() || 'file';
               const { kind, mime } = guessKind(filePath);
               const buffer = Buffer.isBuffer(att) ? att : await streamToBuffer(att);
-              info = await this.api.e2ee.sendAttachment(jid, buffer, filename, mime, kind);
+              let duration;
+              if (kind === 'audio' || kind === 'video') {
+                try {
+                  const os = require('os');
+                  const pathMod = require('path');
+                  const ffmpeg = require('fluent-ffmpeg');
+                  const tmpFile = pathMod.join(os.tmpdir(), 'dur_' + Date.now() + '_' + filename);
+                  fs.writeFileSync(tmpFile, buffer);
+                  duration = await new Promise((res) => {
+                    ffmpeg.ffprobe(tmpFile, (err, data) => {
+                      fs.unlink(tmpFile, () => {});
+                      if (err || !data || !data.format) return res(undefined);
+                      res(Math.round(data.format.duration || 0));
+                    });
+                  });
+                } catch (_) { duration = undefined; }
+              }
+              info = await this.api.e2ee.sendAttachment(jid, buffer, filename, mime, kind, duration);
             } else {
               const text = typeof message === 'object' ? (message.body || '') : String(message);
               info = await this.api.e2ee.sendMessage(jid, text, replyMessageID);
