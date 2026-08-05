@@ -1432,10 +1432,10 @@ index 0000000..f4c0fab
 \ No newline at end of file
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 new file mode 100644
-index 0000000..120a4b2
+index 0000000..3b1b275
 --- /dev/null
 +++ b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
-@@ -0,0 +1,222 @@
+@@ -0,0 +1,230 @@
 +"use strict";
 +
 +/**
@@ -1625,6 +1625,14 @@ index 0000000..120a4b2
 +        if (!this.client) throw new Error("Native E2EE bridge not connected.");
 +        const text = typeof msg === "string" ? msg : (msg && msg.body) || "";
 +        return this.client.sendE2EEMessage(threadId, text, replyToMessageId ? { replyToId: replyToMessageId } : {});
++    }
++
++    async sendAttachment(threadId, buffer, filename, mimeType, kind) {
++        if (!this.client) throw new Error("Native E2EE bridge not connected.");
++        if (kind === "image") return this.client.sendE2EEImage(threadId, buffer, mimeType || "image/jpeg", {});
++        if (kind === "video") return this.client.sendE2EEVideo(threadId, buffer, mimeType || "video/mp4", {});
++        if (kind === "audio") return this.client.sendE2EEAudio(threadId, buffer, mimeType || "audio/mpeg", {});
++        return this.client.sendE2EEDocument(threadId, buffer, filename || "file", mimeType || "application/octet-stream", {});
 +    }
 +
 +    async sendReaction(threadId, messageId, reaction, senderJid) {
