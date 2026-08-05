@@ -145,7 +145,7 @@ async react(emoji, messageID) {
       console.log('[E2EE-SEND-DEBUG] sendMessage called for threadID:', String(threadID), 'isE2EEThread:', this.e2eeThreads ? this.e2eeThreads.has(String(threadID)) : 'no-set', 'hasApiE2ee:', !!this.api.e2ee, 'hasSendFn:', !!(this.api.e2ee && typeof this.api.e2ee.sendMessage === 'function'));
       if (this.e2eeThreads && this.e2eeThreads.has(String(threadID)) && this.api.e2ee && typeof this.api.e2ee.sendMessage === 'function') {
         const text = typeof message === 'object' ? (message.body || '') : String(message);
-        this.api.e2ee.sendMessage(threadID, text, replyMessageID)
+        this.api.e2ee.sendMessage(String(threadID).includes('@') ? threadID : String(threadID) + '@g.us', text, replyMessageID)
           .then((info) => {
             if (callback) { try { callback(null, info); } catch (_) {} }
             resolve(info);
