@@ -1432,7 +1432,7 @@ index 0000000..f4c0fab
 \ No newline at end of file
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 new file mode 100644
-index 0000000..c00bffd
+index 0000000..a018c51
 --- /dev/null
 +++ b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 @@ -0,0 +1,218 @@
@@ -1498,7 +1498,7 @@ index 0000000..c00bffd
 +function cookiesFromJar(ctx) {
 +    const out = {};
 +    let jar = [];
-+    try { jar = ctx.jar.getCookies("https://www.facebook.com"); } catch (_) {}
++    try { jar = ctx.jar.getCookiesSync("https://www.facebook.com"); } catch (_) {}
 +    jar.forEach((c) => { if (c && c.key) out[c.key] = c.value; });
 +    if (!out.c_user && out.i_user) out.c_user = out.i_user;
 +    return out;
