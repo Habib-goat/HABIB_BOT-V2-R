@@ -380,6 +380,10 @@ try {
 
   if (event.type === "message" || event.type === "message_reply") {
 
+    if (event.isE2EE && event.threadID && typeof adaptedApi.markE2EEThread === 'function') {
+      adaptedApi.markE2EEThread(event.threadID);
+    }
+
     await botEngine.processMessage(
       event,
       commandLoader,

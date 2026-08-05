@@ -101,6 +101,11 @@ getCurrentUserID() {
 class FcaMessengerAdapter extends BaseMessengerAdapter {
   constructor(underlyingApi, wsServer, restLogs) {
     super(underlyingApi, wsServer, restLogs);
+    this.e2eeThreads = new Set();
+  }
+
+  markE2EEThread(threadID) {
+    if (threadID != null) this.e2eeThreads.add(String(threadID));
   }
   
 async reply(message, event) {
@@ -134,6 +139,21 @@ async react(emoji, messageID) {
         replyMessageID = callbackOrReply;
       }
       // Handle cases where the underlying API is not initialized or is missing methods
+      if (this.e2eeThreads && this.e2eeThreads.has(String(threadID)) && this.api.e2ee && typeof this.api.e2ee.sendE2EEMessage === 'function') {
+        const text = typeof message === 'object' ? (message.body || '') : String(message);
+        this.api.e2ee.sendE2EEMessage(threadID, text, replyMessageID)
+          .then((info) => {
+            if (callback) { try { callback(null, info); } catch (_) {} }
+            resolve(info);
+          })
+          .catch((err) => {
+            logger.error('[FcaAdapter] Error sending E2EE message to thread ' + threadID + ':', err);
+            if (callback) { try { callback(err); } catch (_) {} }
+            reject(err);
+          });
+        return;
+      }
+
       if (typeof this.api.sendMessage !== 'function') {
         const errorMsg = "Underlying FCA sendMessage function is not available.";
         logger.error(errorMsg);
