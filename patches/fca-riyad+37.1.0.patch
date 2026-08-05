@@ -1432,7 +1432,7 @@ index 0000000..f4c0fab
 \ No newline at end of file
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 new file mode 100644
-index 0000000..365370a
+index 0000000..120a4b2
 --- /dev/null
 +++ b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 @@ -0,0 +1,222 @@
@@ -1529,7 +1529,7 @@ index 0000000..365370a
 +        messageReply,
 +        attachments: Array.isArray(ev.attachments) ? ev.attachments : [],
 +        timestamp: ev.timestampMs != null ? Number(ev.timestampMs) : Date.now(),
-+        isGroup: /@group\.facebook\.com$/i.test(ev.chatJid || ""),
++        isGroup: /@g\.us$/i.test(ev.chatJid || ""),
 +        isE2EE: true,
 +        e2ee: { chatJid: ev.chatJid, senderJid: ev.senderJid, replyTo: ev.replyTo || null }
 +    };
