@@ -29,6 +29,7 @@
     "mongoose": "^8.19.1",
     "node-cron": "^4.6.0",
     "request": "^2.88.2",
+    "undici": "6.28.0",
     "ws": "^8.21.0",
     "yumi-json-bigint": "1.0.0"
   },
