@@ -1432,7 +1432,7 @@ index 0000000..f4c0fab
 \ No newline at end of file
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 new file mode 100644
-index 0000000..2bdc299
+index 0000000..9bfea02
 --- /dev/null
 +++ b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 @@ -0,0 +1,218 @@
@@ -1507,7 +1507,7 @@ index 0000000..2bdc299
 +function mapMsg(ev) {
 +    const text = ev && ev.text ? String(ev.text) : "";
 +    const sid = ev && ev.senderId != null ? String(ev.senderId).match(/^(\d+)/)?.[1] || String(ev.senderId) : "";
-+    const tid = ev && ev.chatJid ? String(ev.chatJid) : (ev && ev.threadId != null ? String(ev.threadId) : "");
++    const tid = ev && ev.chatJid ? String(ev.chatJid).split("@")[0] : (ev && ev.threadId != null ? String(ev.threadId) : "");
 +    let messageReply = null;
 +    if (ev && ev.replyTo) {
 +        const rtId = ev.replyTo.messageId != null ? ev.replyTo.messageId : ev.replyTo.id;
