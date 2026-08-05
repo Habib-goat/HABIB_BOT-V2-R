@@ -1432,7 +1432,7 @@ index 0000000..f4c0fab
 \ No newline at end of file
 diff --git a/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 new file mode 100644
-index 0000000..a018c51
+index 0000000..2bdc299
 --- /dev/null
 +++ b/node_modules/fca-riyad/src/api/socket/e2ee/nativeBridge.js
 @@ -0,0 +1,218 @@
@@ -1521,7 +1521,7 @@ index 0000000..a018c51
 +        };
 +    }
 +    return {
-+        type: "e2ee_message",
++        type: "message",
 +        senderID: sid,
 +        body: text,
 +        threadID: tid,
