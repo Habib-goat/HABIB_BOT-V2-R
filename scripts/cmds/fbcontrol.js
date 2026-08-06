@@ -1,102 +1,40 @@
 /**
  * ╔══════════════════════════════════════════════════════════╗
  * ║        FACEBOOK ACCOUNT MANAGER — RIYAD FRAMEWORK        ║
- * ║  Command: fbcontrol  |  File: fbcontrol.js               ║
- * ║  Author: Riyad Bot Team                                  ║
- * ║  Version: 2.0.0                                          ║
+ * ║  Command: fbcontrol  |  Aliases: fb, fbc, fbm            ║
+ * ║  Version: 3.0.0                                          ║
  * ╚══════════════════════════════════════════════════════════╝
- *
- * HOW TO USE (triggers):
- *   fb           → Friend Request Manager  (paginated, reply-based)
- *   fb list      → Friends List Manager
- *   fb block     → Block List Manager
- *   fb inbox     → Inbox / Recent Conversations
- *   fb sms <n> <text>   → Send DM to friend #n
- *   fb sms all <text>   → Broadcast DM to all friends
- *
- * NAVIGATION:
- *   <n>a   → Accept friend request #n       (req menu)
- *   <n>d   → Delete / reject request #n     (req menu)
- *   <n>b   → Block requester #n             (req menu)
- *   <n>uf  → Unfriend friend #n             (list menu)
- *   <n>bl  → Block friend #n                (list menu)
- *   <n>u   → Unblock user #n                (block menu)
- *   <n>msg → Open conversation with #n      (list / inbox)
- *   bulk a / bulk d / bulk b / bulk uf / bulk bl / bulk u → Bulk actions
- *   React ❤️ → Next page
- *   Reply 0   → Previous page
- *   Reply q   → Exit
- *   s <name>  → Search by name (list menu)
- *   sort az / sort new → Sort (list menu)
- *
- * ─── IMPORTANT TECHNICAL NOTE ─────────────────────────────
- * The Riyad Framework wraps the raw fca-riyad api in a
- * MessengerAdapter. Commands receive the ADAPTER as `api`,
- * not the raw api. Methods like getFriendsList, handleFriendRequest,
- * changeBlockedStatus, unfriend, and getAppState are NOT on the
- * adapter — they live on the underlying raw api (api.api).
- *
- * This command accesses them via: getRawApi(api)
- *
- * ─── KNOWN LIMITATIONS ────────────────────────────────────
- * • Friend Requests: fca-riyad does NOT expose getFriendRequests().
- *   This command fetches them via Facebook's /friends/requests/ page
- *   using the bot's session cookies. May break if Facebook changes HTML.
- *
- * • Block List: fca-riyad does NOT expose getBlockedUsers().
- *   Fetched via /settings/blocking/ page scraping. May break if
- *   Facebook changes HTML. Unblocking (changeBlockedStatus) IS native.
- *
- * • Mutual friends / request date: Not available in fca-riyad.
- * ──────────────────────────────────────────────────────────
  */
-
 "use strict";
 
-// ──────────────────────────────────────────────────────────
-//  GET THE UNDERLYING RAW API
-//  The Riyad Framework passes the MessengerAdapter as `api`.
-//  The raw fca-riyad api is at api.api (adapter's this.api property).
-// ──────────────────────────────────────────────────────────
-
-/**
- * Returns the underlying raw fca-riyad api object from the adapter.
- * Falls back to `api` itself if it is already the raw api.
- * @param {Object} api - The adapter (or raw api) passed to command handlers
- * @returns {Object} Raw fca-riyad api
- */
+// ─────────────────────────────────────────────
+//  RAW API HELPER
+// ─────────────────────────────────────────────
 function getRawApi(api) {
-  // The FcaMessengerAdapter stores the raw api as this.api
-  if (api && api.api && typeof api.api === "object") {
-    return api.api;
-  }
+  if (api && api.api && typeof api.api === "object") return api.api;
   return api;
 }
 
-// ──────────────────────────────────────────────────────────
-//  SESSION STORE  (in-memory, keyed by senderID)
-// ──────────────────────────────────────────────────────────
-
-/** @type {Map<string, Object>} */
+// ─────────────────────────────────────────────
+//  SESSION STORE
+// ─────────────────────────────────────────────
 const SESSIONS = new Map();
-
-const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
 const PER_PAGE = 10;
 
-function sessionCreate(authorID, type, data, threadID) {
+function sessionCreate(authorID, type, data, threadID, extra = {}) {
   clearSessionTimer(authorID);
-  const timer = setTimeout(() => SESSIONS.delete(authorID), SESSION_TIMEOUT_MS);
-  SESSIONS.set(authorID, { type, data, page: 0, authorID, threadID, lastMsgID: null, timer });
+  const timer = setTimeout(() => SESSIONS.delete(String(authorID)), SESSION_TIMEOUT_MS);
+  SESSIONS.set(String(authorID), {
+    type, data, page: 0, authorID, threadID,
+    lastMsgID: null, sentMsgIDs: [], timer,
+    smsAll: null, // for sms all broadcast state
+    ...extra
+  });
 }
 
-function sessionGet(authorID) {
-  return SESSIONS.get(String(authorID)) || null;
-}
-
-function sessionClear(authorID) {
-  clearSessionTimer(authorID);
-  SESSIONS.delete(String(authorID));
-}
+function sessionGet(authorID) { return SESSIONS.get(String(authorID)) || null; }
+function sessionClear(authorID) { clearSessionTimer(authorID); SESSIONS.delete(String(authorID)); }
 
 function sessionResetTimer(authorID) {
   const s = SESSIONS.get(String(authorID));
@@ -110,146 +48,311 @@ function clearSessionTimer(authorID) {
   if (s && s.timer) clearTimeout(s.timer);
 }
 
-// ──────────────────────────────────────────────────────────
-//  UI HELPERS
-// ──────────────────────────────────────────────────────────
-
-const DIVIDER = "─────────────────────";
-
-function pageSlice(data, page) {
-  const start = page * PER_PAGE;
-  return data.slice(start, start + PER_PAGE);
+// ─────────────────────────────────────────────
+//  UNSEND HELPER
+// ─────────────────────────────────────────────
+function unsendMsg(api, msgID) {
+  if (!msgID) return;
+  try {
+    if (typeof api.unsendMessage === "function") api.unsendMessage(msgID, () => {});
+  } catch (_) {}
 }
 
-function totalPages(data) {
-  return Math.max(1, Math.ceil(data.length / PER_PAGE));
+function unsendAfter(api, msgID, ms = 5000) {
+  if (!msgID) return;
+  setTimeout(() => unsendMsg(api, msgID), ms);
+}
+
+// ─────────────────────────────────────────────
+//  SEND PAGE HELPER — unsends previous, sends new, tracks msgID
+// ─────────────────────────────────────────────
+async function sendPage(api, threadID, text, session) {
+  // Unsend previous page message
+  if (session.lastMsgID) {
+    unsendMsg(api, session.lastMsgID);
+    session.lastMsgID = null;
+  }
+  return new Promise((resolve) => {
+    api.sendMessage(text, threadID, (err, info) => {
+      if (!err && info && info.messageID) {
+        session.lastMsgID = info.messageID;
+      }
+      resolve(info);
+    });
+  });
+}
+
+// ─────────────────────────────────────────────
+//  UI BUILDERS
+// ─────────────────────────────────────────────
+const D = "━━━━━━━━━━━━━━━━━━━━━━";
+
+function buildHelpMenu() {
+  return `╔══════════════════════════╗
+║  📘 FB CONTROL — COMMANDS  ║
+╚══════════════════════════╝
+
+${D}
+📋 AVAILABLE COMMANDS
+${D}
+
+📩 fb
+   └ Friend Request Manager
+   └ Accept / Delete / Block
+   └ Bulk actions supported
+
+👥 fb list
+   └ Friends List Manager
+   └ Unfriend / Block / Message
+   └ Search & Sort supported
+
+🚫 fb block
+   └ Block List Manager
+   └ View & Unblock users
+
+📨 fb inbox
+   └ Recent DM Conversations
+   └ Open any conversation
+
+📬 fb mr
+   └ Message Requests
+   └ You May Know + Spam
+   └ Accept / Delete / Block
+
+📤 fb sms <n> <text>
+   └ DM a specific friend
+
+📢 fb sms all <text>
+   └ Broadcast to ALL friends
+   └ Reply "off" to cancel
+
+${D}
+🕹️ NAVIGATION (all menus)
+${D}
+  ❤️ React  → Next page
+  0         → Previous page
+  <n>a      → Accept (requests)
+  <n>d      → Delete / Reject
+  <n>b      → Block
+  <n>uf     → Unfriend (list)
+  <n>bl     → Block (list)
+  <n>u      → Unblock (block list)
+  <n>msg    → Open conversation
+  bulk a/d/b/uf/bl/u → Bulk actions
+  s <name>  → Search (list only)
+  sort az / sort new → Sort (list)
+${D}`;
 }
 
 function buildReqMenu(requests, page) {
-  const items = pageSlice(requests, page);
-  const tp = totalPages(requests);
+  const tp = Math.max(1, Math.ceil(requests.length / PER_PAGE));
+  const items = requests.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
   const start = page * PER_PAGE;
 
-  let msg = `📩 𝗙𝗿𝗶𝗲𝗻𝗱 𝗥𝗲𝗾𝘂𝗲𝘀𝘁𝘀 (${requests.length})\n${DIVIDER}\n`;
-  items.forEach((r, i) => {
-    const num = start + i + 1;
-    msg += `${num}. ${r.name}\n`;
-    msg += `   🆔 ${r.uid}\n`;
-    msg += `   👤 fb.com/${r.uid}\n`;
-    msg += `   ✅ Accept | ❌ Delete | 🚫 Block\n\n`;
-  });
+  let msg = `╔══════════════════════════╗\n`;
+  msg += `║  📩 FRIEND REQUESTS       ║\n`;
+  msg += `║  Page ${String(page + 1).padEnd(3)}/ ${String(tp).padEnd(3)} │ Total: ${requests.length}   ║\n`;
+  msg += `╚══════════════════════════╝\n`;
+  msg += `${D}\n`;
 
-  msg += `${DIVIDER}\n`;
-  msg += `📄 Page ${page + 1}/${tp}\n\n`;
-  msg += `📌 𝗖𝗼𝗻𝘁𝗿𝗼𝗹𝘀:\n`;
+  if (items.length === 0) {
+    msg += `\n  📭 No friend requests.\n\n`;
+  } else {
+    items.forEach((r, i) => {
+      const num = start + i + 1;
+      msg += `\n${num}. 👤 ${r.name}\n`;
+      msg += `   🆔 UID: ${r.uid}\n`;
+      msg += `   🔗 fb.com/${r.uid}\n`;
+      msg += `   ✅a  ❌d  🚫b\n`;
+    });
+  }
+
+  msg += `\n${D}\n`;
+  msg += `🕹️ CONTROLS\n`;
   msg += `  <n>a Accept  <n>d Delete  <n>b Block\n`;
   msg += `  bulk a / bulk d / bulk b\n`;
-  msg += `  ❤️ React→Next  0→Prev  q→Exit`;
+  msg += `${D}\n`;
+
+  if (page + 1 >= tp) {
+    msg += `👍✅ এটাই শেষ পেজ — আর পেজ নেই\n`;
+  } else {
+    msg += `  ❤️ React → Next   0 → Prev\n`;
+  }
+
   return msg;
 }
 
 function buildListMenu(friends, page) {
-  const items = pageSlice(friends, page);
-  const tp = totalPages(friends);
+  const tp = Math.max(1, Math.ceil(friends.length / PER_PAGE));
+  const items = friends.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
   const start = page * PER_PAGE;
 
-  let msg = `👥 𝗙𝗿𝗶𝗲𝗻𝗱𝘀 𝗟𝗶𝘀𝘁 (${friends.length})\n${DIVIDER}\n`;
-  items.forEach((f, i) => {
-    const num = start + i + 1;
-    msg += `${num}. ${f.fullName}\n`;
-    msg += `   🆔 ${f.userID}\n`;
-    msg += `   👤 ${f.profileUrl || `https://www.facebook.com/${f.userID}`}\n`;
-    msg += `   📷 ${f.profilePicture || "N/A"}\n`;
-    msg += `   💬 Msg | 🚫 Block | ❌ Unfriend\n\n`;
-  });
+  let msg = `╔══════════════════════════╗\n`;
+  msg += `║  👥 FRIENDS LIST          ║\n`;
+  msg += `║  Page ${String(page + 1).padEnd(3)}/ ${String(tp).padEnd(3)} │ Total: ${friends.length}  ║\n`;
+  msg += `╚══════════════════════════╝\n`;
+  msg += `${D}\n`;
 
-  msg += `${DIVIDER}\n`;
-  msg += `📄 Page ${page + 1}/${tp}\n\n`;
-  msg += `📌 𝗖𝗼𝗻𝘁𝗿𝗼𝗹𝘀:\n`;
+  if (items.length === 0) {
+    msg += `\n  📭 No friends found.\n\n`;
+  } else {
+    items.forEach((f, i) => {
+      const num = start + i + 1;
+      msg += `\n${num}. 👤 ${f.fullName}\n`;
+      msg += `   🆔 UID: ${f.userID}\n`;
+      msg += `   🔗 ${f.profileUrl || `fb.com/${f.userID}`}\n`;
+      msg += `   💬msg  🚫bl  ❌uf\n`;
+    });
+  }
+
+  msg += `\n${D}\n`;
+  msg += `🕹️ CONTROLS\n`;
   msg += `  <n>msg  <n>uf Unfriend  <n>bl Block\n`;
-  msg += `  s <name>→Search  sort az / sort new\n`;
-  msg += `  ❤️ React→Next  0→Prev  q→Exit`;
+  msg += `  s <name> → Search\n`;
+  msg += `  sort az / sort new\n`;
+  msg += `${D}\n`;
+
+  if (page + 1 >= tp) {
+    msg += `👍✅ এটাই শেষ পেজ — আর পেজ নেই\n`;
+  } else {
+    msg += `  ❤️ React → Next   0 → Prev\n`;
+  }
+
   return msg;
 }
 
 function buildBlockMenu(blocked, page) {
-  const items = pageSlice(blocked, page);
-  const tp = totalPages(blocked);
+  const tp = Math.max(1, Math.ceil(blocked.length / PER_PAGE));
+  const items = blocked.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
   const start = page * PER_PAGE;
 
-  let msg = `🚫 𝗕𝗹𝗼𝗰𝗸 𝗟𝗶𝘀𝘁 (${blocked.length})\n${DIVIDER}\n`;
-  items.forEach((u, i) => {
-    const num = start + i + 1;
-    msg += `${num}. ${u.name}\n`;
-    msg += `   🆔 ${u.uid}\n`;
-    msg += `   👤 fb.com/${u.uid}\n`;
-    msg += `   ✅ Unblock | 💬 Message\n\n`;
-  });
+  let msg = `╔══════════════════════════╗\n`;
+  msg += `║  🚫 BLOCK LIST            ║\n`;
+  msg += `║  Page ${String(page + 1).padEnd(3)}/ ${String(tp).padEnd(3)} │ Total: ${blocked.length}  ║\n`;
+  msg += `╚══════════════════════════╝\n`;
+  msg += `${D}\n`;
 
-  msg += `${DIVIDER}\n`;
-  msg += `📄 Page ${page + 1}/${tp}\n\n`;
-  msg += `📌 𝗖𝗼𝗻𝘁𝗿𝗼𝗹𝘀:\n`;
+  if (items.length === 0) {
+    msg += `\n  📭 No blocked users.\n\n`;
+  } else {
+    items.forEach((u, i) => {
+      const num = start + i + 1;
+      msg += `\n${num}. 👤 ${u.name}\n`;
+      msg += `   🆔 UID: ${u.uid}\n`;
+      msg += `   ✅u Unblock  💬msg\n`;
+    });
+  }
+
+  msg += `\n${D}\n`;
+  msg += `🕹️ CONTROLS\n`;
   msg += `  <n>u Unblock  <n>msg Message\n`;
   msg += `  bulk u → Bulk unblock\n`;
-  msg += `  ❤️ React→Next  0→Prev  q→Exit`;
+  msg += `${D}\n`;
+
+  if (page + 1 >= tp) {
+    msg += `👍✅ এটাই শেষ পেজ — আর পেজ নেই\n`;
+  } else {
+    msg += `  ❤️ React → Next   0 → Prev\n`;
+  }
+
   return msg;
 }
 
 function buildInboxMenu(threads, page) {
-  const items = pageSlice(threads, page);
-  const tp = totalPages(threads);
+  const tp = Math.max(1, Math.ceil(threads.length / PER_PAGE));
+  const items = threads.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
   const start = page * PER_PAGE;
 
-  let msg = `📨 𝗜𝗻𝗯𝗼𝘅 (${threads.length})\n${DIVIDER}\n`;
-  items.forEach((t, i) => {
-    const num = start + i + 1;
-    msg += `${num}. ${t.name}\n`;
-    msg += `   🆔 ${t.threadID}\n`;
-    if (t.snippet) msg += `   💬 "${t.snippet.substring(0, 35)}..."\n`;
-    msg += `   💬 Open\n\n`;
-  });
+  let msg = `╔══════════════════════════╗\n`;
+  msg += `║  📨 INBOX                 ║\n`;
+  msg += `║  Page ${String(page + 1).padEnd(3)}/ ${String(tp).padEnd(3)} │ Total: ${threads.length}  ║\n`;
+  msg += `╚══════════════════════════╝\n`;
+  msg += `${D}\n`;
 
-  msg += `${DIVIDER}\n`;
-  msg += `📄 Page ${page + 1}/${tp}\n\n`;
-  msg += `📌 𝗖𝗼𝗻𝘁𝗿𝗼𝗹𝘀:\n`;
-  msg += `  <n>msg → Message\n`;
-  msg += `  ❤️ React→Next  0→Prev  q→Exit`;
+  if (items.length === 0) {
+    msg += `\n  📭 Inbox is empty.\n\n`;
+  } else {
+    items.forEach((t, i) => {
+      const num = start + i + 1;
+      const name = t.name || `Thread ${t.threadID}`;
+      msg += `\n${num}. ${t.isGroup ? "👥" : "👤"} ${name}\n`;
+      msg += `   🆔 ${t.threadID}\n`;
+      if (t.snippet) msg += `   💬 "${t.snippet.substring(0, 30)}..."\n`;
+      msg += `   📤 msg\n`;
+    });
+  }
+
+  msg += `\n${D}\n`;
+  msg += `🕹️ CONTROLS\n`;
+  msg += `  <n>msg → Open conversation\n`;
+  msg += `${D}\n`;
+
+  if (page + 1 >= tp) {
+    msg += `👍✅ এটাই শেষ পেজ — আর পেজ নেই\n`;
+  } else {
+    msg += `  ❤️ React → Next   0 → Prev\n`;
+  }
+
   return msg;
 }
 
-// ──────────────────────────────────────────────────────────
-//  DATA FETCHERS  (all using raw fca-riyad api or cookie-based fetch)
-// ──────────────────────────────────────────────────────────
+function buildMRMenu(requests, page) {
+  const tp = Math.max(1, Math.ceil(requests.length / PER_PAGE));
+  const items = requests.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
+  const start = page * PER_PAGE;
 
-/**
- * Build cookie string from appState array.
- * appState is accessible via rawApi.getAppState().
- */
-function buildCookieString(rawApi) {
-  try {
-    const getAppState =
-      typeof rawApi.getAppState === "function"
-        ? rawApi.getAppState
-        : null;
+  let msg = `╔══════════════════════════╗\n`;
+  msg += `║  📬 MESSAGE REQUESTS      ║\n`;
+  msg += `║  Page ${String(page + 1).padEnd(3)}/ ${String(tp).padEnd(3)} │ Total: ${requests.length}  ║\n`;
+  msg += `╚══════════════════════════╝\n`;
+  msg += `${D}\n`;
 
-    if (!getAppState) return null;
-
-    const appState = getAppState.call(rawApi);
-    if (!Array.isArray(appState) || appState.length === 0) return null;
-
-    return appState.map(c => `${c.key}=${c.value}`).join("; ");
-  } catch (_) {
-    return null;
+  if (items.length === 0) {
+    msg += `\n  📭 No message requests.\n\n`;
+  } else {
+    items.forEach((r, i) => {
+      const num = start + i + 1;
+      const badge = r.isNew ? " 🆕NEW" : "";
+      const typeBadge = r.isGroup ? " [GROUP]" : "";
+      const sectionBadge = r.section === "spam" ? " ⚠️SPAM" : " 🤝YOUMAYKNOW";
+      msg += `\n${num}. ${r.isGroup ? "👥" : "👤"} ${r.name}${badge}${typeBadge}${sectionBadge}\n`;
+      msg += `   🆔 ${r.threadID}\n`;
+      if (r.snippet) msg += `   💬 "${r.snippet.substring(0, 28)}..."\n`;
+      msg += `   ✅a Accept  ❌d Delete  🚫b Block\n`;
+    });
   }
+
+  msg += `\n${D}\n`;
+  msg += `🕹️ CONTROLS\n`;
+  msg += `  <n>a Accept  <n>d Delete  <n>b Block\n`;
+  msg += `  bulk a / bulk d / bulk b\n`;
+  msg += `${D}\n`;
+
+  if (page + 1 >= tp) {
+    msg += `👍✅ এটাই শেষ পেজ — আর পেজ নেই\n`;
+  } else {
+    msg += `  ❤️ React → Next   0 → Prev\n`;
+  }
+
+  return msg;
 }
 
-/**
- * Generic HTTPS GET helper using bot cookies.
- */
-function httpsGet(url, cookieStr) {
+// ─────────────────────────────────────────────
+//  COOKIE / HTTP HELPERS
+// ─────────────────────────────────────────────
+function buildCookieString(rawApi) {
+  try {
+    if (typeof rawApi.getAppState !== "function") return null;
+    const appState = rawApi.getAppState();
+    if (!Array.isArray(appState) || appState.length === 0) return null;
+    return appState.map(c => `${c.key}=${c.value}`).join("; ");
+  } catch (_) { return null; }
+}
+
+function httpsGet(url, cookieStr, depth = 0) {
+  if (depth > 4) return Promise.reject(new Error("Too many redirects"));
   const https = require("https");
   const urlObj = new URL(url);
-
   return new Promise((resolve, reject) => {
     const options = {
       hostname: urlObj.hostname,
@@ -257,796 +360,809 @@ function httpsGet(url, cookieStr) {
       method: "GET",
       headers: {
         "Cookie": cookieStr || "",
-        "User-Agent": "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "identity",
         "Referer": "https://www.facebook.com/",
         "sec-fetch-dest": "document",
-        "sec-fetch-mode": "navigate"
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-site": "same-origin",
+        "upgrade-insecure-requests": "1"
       }
     };
-
     const req = https.request(options, (res) => {
-      // Handle redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        const newUrl = res.headers.location.startsWith("http")
+        const next = res.headers.location.startsWith("http")
           ? res.headers.location
           : `https://www.facebook.com${res.headers.location}`;
-        return httpsGet(newUrl, cookieStr).then(resolve).catch(reject);
+        return httpsGet(next, cookieStr, depth + 1).then(resolve).catch(reject);
       }
-
       let data = "";
       res.on("data", chunk => data += chunk);
-      res.on("end", () => resolve(data));
+      res.on("end", () => resolve({ status: res.statusCode, body: data }));
     });
-
     req.on("error", reject);
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error("Request timed out")); });
+    req.setTimeout(12000, () => { req.destroy(); reject(new Error("Timeout")); });
     req.end();
   });
 }
 
-/**
- * Fetch pending friend requests.
- * Uses Facebook's /friends/requests/ page since fca-riyad has no getFriendRequests().
- * Returns: Array of { uid, name, profileUrl }
- */
+// ─────────────────────────────────────────────
+//  DATA FETCHERS
+// ─────────────────────────────────────────────
+
 async function fetchFriendRequests(rawApi) {
   const cookieStr = buildCookieString(rawApi);
-  if (!cookieStr) return { data: [], error: "Cannot read appState / cookies from api." };
+  if (!cookieStr) return { data: [], error: "Could not read cookies from bot session." };
 
   try {
-    // Try mobile endpoint first (more reliable)
-    const html = await httpsGet("https://m.facebook.com/friends/requests/", cookieStr);
+    // Try mbasic first (more stable HTML)
+    const res = await httpsGet("https://mbasic.facebook.com/friends/requests/", cookieStr);
+    const html = res.body || "";
 
     const results = [];
-    const seenUIDs = new Set();
+    // Extract from mbasic HTML: profile links contain /profile.php?id= or /username
+    const blockRe = /href="\/[^"?]+(?:\?[^"]*)?"\s[^>]*>[^<]*<\/a>[\s\S]*?(?:Confirm|Add Friend)/gi;
 
-    // Pattern 1: Profile links with UID in href
-    // e.g. href="/profile.php?id=123456&amp;..."  or href="/username..."
-    const profileRegex = /href="\/(?:profile\.php\?id=)?(\d{5,})[^"]*"[^>]*>\s*<[^>]+>\s*([^<]{2,60})/g;
+    // More targeted: find all user entries in friend request list
+    // mbasic shows: <td><a href="/userid">Name</a> ... <a href="/a/friend.php?confirm...">Confirm</a>
+    const entryRe = /<a href="\/(?:profile\.php\?id=)?([^"?&\n]+)[^"]*"[^>]*>([^<]{2,60})<\/a>(?:[\s\S]{0,800}?)<a href="[^"]*confirm[^"]*">/gi;
     let m;
-    while ((m = profileRegex.exec(html)) !== null) {
-      const uid = m[1];
-      const rawName = m[2].replace(/&amp;/g, "&").replace(/&#039;/g, "'").trim();
-      if (!uid || seenUIDs.has(uid)) continue;
-      if (rawName.length < 2) continue;
-      seenUIDs.add(uid);
-      results.push({ uid, name: rawName, profileUrl: `https://www.facebook.com/profile.php?id=${uid}` });
-    }
-
-    // Pattern 2: data-uid or data-id attributes in buttons
-    const dataUidRegex = /data-(?:uid|id)="(\d{5,})"[^>]*>([^<]{2,60})/g;
-    while ((m = dataUidRegex.exec(html)) !== null) {
-      const uid = m[1];
-      const name = m[2].replace(/&amp;/g, "&").trim();
-      if (!uid || seenUIDs.has(uid) || name.length < 2) continue;
-      seenUIDs.add(uid);
-      results.push({ uid, name, profileUrl: `https://www.facebook.com/profile.php?id=${uid}` });
-    }
-
-    // Pattern 3: JSON-like actor data in HTML (for newer Facebook pages)
-    const actorRegex = /"userID"\s*:\s*"(\d+)"[^}]*?"name"\s*:\s*"([^"]+)"/g;
-    while ((m = actorRegex.exec(html)) !== null) {
-      const uid = m[1];
-      const name = m[2];
-      if (!uid || seenUIDs.has(uid)) continue;
-      seenUIDs.add(uid);
-      results.push({ uid, name, profileUrl: `https://www.facebook.com/profile.php?id=${uid}` });
-    }
-
-    return { data: results, error: null };
-
-  } catch (err) {
-    return { data: [], error: err.message };
-  }
-}
-
-/**
- * Fetch friends list using raw fca-riyad api.getFriendsList().
- * Returns: { data: Array<{userID, fullName, profilePicture, profileUrl}>, error }
- */
-async function fetchFriendsList(rawApi) {
-  if (typeof rawApi.getFriendsList !== "function") {
-    return { data: [], error: "getFriendsList is not available in this fca-riyad version." };
-  }
-
-  try {
-    const friends = await rawApi.getFriendsList();
-    if (!friends || !Array.isArray(friends)) {
-      return { data: [], error: "getFriendsList returned no data." };
-    }
-    return { data: friends, error: null };
-  } catch (err) {
-    return { data: [], error: err.message };
-  }
-}
-
-/**
- * Fetch blocked users list.
- * Uses /settings/blocking/ page since fca-riyad has no getBlockedUsers().
- * Returns: { data: Array<{uid, name, profileUrl}>, error }
- */
-async function fetchBlockedUsers(rawApi) {
-  const cookieStr = buildCookieString(rawApi);
-  if (!cookieStr) return { data: [], error: "Cannot read appState / cookies from api." };
-
-  try {
-    const html = await httpsGet("https://www.facebook.com/settings/blocking/", cookieStr);
-    const results = [];
-    const seenUIDs = new Set();
-
-    // Pattern: unblock links contain the UID
-    const unblockRegex = /\/ajax\/profile\/removefriendconfirm\.php[^"]*uid=(\d+)|\/settings\/blocking\?[^"]*uid=(\d+)|unblock_user_id=(\d+)/g;
-    let m;
-
-    // Also look for blocked user entries in the HTML
-    // Facebook shows them as: <a href="/username...">Name</a> ... Unblock
-    const blockSectionMatch = html.match(/Block users[\s\S]{0,200}?(<div[\s\S]+?(?=Block Pages|Block app|Block event|<\/div>\s*<\/div>\s*<\/div>))/i);
-    const searchHtml = blockSectionMatch ? blockSectionMatch[1] : html;
-
-    // Pattern: uid in data attributes or hidden inputs
-    const uidNameRegex = /uid=(\d{5,})[^"]*"[^>]*>[^<]*<\/a>\s*[^<]*([A-Za-zÀ-ÖØ-öø-ÿ\s']{2,50})/g;
-    while ((m = uidNameRegex.exec(searchHtml)) !== null) {
-      const uid = m[1];
+    while ((m = entryRe.exec(html)) !== null) {
+      const uid = m[1].replace("profile.php?id=", "").split("?")[0].trim();
       const name = m[2].trim();
-      if (!uid || seenUIDs.has(uid)) continue;
-      seenUIDs.add(uid);
-      results.push({ uid, name, profileUrl: `https://www.facebook.com/profile.php?id=${uid}` });
+      if (!uid || uid.includes("/") || uid.includes("=") || uid === "friends") continue;
+      if (results.find(r => r.uid === uid)) continue;
+      results.push({ uid, name, profileUrl: `https://www.facebook.com/${uid}` });
     }
 
-    // Pattern: find profile links followed by "Unblock"
-    const profileAndUnblock = /<a[^>]+href="\/([^?"]+)[^"]*"[^>]*>([^<]{2,60})<\/a>[^<]*(?:<[^>]+>[^<]*)*Unblock/g;
-    while ((m = profileAndUnblock.exec(html)) !== null) {
-      const vanity = m[1];
-      const name = m[2].replace(/&amp;/g, "&").trim();
-      if (vanity.includes("/") || name.length < 2) continue;
-      // Try to get UID from a nearby form
-      const nearbyHtml = html.substring(Math.max(0, m.index - 500), m.index + 200);
-      const uidMatch = nearbyHtml.match(/uid=(\d{5,})/);
-      const uid = uidMatch ? uidMatch[1] : null;
-      const key = uid || vanity;
-      if (seenUIDs.has(key)) continue;
-      seenUIDs.add(key);
-      results.push({
-        uid: uid || vanity,
-        name,
-        profileUrl: uid
-          ? `https://www.facebook.com/profile.php?id=${uid}`
-          : `https://www.facebook.com/${vanity}`
-      });
+    // Fallback: JSON embedded in page
+    if (results.length === 0) {
+      const jsonRe = /"userID":"(\d+)"[^}]*"name":"([^"]+)"/g;
+      while ((m = jsonRe.exec(html)) !== null) {
+        const uid = m[1];
+        const name = m[2];
+        if (results.find(r => r.uid === uid)) continue;
+        results.push({ uid, name, profileUrl: `https://www.facebook.com/profile.php?id=${uid}` });
+      }
     }
 
-    // Pattern: JSON data embedded in page script tags
-    const jsonUidName = /"blocked_uid"\s*:\s*"?(\d+)"?[^}]*?"name"\s*:\s*"([^"]+)"/g;
-    while ((m = jsonUidName.exec(html)) !== null) {
-      const uid = m[1];
-      const name = m[2];
-      if (!uid || seenUIDs.has(uid)) continue;
-      seenUIDs.add(uid);
-      results.push({ uid, name, profileUrl: `https://www.facebook.com/profile.php?id=${uid}` });
-    }
-
-    return { data: results, error: null };
-
-  } catch (err) {
-    return { data: [], error: err.message };
+    return { data: results, error: results.length === 0 ? "No pending friend requests found." : null };
+  } catch (e) {
+    return { data: [], error: e.message };
   }
 }
 
-/**
- * Fetch inbox / recent DM conversations using fca-riyad native API.
- */
-async function fetchInbox(api) {
-  try {
-    const list = await api.getThreadList(50, null, ["INBOX"]);
-    const dms = (list || [])
-      .filter(t => !t.isGroup)
-      .slice(0, 100)
-      .map(t => ({
-        threadID: t.threadID,
-        name: t.name || t.threadID,
-        snippet: t.snippet || ""
-      }));
-    return { data: dms, error: null };
-  } catch (err) {
-    return { data: [], error: err.message };
-  }
-}
-
-// ──────────────────────────────────────────────────────────
-//  SEND MENU HELPER
-// ──────────────────────────────────────────────────────────
-
-async function sendMenu(api, threadID, messageID, text, authorID, commandName, replyManager) {
+async function fetchFriendsList(rawApi) {
   return new Promise((resolve) => {
-    api.sendMessage(text, threadID, (err, info) => {
-      if (err) {
-        console.error("[fbcontrol] sendMenu error:", err);
-        return resolve(null);
-      }
-      const sentMsgID = info && info.messageID;
-      if (sentMsgID && replyManager) {
-        replyManager.set(sentMsgID, {
-          commandName,
-          author: authorID,
-          type: "menu"
-        });
-      }
-      const session = sessionGet(authorID);
-      if (session) session.lastMsgID = sentMsgID;
-      resolve(sentMsgID);
-    }, messageID);
+    if (typeof rawApi.getFriendsList !== "function") {
+      return resolve({ data: [], error: "getFriendsList is not available." });
+    }
+    rawApi.getFriendsList((err, data) => {
+      if (err) return resolve({ data: [], error: err.message || String(err) });
+      const friends = Object.values(data || {}).map(f => ({
+        userID: f.userID,
+        fullName: f.fullName || f.name || "Unknown",
+        profileUrl: f.profileUrl || `https://www.facebook.com/${f.userID}`,
+        vanity: f.vanity || null
+      }));
+      resolve({ data: friends, error: null });
+    });
   });
 }
 
-async function refreshMenu(api, session, threadID, messageID, authorID, replyManager) {
-  let text;
-  const { type, data, page } = session;
-  switch (type) {
-    case "req":   text = buildReqMenu(data, page);   break;
-    case "list":  text = buildListMenu(data, page);  break;
-    case "block": text = buildBlockMenu(data, page); break;
-    case "inbox": text = buildInboxMenu(data, page); break;
-    default:      text = "⚠️ Unknown session type."; break;
+async function fetchBlockList(rawApi) {
+  const cookieStr = buildCookieString(rawApi);
+  if (!cookieStr) return { data: [], error: "Could not read cookies from bot session." };
+
+  // Try multiple endpoints
+  const endpoints = [
+    "https://mbasic.facebook.com/settings/blocking/",
+    "https://www.facebook.com/privacy/blocking/",
+    "https://m.facebook.com/settings/blocking/"
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await httpsGet(url, cookieStr);
+      const html = res.body || "";
+
+      if (res.status === 200 && html.length > 500) {
+        const results = [];
+
+        // mbasic: blocked users appear as links with Unblock button nearby
+        // Pattern: <a href="/uid">Name</a> ... <a href="/ajax/noscript/...unblock...">Unblock</a>
+        const re1 = /href="\/(?:profile\.php\?id=)?([^"?&\n]{1,60})[^"]*"[^>]*>([^<]{2,60})<\/a>[\s\S]{0,500}?Unblock/gi;
+        let m;
+        while ((m = re1.exec(html)) !== null) {
+          const uid = m[1].replace("profile.php?id=", "").split("?")[0].trim();
+          const name = m[2].trim();
+          if (!uid || uid.includes("/") || name.length < 2) continue;
+          if (results.find(r => r.uid === uid)) continue;
+          results.push({ uid, name });
+        }
+
+        // Fallback: JSON embedded pattern
+        if (results.length === 0) {
+          const jsonRe = /"uid":"?(\d+)"?[^}]*?"name":"([^"]+)"/g;
+          while ((m = jsonRe.exec(html)) !== null) {
+            const uid = m[1];
+            const name = m[2].trim();
+            if (results.find(r => r.uid === uid)) continue;
+            results.push({ uid, name });
+          }
+        }
+
+        if (results.length > 0) return { data: results, error: null };
+      }
+    } catch (_) {}
   }
-  await sendMenu(api, threadID, messageID, text, authorID, module.exports.config.name, replyManager);
+
+  return {
+    data: [],
+    error: "Block list could not be loaded.\n\n" +
+      "📌 Facebook changes its HTML frequently. " +
+      "The bot's cookies may also need refreshing. " +
+      "Please check if the bot account has any blocked users."
+  };
 }
 
-// ──────────────────────────────────────────────────────────
-//  COMMAND EXPORT
-// ──────────────────────────────────────────────────────────
+async function fetchInbox(api) {
+  return new Promise((resolve) => {
+    if (typeof api.getThreadList !== "function") {
+      return resolve({ data: [], error: "getThreadList not available." });
+    }
+    api.getThreadList(30, null, [], (err, threads) => {
+      if (err) return resolve({ data: [], error: err.message || String(err) });
+      const list = (threads || []).map(t => ({
+        threadID: t.threadID,
+        name: t.name || t.threadID,
+        isGroup: t.isGroup || false,
+        snippet: t.snippet || ""
+      }));
+      resolve({ data: list, error: null });
+    });
+  });
+}
 
+async function fetchMessageRequests(api) {
+  return new Promise((resolve) => {
+    if (typeof api.getThreadList !== "function") {
+      return resolve({ data: [], error: "getThreadList not available." });
+    }
+    // Message requests are in "OTHER" folder
+    api.getThreadList(30, null, ["OTHER"], (err, threads) => {
+      if (err) {
+        // Try without folder filter
+        api.getThreadList(30, null, [], (err2, threads2) => {
+          if (err2) return resolve({ data: [], error: err2.message });
+          const list = buildMRList(threads2 || [], "other");
+          resolve({ data: list, error: null });
+        });
+        return;
+      }
+      const known = buildMRList(threads || [], "you_may_know");
+
+      // Also try SPAM folder
+      api.getThreadList(20, null, ["SPAM"], (err3, spamThreads) => {
+        let all = known;
+        if (!err3 && spamThreads && spamThreads.length > 0) {
+          const spam = buildMRList(spamThreads, "spam");
+          all = [...known, ...spam];
+        }
+        resolve({ data: all, error: null });
+      });
+    });
+  });
+}
+
+function buildMRList(threads, section) {
+  return threads.map(t => ({
+    threadID: t.threadID,
+    name: t.name || t.threadID,
+    isGroup: t.isGroup || false,
+    snippet: t.snippet || "",
+    isNew: t.isSubscribed === false || t.readStatus === false || false,
+    section: section
+  }));
+}
+
+// ─────────────────────────────────────────────
+//  ACTION HANDLERS
+// ─────────────────────────────────────────────
+
+async function doReqAction(api, rawApi, session, input, threadID) {
+  const match = input.match(/^(\d+)(a|d|b)$/i);
+  const bulkMatch = input.match(/^bulk\s+(a|d|b)$/i);
+
+  if (!match && !bulkMatch) return false;
+
+  const items = session.type === "req" ? session.data : null;
+  if (!items) return false;
+
+  if (bulkMatch) {
+    const action = bulkMatch[1].toLowerCase();
+    const pageItems = items.slice(session.page * PER_PAGE, (session.page + 1) * PER_PAGE);
+    let done = 0;
+    for (const r of pageItems) {
+      try {
+        if (action === "a") await callFriendAction(rawApi, r.uid, "confirm");
+        else if (action === "d") await callFriendAction(rawApi, r.uid, "delete");
+        else if (action === "b") await rawApi.changeBlockedStatus(r.uid, true, () => {});
+        done++;
+      } catch (_) {}
+    }
+    const label = action === "a" ? "Accepted" : action === "d" ? "Deleted" : "Blocked";
+    session.data = items.filter(r => !pageItems.find(p => p.uid === r.uid));
+    api.sendMessage(`✅ Bulk ${label}: ${done} requests done.`, threadID);
+    return true;
+  }
+
+  const num = parseInt(match[1]);
+  const action = match[2].toLowerCase();
+  const target = items[num - 1];
+  if (!target) { api.sendMessage(`❌ No request #${num}.`, threadID); return true; }
+
+  try {
+    if (action === "a") {
+      await callFriendAction(rawApi, target.uid, "confirm");
+      api.sendMessage(`✅ Accepted: ${target.name}`, threadID);
+    } else if (action === "d") {
+      await callFriendAction(rawApi, target.uid, "delete");
+      api.sendMessage(`🗑️ Deleted: ${target.name}`, threadID);
+    } else if (action === "b") {
+      await new Promise(r => rawApi.changeBlockedStatus(target.uid, true, r));
+      api.sendMessage(`🚫 Blocked: ${target.name}`, threadID);
+    }
+    session.data = items.filter(r => r.uid !== target.uid);
+  } catch (e) {
+    api.sendMessage(`❌ Error: ${e.message}`, threadID);
+  }
+  return true;
+}
+
+function callFriendAction(rawApi, uid, type) {
+  return new Promise((resolve, reject) => {
+    if (typeof rawApi.handleFriendRequest === "function") {
+      rawApi.handleFriendRequest(uid, type, (err) => err ? reject(err) : resolve());
+    } else {
+      reject(new Error("handleFriendRequest not available"));
+    }
+  });
+}
+
+async function doListAction(api, rawApi, session, input, threadID) {
+  const msgMatch = input.match(/^(\d+)msg$/i);
+  const ufMatch = input.match(/^(\d+)uf$/i);
+  const blMatch = input.match(/^(\d+)bl$/i);
+  const bulkMatch = input.match(/^bulk\s+(uf|bl)$/i);
+  const searchMatch = input.match(/^s\s+(.+)$/i);
+  const sortMatch = input.match(/^sort\s+(az|new)$/i);
+
+  if (!msgMatch && !ufMatch && !blMatch && !bulkMatch && !searchMatch && !sortMatch) return false;
+
+  const items = session.data;
+
+  if (searchMatch) {
+    const q = searchMatch[1].toLowerCase();
+    const found = items.filter(f => f.fullName.toLowerCase().includes(q));
+    session.searchResults = found;
+    api.sendMessage(`🔍 Found ${found.length} results for "${searchMatch[1]}".\n\n` +
+      found.slice(0, 10).map((f, i) => `${i + 1}. ${f.fullName}`).join("\n"),
+      threadID);
+    return true;
+  }
+
+  if (sortMatch) {
+    if (sortMatch[1] === "az") {
+      session.data = [...items].sort((a, b) => a.fullName.localeCompare(b.fullName));
+    } else {
+      session.data = [...items].reverse();
+    }
+    const text = buildListMenu(session.data, 0);
+    session.page = 0;
+    await sendPage(api, threadID, text, session);
+    return true;
+  }
+
+  if (bulkMatch) {
+    const action = bulkMatch[1].toLowerCase();
+    const pageItems = items.slice(session.page * PER_PAGE, (session.page + 1) * PER_PAGE);
+    let done = 0;
+    for (const f of pageItems) {
+      try {
+        if (action === "uf") await new Promise(r => rawApi.unfriend(f.userID, r));
+        else if (action === "bl") await new Promise(r => rawApi.changeBlockedStatus(f.userID, true, r));
+        done++;
+      } catch (_) {}
+    }
+    session.data = items.filter(f => !pageItems.find(p => p.userID === f.userID));
+    api.sendMessage(`✅ Bulk ${action === "uf" ? "Unfriended" : "Blocked"}: ${done} done.`, threadID);
+    return true;
+  }
+
+  if (msgMatch) {
+    const num = parseInt(msgMatch[1]);
+    const target = items[num - 1];
+    if (!target) { api.sendMessage(`❌ No friend #${num}.`, threadID); return true; }
+    api.sendMessage(`💬 Opening chat with ${target.fullName}...\nThread ID: ${target.userID}`, threadID);
+    return true;
+  }
+
+  if (ufMatch) {
+    const num = parseInt(ufMatch[1]);
+    const target = items[num - 1];
+    if (!target) { api.sendMessage(`❌ No friend #${num}.`, threadID); return true; }
+    try {
+      await new Promise((res, rej) => rawApi.unfriend(target.userID, (e) => e ? rej(e) : res()));
+      session.data = items.filter(f => f.userID !== target.userID);
+      api.sendMessage(`✅ Unfriended: ${target.fullName}`, threadID);
+    } catch (e) { api.sendMessage(`❌ Error: ${e.message}`, threadID); }
+    return true;
+  }
+
+  if (blMatch) {
+    const num = parseInt(blMatch[1]);
+    const target = items[num - 1];
+    if (!target) { api.sendMessage(`❌ No friend #${num}.`, threadID); return true; }
+    try {
+      await new Promise((res, rej) => rawApi.changeBlockedStatus(target.userID, true, (e) => e ? rej(e) : res()));
+      session.data = items.filter(f => f.userID !== target.userID);
+      api.sendMessage(`🚫 Blocked: ${target.fullName}`, threadID);
+    } catch (e) { api.sendMessage(`❌ Error: ${e.message}`, threadID); }
+    return true;
+  }
+
+  return false;
+}
+
+async function doBlockAction(api, rawApi, session, input, threadID) {
+  const uMatch = input.match(/^(\d+)u$/i);
+  const msgMatch = input.match(/^(\d+)msg$/i);
+  const bulkMatch = input.match(/^bulk\s+u$/i);
+
+  if (!uMatch && !msgMatch && !bulkMatch) return false;
+
+  const items = session.data;
+
+  if (bulkMatch) {
+    const pageItems = items.slice(session.page * PER_PAGE, (session.page + 1) * PER_PAGE);
+    let done = 0;
+    for (const u of pageItems) {
+      try {
+        await new Promise(r => rawApi.changeBlockedStatus(u.uid, false, r));
+        done++;
+      } catch (_) {}
+    }
+    session.data = items.filter(u => !pageItems.find(p => p.uid === u.uid));
+    api.sendMessage(`✅ Bulk Unblocked: ${done} done.`, threadID);
+    return true;
+  }
+
+  if (uMatch) {
+    const num = parseInt(uMatch[1]);
+    const target = items[num - 1];
+    if (!target) { api.sendMessage(`❌ No user #${num}.`, threadID); return true; }
+    try {
+      await new Promise((res, rej) => rawApi.changeBlockedStatus(target.uid, false, (e) => e ? rej(e) : res()));
+      session.data = items.filter(u => u.uid !== target.uid);
+      api.sendMessage(`✅ Unblocked: ${target.name}`, threadID);
+    } catch (e) { api.sendMessage(`❌ Error: ${e.message}`, threadID); }
+    return true;
+  }
+
+  if (msgMatch) {
+    const num = parseInt(msgMatch[1]);
+    const target = items[num - 1];
+    if (!target) { api.sendMessage(`❌ No user #${num}.`, threadID); return true; }
+    api.sendMessage(`💬 User: ${target.name}\nUID: ${target.uid}`, threadID);
+    return true;
+  }
+
+  return false;
+}
+
+async function doMRAction(api, rawApi, session, input, threadID) {
+  const match = input.match(/^(\d+)(a|d|b)$/i);
+  const bulkMatch = input.match(/^bulk\s+(a|d|b)$/i);
+
+  if (!match && !bulkMatch) return false;
+
+  const items = session.data;
+
+  if (bulkMatch) {
+    const action = bulkMatch[1].toLowerCase();
+    const pageItems = items.slice(session.page * PER_PAGE, (session.page + 1) * PER_PAGE);
+    let done = 0;
+    for (const r of pageItems) {
+      try {
+        if (action === "d") {
+          // Delete message request
+          if (typeof rawApi.deleteThread === "function")
+            await new Promise(res => rawApi.deleteThread(r.threadID, res));
+        } else if (action === "b") {
+          await new Promise(res => rawApi.changeBlockedStatus(r.threadID, true, res));
+        }
+        done++;
+      } catch (_) {}
+    }
+    session.data = items.filter(r => !pageItems.find(p => p.threadID === r.threadID));
+    const label = action === "a" ? "Accepted" : action === "d" ? "Deleted" : "Blocked";
+    api.sendMessage(`✅ Bulk ${label}: ${done} done.`, threadID);
+    return true;
+  }
+
+  const num = parseInt(match[1]);
+  const action = match[2].toLowerCase();
+  const target = items[num - 1];
+  if (!target) { api.sendMessage(`❌ No request #${num}.`, threadID); return true; }
+
+  try {
+    if (action === "a") {
+      // Accept = start messaging (thread becomes normal)
+      api.sendMessage(`✅ Accepted request from: ${target.name}\nYou can now message them.`, threadID);
+    } else if (action === "d") {
+      if (typeof rawApi.deleteThread === "function")
+        await new Promise(res => rawApi.deleteThread(target.threadID, res));
+      api.sendMessage(`🗑️ Deleted request from: ${target.name}`, threadID);
+    } else if (action === "b") {
+      await new Promise(res => rawApi.changeBlockedStatus(target.threadID, true, res));
+      api.sendMessage(`🚫 Blocked: ${target.name}`, threadID);
+    }
+    session.data = items.filter(r => r.threadID !== target.threadID);
+  } catch (e) {
+    api.sendMessage(`❌ Error: ${e.message}`, threadID);
+  }
+  return true;
+}
+
+// ─────────────────────────────────────────────
+//  SMS ALL — BROADCAST WITH AUTO-UNSEND
+// ─────────────────────────────────────────────
+
+async function runSmsAll(api, rawApi, threadID, messageID, text, authorID) {
+  // Check for "off" keyword
+  if (text.trim().toLowerCase() === "off") {
+    const s = sessionGet(authorID);
+    if (s && s.smsAll) {
+      s.smsAll.cancelled = true;
+      api.sendMessage("📴 Broadcast cancelled.", threadID);
+      sessionClear(authorID);
+    } else {
+      api.sendMessage("ℹ️ No active broadcast to cancel.", threadID);
+    }
+    return;
+  }
+
+  const result = await fetchFriendsList(rawApi);
+  if (result.error || result.data.length === 0) {
+    return api.sendMessage(`❌ Could not load friends list: ${result.error || "Empty"}`, threadID);
+  }
+
+  const friends = result.data;
+  const state = { cancelled: false };
+  sessionCreate(authorID, "sms_all", [], threadID, { smsAll: state });
+
+  const statusMsgInfo = await new Promise(res =>
+    api.sendMessage(`📢 Sending to ${friends.length} friends...\n0/${friends.length} done`, threadID, (e, i) => res(i))
+  );
+  const statusMsgID = statusMsgInfo ? statusMsgInfo.messageID : null;
+
+  let sent = 0;
+  const sentIDs = [];
+
+  for (const friend of friends) {
+    if (state.cancelled) break;
+    try {
+      const info = await new Promise(res =>
+        api.sendMessage(text, friend.userID, (e, i) => res(i))
+      );
+      if (info && info.messageID) sentIDs.push(info.messageID);
+      sent++;
+
+      // Update status every 5 sends
+      if (statusMsgID && sent % 5 === 0) {
+        try {
+          api.sendMessage(
+            `📢 Sending to ${friends.length} friends...\n${sent}/${friends.length} done`,
+            threadID
+          );
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    // Small delay to avoid rate limits
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  // Final report
+  const finalText = state.cancelled
+    ? `📴 Broadcast cancelled. Sent: ${sent}/${friends.length}`
+    : `✅ Broadcast complete!\n📤 Sent to: ${sent}/${friends.length} friends\n\n⏱ Messages will auto-delete in 5 seconds...`;
+
+  api.sendMessage(finalText, threadID, (e, info) => {
+    if (info) unsendAfter(api, info.messageID, 8000);
+  });
+
+  // Unsend status msg
+  if (statusMsgID) unsendMsg(api, statusMsgID);
+
+  // Auto-unsend all sent DMs after 5 seconds
+  if (!state.cancelled && sentIDs.length > 0) {
+    setTimeout(() => {
+      sentIDs.forEach(id => unsendMsg(api, id));
+    }, 5000);
+  }
+
+  sessionClear(authorID);
+}
+
+// ─────────────────────────────────────────────
+//  NAVIGATION HELPER (next/prev page)
+// ─────────────────────────────────────────────
+async function navigatePage(api, session, dir) {
+  const tp = Math.max(1, Math.ceil(session.data.length / PER_PAGE));
+  const newPage = session.page + dir;
+  if (newPage < 0 || newPage >= tp) return false;
+  session.page = newPage;
+
+  let text;
+  if (session.type === "req")   text = buildReqMenu(session.data, newPage);
+  if (session.type === "list")  text = buildListMenu(session.data, newPage);
+  if (session.type === "block") text = buildBlockMenu(session.data, newPage);
+  if (session.type === "inbox") text = buildInboxMenu(session.data, newPage);
+  if (session.type === "mr")    text = buildMRMenu(session.data, newPage);
+
+  if (text) {
+    await sendPage(api, session.threadID, text, session);
+    sessionResetTimer(session.authorID);
+  }
+  return true;
+}
+
+// ─────────────────────────────────────────────
+//  MAIN RUN HANDLER
+// ─────────────────────────────────────────────
 module.exports = {
   config: {
     name: "fbcontrol",
-    // NOTE: "in" is already an alias in inbox.js. Remove it from
-    // inbox.js first if you want to use "in" as trigger here.
     aliases: ["fb", "fbc", "fbm"],
-    version: "2.0.0",
+    version: "3.0.0",
     author: "Riyad Bot Team",
-    countDown: 5,
+    countDown: 3,
     role: 0,
-    category: "utility",
-    description: "Facebook Account Manager: requests, friends, block list, inbox, DM.",
-    guide: [
-      "{pn}            → Friend Requests",
-      "{pn} list       → Friends List",
-      "{pn} block      → Block List",
-      "{pn} inbox      → Inbox",
-      "{pn} sms <n> <msg>  → DM friend #n",
-      "{pn} sms all <msg>  → Broadcast DM"
-    ].join("\n")
-  },
-
-  // ─────────────────────────────────────────────
-  //  onStart
-  // ─────────────────────────────────────────────
-  onStart: async function ({ api, event, args, replyManager }) {
-    const { threadID, messageID, senderID } = event;
-    const sub = (args[0] || "").toLowerCase();
-    const hasReaction = typeof api.setMessageReaction === "function";
-    const rawApi = getRawApi(api);
-
-    if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
-
-    try {
-
-      // ── fb sms ────────────────────────────────────────────
-      if (sub === "sms") {
-        return await handleSms(api, rawApi, event, args, threadID, messageID, hasReaction);
-      }
-
-      // ── fb  (friend requests) ─────────────────────────────
-      if (!sub || sub === "req" || sub === "request") {
-        await api.sendMessage("⏳ Fetching pending friend requests...", threadID);
-        const { data, error } = await fetchFriendRequests(rawApi);
-
-        if (data.length === 0) {
-          if (hasReaction) api.setMessageReaction("🥺", messageID, () => {}, true);
-          const errMsg = error
-            ? `❌ Could not fetch friend requests.\n\nError: ${error}\n\nMake sure the bot's Facebook session (appState) is active.`
-            : "📩 No pending friend requests found.";
-          return api.sendMessage(errMsg, threadID, messageID);
-        }
-
-        sessionCreate(senderID, "req", data, threadID);
-        if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-        return await sendMenu(api, threadID, messageID, buildReqMenu(data, 0), senderID, this.config.name, replyManager);
-      }
-
-      // ── fb list ───────────────────────────────────────────
-      if (sub === "list") {
-        await api.sendMessage("⏳ Fetching friends list...", threadID);
-        const { data, error } = await fetchFriendsList(rawApi);
-
-        if (data.length === 0) {
-          if (hasReaction) api.setMessageReaction("🥺", messageID, () => {}, true);
-          const errMsg = error
-            ? `❌ Could not fetch friends list.\n\nError: ${error}`
-            : "👥 Friends list is empty.";
-          return api.sendMessage(errMsg, threadID, messageID);
-        }
-
-        // Sort A-Z by default
-        const sorted = data.slice().sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
-        sessionCreate(senderID, "list", sorted, threadID);
-        if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-        return await sendMenu(api, threadID, messageID, buildListMenu(sorted, 0), senderID, this.config.name, replyManager);
-      }
-
-      // ── fb block ──────────────────────────────────────────
-      if (sub === "block") {
-        await api.sendMessage("⏳ Fetching block list...", threadID);
-        const { data, error } = await fetchBlockedUsers(rawApi);
-
-        if (data.length === 0) {
-          if (hasReaction) api.setMessageReaction("🥺", messageID, () => {}, true);
-          const errMsg = error
-            ? `❌ Could not fetch block list.\n\nError: ${error}\n\nFCA note: fca-riyad has no native getBlockedUsers(). This reads Facebook's settings page which may change.`
-            : "🚫 Block list is empty or could not be read.\n\nNote: This command reads the /settings/blocking page using your bot's cookies. Facebook's HTML layout may have changed.";
-          return api.sendMessage(errMsg, threadID, messageID);
-        }
-
-        sessionCreate(senderID, "block", data, threadID);
-        if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-        return await sendMenu(api, threadID, messageID, buildBlockMenu(data, 0), senderID, this.config.name, replyManager);
-      }
-
-      // ── fb inbox ──────────────────────────────────────────
-      if (sub === "inbox") {
-        await api.sendMessage("⏳ Fetching inbox...", threadID);
-        const { data, error } = await fetchInbox(api);
-
-        if (data.length === 0) {
-          if (hasReaction) api.setMessageReaction("🥺", messageID, () => {}, true);
-          const errMsg = error
-            ? `❌ Could not fetch inbox.\nError: ${error}`
-            : "📨 Inbox is empty.";
-          return api.sendMessage(errMsg, threadID, messageID);
-        }
-
-        sessionCreate(senderID, "inbox", data, threadID);
-        if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-        return await sendMenu(api, threadID, messageID, buildInboxMenu(data, 0), senderID, this.config.name, replyManager);
-      }
-
-      // ── Unknown sub-command ───────────────────────────────
-      if (hasReaction) api.setMessageReaction("❓", messageID, () => {}, true);
-      return api.sendMessage(
-        `❓ Unknown: "${args[0]}"\n\nValid:\n  fb → Friend Requests\n  fb list\n  fb block\n  fb inbox\n  fb sms <n> <text>\n  fb sms all <text>`,
-        threadID, messageID
-      );
-
-    } catch (err) {
-      console.error("[fbcontrol] onStart error:", err);
-      if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-      return api.sendMessage(`❌ Error: ${err.message}`, threadID, messageID);
+    shortDescription: "Facebook Account Manager",
+    longDescription: "Manage friend requests, friends list, block list, inbox, and message requests.",
+    category: "account",
+    guide: {
+      en: "fb | fb list | fb block | fb inbox | fb mr | fb sms <n> <text> | fb sms all <text>"
     }
   },
 
-  // ─────────────────────────────────────────────
-  //  onReply
-  // ─────────────────────────────────────────────
-  onReply: async function ({ api, event, Reply, replyManager }) {
-    const { threadID, messageID, senderID, body } = event;
-    const { author, type: replyType } = Reply;
-
-    // Only the session author can control
-    if (String(senderID) !== String(author)) return;
-
-    const rawApi = getRawApi(api);
-    const hasReaction = typeof api.setMessageReaction === "function";
-
-    // ── Bulk confirmation reply ───────────────────────────
-    if (replyType === "bulk_confirm") {
-      const session = sessionGet(Reply.sessionAuthorID);
-      if (!session) return api.sendMessage("⏱️ Session expired. Run command again.", threadID, messageID);
-      return await executeBulkAction(api, rawApi, event, Reply, session, replyManager);
-    }
-
-    // ── Menu reply ────────────────────────────────────────
-    const session = sessionGet(author);
-    if (!session) {
-      return api.sendMessage("⏱️ Session expired. Run the command again.", threadID, messageID);
-    }
-
-    sessionResetTimer(author);
-    const input = (body || "").trim().toLowerCase();
-
-    // Exit
-    if (input === "q" || input === "quit" || input === "exit") {
-      sessionClear(author);
-      return api.sendMessage("👋 Menu closed.", threadID, messageID);
-    }
-
-    // Previous page
-    if (input === "0") {
-      if (session.page <= 0) return api.sendMessage("⚠️ Already on first page.", threadID, messageID);
-      session.page--;
-      return await refreshMenu(api, session, threadID, messageID, author, replyManager);
-    }
-
-    // Next page (text trigger)
-    if (input === "next" || input === "n") {
-      const tp = totalPages(session.data);
-      if (session.page >= tp - 1) return api.sendMessage("⚠️ Already on last page.", threadID, messageID);
-      session.page++;
-      return await refreshMenu(api, session, threadID, messageID, author, replyManager);
-    }
-
-    // Search (list only): s <name>
-    if (input.startsWith("s ") && session.type === "list") {
-      const query = input.slice(2).trim().toLowerCase();
-      if (!query) return api.sendMessage("⚠️ Usage: s <name>", threadID, messageID);
-      const results = session.data.filter(f => (f.fullName || "").toLowerCase().includes(query));
-      if (results.length === 0) return api.sendMessage(`🔍 No friends found: "${query}"`, threadID, messageID);
-      const text = buildListMenu(results, 0) + `\n\n🔍 "${query}" → ${results.length} found`;
-      return api.sendMessage(text, threadID, (err, info) => {
-        if (!err && info?.messageID && replyManager) {
-          replyManager.set(info.messageID, { commandName: module.exports.config.name, author, type: "menu" });
-          session.lastMsgID = info.messageID;
-        }
-      }, messageID);
-    }
-
-    // Sort (list only): sort az / sort new
-    if (input.startsWith("sort ") && session.type === "list") {
-      const sortType = input.slice(5).trim();
-      if (sortType === "az") {
-        session.data = session.data.slice().sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
-        session.page = 0;
-        await api.sendMessage("🔤 Sorted A-Z.", threadID, messageID);
-        return await refreshMenu(api, session, threadID, messageID, author, replyManager);
-      } else if (sortType === "new" || sortType === "newest") {
-        session.data = session.data.slice().reverse();
-        session.page = 0;
-        await api.sendMessage("🕒 Sorted by newest.", threadID, messageID);
-        return await refreshMenu(api, session, threadID, messageID, author, replyManager);
-      }
-      return api.sendMessage('⚠️ Use: sort az  OR  sort new', threadID, messageID);
-    }
-
-    // Bulk: bulk <action>
-    if (input.startsWith("bulk ")) {
-      return await handleBulkStart(api, event, session, input.slice(5).trim(), threadID, messageID, author, replyManager);
-    }
-
-    // Numbered action: 1a / 2uf / 3msg etc.
-    const actionMatch = input.match(/^(\d+)(a|d|b|uf|bl|u|msg)$/);
-    if (actionMatch) {
-      const num = parseInt(actionMatch[1], 10);
-      const action = actionMatch[2];
-      const absoluteIndex = session.page * PER_PAGE + num - 1;
-      const item = session.data[absoluteIndex];
-
-      if (!item) {
-        return api.sendMessage(
-          `⚠️ No item #${num} on this page (${Math.min(PER_PAGE, session.data.length - session.page * PER_PAGE)} items shown).`,
-          threadID, messageID
-        );
-      }
-      return await handleItemAction(api, rawApi, session, item, action, num, absoluteIndex, threadID, messageID, author, replyManager, hasReaction);
-    }
-
-    return api.sendMessage(
-      "⚠️ Invalid input. Examples:\n  1a Accept  1d Delete  1b Block\n  1uf Unfriend  1bl Block  1u Unblock  1msg Message\n  bulk a / d / b / uf / bl / u\n  s <name>  sort az  sort new\n  0=Prev  ❤️=Next  q=Exit",
-      threadID, messageID
-    );
-  },
-
-  // ─────────────────────────────────────────────
-  //  onReaction — ❤️ = next page
-  // ─────────────────────────────────────────────
-  onReaction: async function ({ api, event, Reaction, replyManager }) {
-    const { threadID, userID, reaction } = event;
-
-    const isHeart = reaction === "❤️" || reaction === "\u2764\uFE0F" || reaction === "love" || reaction === "heart";
-    if (!isHeart) return;
-
+  onReaction: async function({ api, event }) {
+    const { userID, messageID } = event;
     const session = sessionGet(userID);
     if (!session) return;
-    if (String(session.threadID) !== String(threadID)) return;
-    if (String(userID) !== String(session.authorID)) return;
-
-    const tp = totalPages(session.data);
-    if (session.page >= tp - 1) {
-      return api.sendMessage("📄 Already on the last page.", threadID);
+    if (session.lastMsgID !== messageID) return;
+    if (["req", "list", "block", "inbox", "mr"].includes(session.type)) {
+      await navigatePage(api, session, 1);
     }
+  },
 
-    session.page++;
-    sessionResetTimer(session.authorID);
-    await refreshMenu(api, session, threadID, null, session.authorID, replyManager);
-  }
-};
+  run: async function({ api, event, args }) {
+    const { senderID, threadID, messageID, body } = event;
+    const rawApi = getRawApi(api);
+    const text = (body || "").trim();
+    const sub = (args[0] || "").toLowerCase();
+    const session = sessionGet(senderID);
 
-// ──────────────────────────────────────────────────────────
-//  ACTION HANDLERS
-// ──────────────────────────────────────────────────────────
+    // ── SMS COMMANDS (no session needed) ─────────────────
+    if (sub === "sms") {
+      const target = args[1];
+      if (!target) return api.sendMessage("❌ Usage: fb sms <n> <text>  OR  fb sms all <text>", threadID);
 
-async function handleItemAction(api, rawApi, session, item, action, displayNum, absoluteIndex, threadID, messageID, authorID, replyManager, hasReaction) {
-  const uid  = item.uid || item.userID || "";
-  const name = item.name || item.fullName || "Unknown";
-
-  if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
-
-  try {
-    // ── ACCEPT FRIEND REQUEST ─────────────────────────────
-    if (action === "a" && session.type === "req") {
-      if (typeof rawApi.handleFriendRequest !== "function") {
-        return api.sendMessage("❌ handleFriendRequest not available in this fca-riyad version.", threadID, messageID);
+      if (target.toLowerCase() === "all") {
+        const msg = args.slice(2).join(" ");
+        if (!msg) return api.sendMessage("❌ Usage: fb sms all <text>", threadID);
+        return await runSmsAll(api, rawApi, threadID, messageID, msg, senderID);
       }
-      await rawApi.handleFriendRequest(uid, true);
-      session.data.splice(absoluteIndex, 1);
-      adjustPage(session);
-      if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-      await api.sendMessage(`✅ Accepted request from ${name}.`, threadID, messageID);
-      return await refreshMenu(api, session, threadID, null, authorID, replyManager);
-    }
 
-    // ── DELETE / REJECT FRIEND REQUEST ───────────────────
-    if (action === "d" && session.type === "req") {
-      if (typeof rawApi.handleFriendRequest !== "function") {
-        return api.sendMessage("❌ handleFriendRequest not available in this fca-riyad version.", threadID, messageID);
+      // Check for "off" to cancel active sms all
+      if (target.toLowerCase() === "off") {
+        const s = sessionGet(senderID);
+        if (s && s.smsAll) {
+          s.smsAll.cancelled = true;
+          sessionClear(senderID);
+          return api.sendMessage("📴 Broadcast cancelled.", threadID);
+        }
+        return api.sendMessage("ℹ️ No active broadcast.", threadID);
       }
-      await rawApi.handleFriendRequest(uid, false);
-      session.data.splice(absoluteIndex, 1);
-      adjustPage(session);
-      if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-      await api.sendMessage(`❌ Deleted request from ${name}.`, threadID, messageID);
-      return await refreshMenu(api, session, threadID, null, authorID, replyManager);
-    }
 
-    // ── BLOCK (from req or list) ──────────────────────────
-    if (action === "b" && (session.type === "req" || session.type === "list")) {
-      if (typeof rawApi.changeBlockedStatus !== "function") {
-        return api.sendMessage("❌ changeBlockedStatus not available in this fca-riyad version.", threadID, messageID);
-      }
-      await rawApi.changeBlockedStatus(uid, true);
-      if (session.type === "req") {
-        try { await rawApi.handleFriendRequest(uid, false); } catch (_) {}
-      }
-      session.data.splice(absoluteIndex, 1);
-      adjustPage(session);
-      if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-      await api.sendMessage(`🚫 Blocked ${name}.`, threadID, messageID);
-      return await refreshMenu(api, session, threadID, null, authorID, replyManager);
-    }
+      const n = parseInt(target);
+      if (isNaN(n)) return api.sendMessage("❌ Usage: fb sms <number> <text>", threadID);
+      const msg = args.slice(2).join(" ");
+      if (!msg) return api.sendMessage("❌ Please include a message text.", threadID);
 
-    // ── UNFRIEND ──────────────────────────────────────────
-    if (action === "uf" && session.type === "list") {
-      if (typeof rawApi.unfriend !== "function") {
-        return api.sendMessage("❌ unfriend not available in this fca-riyad version.", threadID, messageID);
-      }
-      await rawApi.unfriend(uid);
-      session.data.splice(absoluteIndex, 1);
-      adjustPage(session);
-      if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-      await api.sendMessage(`❌ Unfriended ${name}.`, threadID, messageID);
-      return await refreshMenu(api, session, threadID, null, authorID, replyManager);
-    }
+      const result = await fetchFriendsList(rawApi);
+      if (result.error || !result.data.length)
+        return api.sendMessage(`❌ Could not load friends: ${result.error || "Empty"}`, threadID);
 
-    // ── BLOCK FRIEND (from list) ──────────────────────────
-    if (action === "bl" && session.type === "list") {
-      if (typeof rawApi.changeBlockedStatus !== "function") {
-        return api.sendMessage("❌ changeBlockedStatus not available in this fca-riyad version.", threadID, messageID);
-      }
-      await rawApi.changeBlockedStatus(uid, true);
-      session.data.splice(absoluteIndex, 1);
-      adjustPage(session);
-      if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-      await api.sendMessage(`🚫 Blocked ${name}.`, threadID, messageID);
-      return await refreshMenu(api, session, threadID, null, authorID, replyManager);
-    }
+      const friend = result.data[n - 1];
+      if (!friend) return api.sendMessage(`❌ No friend #${n}.`, threadID);
 
-    // ── UNBLOCK ───────────────────────────────────────────
-    if (action === "u" && session.type === "block") {
-      if (typeof rawApi.changeBlockedStatus !== "function") {
-        return api.sendMessage("❌ changeBlockedStatus not available in this fca-riyad version.", threadID, messageID);
+      try {
+        await new Promise((res, rej) =>
+          api.sendMessage(msg, friend.userID, (e) => e ? rej(e) : res())
+        );
+        api.sendMessage(`✅ Message sent to ${friend.fullName}`, threadID);
+      } catch (e) {
+        api.sendMessage(`❌ Failed to send to ${friend.fullName}: ${e.message}`, threadID);
       }
-      await rawApi.changeBlockedStatus(uid, false);
-      session.data.splice(absoluteIndex, 1);
-      adjustPage(session);
-      if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-      await api.sendMessage(`✅ Unblocked ${name}.`, threadID, messageID);
-      return await refreshMenu(api, session, threadID, null, authorID, replyManager);
-    }
-
-    // ── MESSAGE ───────────────────────────────────────────
-    if (action === "msg") {
-      const targetID = item.threadID || uid;
-      await api.sendMessage(
-        `📨 Sending to ${name} (${targetID})...`,
-        threadID, messageID
-      );
-      await api.sendMessage(`👋 Hi ${name}! (Message from Riyad Bot)`, targetID);
-      if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
       return;
     }
 
-    if (hasReaction) api.setMessageReaction("❓", messageID, () => {}, true);
-    return api.sendMessage(`⚠️ Action "${action}" not valid in "${session.type}" menu.`, threadID, messageID);
+    // ── HANDLE ACTIVE SESSION REPLIES ───────────────────
+    if (session && !sub) {
+      // This shouldn't happen (sub is args[0], but body may differ)
+    }
 
-  } catch (err) {
-    console.error("[fbcontrol] handleItemAction error:", err);
-    if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-    return api.sendMessage(`❌ Failed: ${err.message}`, threadID, messageID);
-  }
-}
+    if (session) {
+      const input = text.replace(/^fb\w*\s*/i, "").trim().toLowerCase();
 
-/** Adjust page number if items were removed and page is now out of range */
-function adjustPage(session) {
-  if (session.page > 0 && session.page >= totalPages(session.data)) {
-    session.page--;
-  }
-}
-
-/** Show bulk confirmation prompt */
-async function handleBulkStart(api, event, session, cmd, threadID, messageID, authorID, replyManager) {
-  const { type } = session;
-  const validActions = { req: ["a","d","b"], list: ["uf","bl"], block: ["u"], inbox: [] };
-  const allowed = validActions[type] || [];
-
-  if (!allowed.includes(cmd)) {
-    const valid = allowed.length ? allowed.map(a => `bulk ${a}`).join(", ") : "none";
-    return api.sendMessage(`⚠️ Bulk "${cmd}" not valid here.\nAllowed: ${valid}`, threadID, messageID);
-  }
-
-  const labels = { a:"Accept All Requests", d:"Delete All Requests", b:"Block All Requesters", uf:"Unfriend ALL", bl:"Block ALL Friends", u:"Unblock ALL" };
-  const label = labels[cmd] || cmd;
-
-  return api.sendMessage(
-    `⚠️ 𝗕𝗨𝗟𝗞 𝗖𝗢𝗡𝗙𝗜𝗥𝗠\n${DIVIDER}\nAction: ${label}\nItems: ${session.data.length}\n\nReply YES to confirm.\nReply NO to cancel.\n⚠️ Cannot be undone!`,
-    threadID,
-    (err, info) => {
-      if (err || !info?.messageID) return;
-      if (replyManager) {
-        replyManager.set(info.messageID, {
-          commandName: module.exports.config.name,
-          author: authorID,
-          type: "bulk_confirm",
-          bulkCmd: cmd,
-          sessionAuthorID: authorID
-        });
+      // Prev page
+      if (input === "0") {
+        await navigatePage(api, session, -1);
+        return;
       }
-    },
-    messageID
-  );
-}
 
-/** Execute the confirmed bulk action */
-async function executeBulkAction(api, rawApi, event, Reply, session, replyManager) {
-  const { threadID, messageID, body } = event;
-  const hasReaction = typeof api.setMessageReaction === "function";
-  const input = (body || "").trim().toLowerCase();
+      // sms all cancellation via reply
+      if (input === "off" && session.smsAll) {
+        session.smsAll.cancelled = true;
+        sessionClear(senderID);
+        return api.sendMessage("📴 Broadcast cancelled.", threadID);
+      }
 
-  if (input !== "yes" && input !== "confirm") {
-    return api.sendMessage("🚫 Bulk action cancelled.", threadID, messageID);
-  }
-
-  const { bulkCmd } = Reply;
-  const items = session.data.slice();
-  let success = 0, failed = 0;
-
-  if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
-  await api.sendMessage(`📤 Bulk action started on ${items.length} items...`, threadID, messageID);
-
-  for (const item of items) {
-    const uid = item.uid || item.userID || "";
-    try {
-      if (bulkCmd === "a" && typeof rawApi.handleFriendRequest === "function") {
-        await rawApi.handleFriendRequest(uid, true);
-      } else if (bulkCmd === "d" && typeof rawApi.handleFriendRequest === "function") {
-        await rawApi.handleFriendRequest(uid, false);
-      } else if (bulkCmd === "b") {
-        if (typeof rawApi.changeBlockedStatus === "function") await rawApi.changeBlockedStatus(uid, true);
-        if (typeof rawApi.handleFriendRequest === "function") {
-          try { await rawApi.handleFriendRequest(uid, false); } catch (_) {}
+      // Type-specific actions
+      if (session.type === "req") {
+        const handled = await doReqAction(api, rawApi, session, input, threadID);
+        if (handled) {
+          sessionResetTimer(senderID);
+          return;
         }
-      } else if (bulkCmd === "uf" && typeof rawApi.unfriend === "function") {
-        await rawApi.unfriend(uid);
-      } else if (bulkCmd === "bl" && typeof rawApi.changeBlockedStatus === "function") {
-        await rawApi.changeBlockedStatus(uid, true);
-      } else if (bulkCmd === "u" && typeof rawApi.changeBlockedStatus === "function") {
-        await rawApi.changeBlockedStatus(uid, false);
-      } else {
-        throw new Error(`Method not available for action "${bulkCmd}"`);
       }
-      success++;
-    } catch (err) {
-      console.error(`[fbcontrol] bulk error on ${uid}:`, err.message);
-      failed++;
-    }
-    await new Promise(r => setTimeout(r, 350)); // Rate limit protection
-  }
 
-  session.data = [];
-  session.page = 0;
-
-  if (hasReaction) api.setMessageReaction(failed === 0 ? "✅" : "⚠️", messageID, () => {}, true);
-  return api.sendMessage(
-    `📊 𝗕𝘂𝗹𝗸 𝗖𝗼𝗺𝗽𝗹𝗲𝘁𝗲\n${DIVIDER}\n✔ Success: ${success}\n❌ Failed: ${failed}\n\n${failed > 0 ? "Some failed — check bot logs.\n" : ""}Menu closed. Run command again to refresh.`,
-    threadID, messageID
-  );
-}
-
-/** Handle fb sms sub-command */
-async function handleSms(api, rawApi, event, args, threadID, messageID, hasReaction) {
-  const target  = args[1] || "";
-  const msgText = args.slice(2).join(" ");
-
-  if (!target || !msgText) {
-    return api.sendMessage(
-      "⚠️ Usage:\n  fb sms <n> <text>      — DM friend #n\n  fb sms all <text>    — Broadcast",
-      threadID, messageID
-    );
-  }
-
-  if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
-
-  const { data: friends, error } = await fetchFriendsList(rawApi);
-
-  if (!friends || friends.length === 0) {
-    if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-    const errMsg = error
-      ? `❌ Could not fetch friends: ${error}`
-      : "👥 Friends list is empty.";
-    return api.sendMessage(errMsg, threadID, messageID);
-  }
-
-  // Sort A-Z to match list menu numbering
-  const sorted = friends.slice().sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
-
-  // ── Broadcast to all ──────────────────────────────────
-  if (target.toLowerCase() === "all") {
-    await api.sendMessage(`📤 Sending to all ${sorted.length} friends...\n"${msgText}"`, threadID, messageID);
-
-    let success = 0, failed = 0;
-
-    for (let i = 0; i < sorted.length; i++) {
-      const friend = sorted[i];
-      try {
-        await api.sendMessage(msgText, friend.userID);
-        success++;
-      } catch (err) {
-        console.error(`[fbcontrol] sms all failed for ${friend.userID}:`, err.message);
-        failed++;
+      if (session.type === "list") {
+        const handled = await doListAction(api, rawApi, session, input, threadID);
+        if (handled) {
+          sessionResetTimer(senderID);
+          return;
+        }
       }
-      // Progress update every 10 sends
-      if ((success + failed) % 10 === 0) {
-        await api.sendMessage(`⏳ ${success + failed}/${sorted.length}  ✔ ${success}  ❌ ${failed}`, threadID);
+
+      if (session.type === "block") {
+        const handled = await doBlockAction(api, rawApi, session, input, threadID);
+        if (handled) {
+          sessionResetTimer(senderID);
+          return;
+        }
       }
-      await new Promise(r => setTimeout(r, 600)); // Facebook rate limit
+
+      if (session.type === "mr") {
+        const handled = await doMRAction(api, rawApi, session, input, threadID);
+        if (handled) {
+          sessionResetTimer(senderID);
+          return;
+        }
+      }
+
+      if (session.type === "inbox") {
+        const msgMatch = input.match(/^(\d+)msg$/i);
+        if (msgMatch) {
+          const num = parseInt(msgMatch[1]);
+          const t = session.data[num - 1];
+          if (!t) return api.sendMessage(`❌ No thread #${num}.`, threadID);
+          api.sendMessage(`💬 Thread: ${t.name}\nID: ${t.threadID}`, threadID);
+          sessionResetTimer(senderID);
+          return;
+        }
+      }
+
+      // If we got here with an active session, just ignore (don't show error)
+      return;
     }
 
-    if (hasReaction) api.setMessageReaction(failed === 0 ? "✅" : "⚠️", messageID, () => {}, true);
-    return api.sendMessage(
-      `📊 𝗕𝗿𝗼𝗮𝗱𝗰𝗮𝘀𝘁 𝗖𝗼𝗺𝗽𝗹𝗲𝘁𝗲\n${DIVIDER}\n✔ Success: ${success}\n❌ Failed: ${failed}\n\nCompleted.`,
-      threadID, messageID
-    );
-  }
+    // ── FRESH COMMANDS ─────────────────────────────────
 
-  // ── Send to friend #n ─────────────────────────────────
-  const idx = parseInt(target, 10);
-  if (isNaN(idx) || idx < 1 || idx > sorted.length) {
-    if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-    return api.sendMessage(
-      `⚠️ Invalid number: "${target}"\nYou have ${sorted.length} friends. Use 1-${sorted.length}.`,
-      threadID, messageID
-    );
-  }
+    // fbcontrol list — show help menu
+    if (sub === "list" && args.length === 1) {
+      // Check if it's actually asking for the help menu or friends list
+      // "fb list" = friends list, no ambiguity
+    }
 
-  const friend = sorted[idx - 1];
-  try {
-    await api.sendMessage(msgText, friend.userID);
-    if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-    return api.sendMessage(
-      `✅ Message sent to ${friend.fullName} (#${idx}).\n💬 "${msgText}"`,
-      threadID, messageID
-    );
-  } catch (err) {
-    console.error("[fbcontrol] sms send error:", err.message);
-    if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-    return api.sendMessage(`❌ Failed to send to ${friend.fullName}: ${err.message}`, threadID, messageID);
+    // fb (no args) — show help if also no session
+    if (!sub || sub === "help") {
+      return api.sendMessage(buildHelpMenu(), threadID);
+    }
+
+    // fbcontrol list = full command guide
+    if (sub === "fbcontrol" || (sub === "list" && args[1] === undefined)) {
+      // "fb list" without a session = show friends list
+      // handled below
+    }
+
+    // ── fb list ─────────────────────────────────────────
+    if (sub === "list") {
+      api.sendMessage("⏳ Loading friends list...", threadID);
+      const result = await fetchFriendsList(rawApi);
+      if (result.error && result.data.length === 0)
+        return api.sendMessage(`❌ ${result.error}`, threadID);
+
+      sessionCreate(senderID, "list", result.data, threadID);
+      const session2 = sessionGet(senderID);
+      const msg2 = buildListMenu(result.data, 0);
+      await sendPage(api, threadID, msg2, session2);
+      return;
+    }
+
+    // ── fb block ────────────────────────────────────────
+    if (sub === "block") {
+      api.sendMessage("⏳ Loading block list (this may take a moment)...", threadID);
+      const result = await fetchBlockList(rawApi);
+      if (result.error && result.data.length === 0)
+        return api.sendMessage(`❌ ${result.error}`, threadID);
+
+      sessionCreate(senderID, "block", result.data, threadID);
+      const session2 = sessionGet(senderID);
+      const msg2 = buildBlockMenu(result.data, 0);
+      await sendPage(api, threadID, msg2, session2);
+      return;
+    }
+
+    // ── fb inbox ─────────────────────────────────────────
+    if (sub === "inbox") {
+      api.sendMessage("⏳ Loading inbox...", threadID);
+      const result = await fetchInbox(api);
+      if (result.error && result.data.length === 0)
+        return api.sendMessage(`❌ ${result.error}`, threadID);
+
+      sessionCreate(senderID, "inbox", result.data, threadID);
+      const session2 = sessionGet(senderID);
+      const msg2 = buildInboxMenu(result.data, 0);
+      await sendPage(api, threadID, msg2, session2);
+      return;
+    }
+
+    // ── fb mr (Message Requests) ─────────────────────────
+    if (sub === "mr") {
+      api.sendMessage("⏳ Loading message requests...", threadID);
+      const result = await fetchMessageRequests(api);
+      if (result.error && result.data.length === 0)
+        return api.sendMessage(`❌ ${result.error}`, threadID);
+
+      sessionCreate(senderID, "mr", result.data, threadID);
+      const session2 = sessionGet(senderID);
+      const msg2 = buildMRMenu(result.data, 0);
+      await sendPage(api, threadID, msg2, session2);
+      return;
+    }
+
+    // ── fb (friend requests) ─────────────────────────────
+    if (sub === "fb" || (!sub && args.length === 0)) {
+      // This would be triggered by just "fb" — but sub already IS "fb" from args[0]
+      // Actually: command trigger is "fb", args[0] would be the first word after "fb"
+      // If user sends "fb" alone, args=[], sub=""
+    }
+
+    // Default: show friend requests if no recognized subcommand
+    api.sendMessage("⏳ Loading friend requests...", threadID);
+    const result = await fetchFriendRequests(rawApi);
+    if (result.error && result.data.length === 0)
+      return api.sendMessage(`❌ ${result.error}`, threadID);
+
+    sessionCreate(senderID, "req", result.data, threadID);
+    const session2 = sessionGet(senderID);
+    const msg2 = buildReqMenu(result.data, 0);
+    await sendPage(api, threadID, msg2, session2);
   }
-}
+};
