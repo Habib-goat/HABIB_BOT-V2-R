@@ -2,8 +2,17 @@
  * ╔══════════════════════════════════════════════════════════════╗
  * ║         FACEBOOK ACCOUNT MANAGER — RIYAD FRAMEWORK           ║
  * ║  Command: fbcontrol  |  Aliases: fb, fbc, fbm                ║
- * ║  Version: 3.4.0                                              ║
+ * ║  Version: 3.5.0                                              ║
  * ╚══════════════════════════════════════════════════════════════╝
+ *
+ * CHANGES IN 3.5.0:
+ *  - REMOVED fb block, fb s (story) commands
+ *  - FIXED react-to-next-page: sendPage now uses await (Promise) not callback,
+ *    ensuring our fbcontrol reaction registration happens AFTER the adapter
+ *    registers __global__, so ours correctly overwrites it.
+ *  - FIXED fb inbox: uses ["INBOX"] tag + Promise.race timeout (no more freeze)
+ *  - FIXED fb p profile picture: accepts image attachments + uses httpsGet
+ *    with bot cookies instead of plain axios (avoids 429 errors)
  */
 "use strict";
 
@@ -27,6 +36,7 @@ function B(str) {
 
 // ─────────────────────────────────────────────
 //  RAW API HELPER
+//  api = FcaMessengerAdapter  |  api.api = raw fca-riyad object
 // ─────────────────────────────────────────────
 function getRawApi(api) {
   if (api && api.api && typeof api.api === "object") return api.api;
@@ -74,6 +84,17 @@ function unsendMsg(api, msgID) {
 
 // ─────────────────────────────────────────────
 //  SEND PAGE
+//
+//  KEY FIX: Use await api.sendMessage() (Promise, NO callback).
+//
+//  The adapter's sendMessage flow is:
+//    1. FCA sends message → callback fires
+//    2. Adapter calls OUR callback (if provided) ← OLD code registered here
+//    3. Adapter calls reactionManager.register(__global__)
+//    4. Adapter calls resolve() ← await returns here
+//
+//  OLD approach (callback): we registered at step 2, __global__ at step 3 → OVERWRITTEN
+//  NEW approach (await Promise): we register after step 4 → OVERWRITES __global__ ✓
 // ─────────────────────────────────────────────
 async function sendPage(api, threadID, text, session, replyManager, reactionManager) {
   if (session.lastMsgID) {
@@ -82,21 +103,28 @@ async function sendPage(api, threadID, text, session, replyManager, reactionMana
     session.lastMsgID = null;
   }
 
-  return new Promise((resolve) => {
-    api.sendMessage(text, threadID, (err, info) => {
-      if (!err && info && info.messageID) {
-        session.lastMsgID = info.messageID;
-        const payload = { commandName: "fbcontrol", authorID: session.authorID, sessionType: session.type };
-        try { replyManager.set(info.messageID, payload); } catch (_) {}
-        try { reactionManager.register(info.messageID, payload); } catch (_) {}
-      }
-      resolve(info);
-    });
-  });
+  try {
+    // Promise form — resolves AFTER adapter registers __global__
+    const info = await api.sendMessage(text, threadID);
+    if (info && info.messageID) {
+      session.lastMsgID = info.messageID;
+      const payload = {
+        commandName: "fbcontrol",
+        authorID: session.authorID,
+        sessionType: session.type
+      };
+      // These overwrite __global__ because we run AFTER resolve()
+      try { replyManager.set(info.messageID, payload); } catch (_) {}
+      try { reactionManager.register(info.messageID, payload); } catch (_) {}
+    }
+    return info;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ─────────────────────────────────────────────
-//  PROFILE PICTURE HELPER
+//  PROFILE PICTURE CARD HELPER
 // ─────────────────────────────────────────────
 async function sendProfileCard(api, uid, name, vanity, threadID) {
   const cacheDir = path.join(__dirname, "cache");
@@ -154,10 +182,6 @@ ${D}
    └ ${B("Friends List Manager")}
    └ ${B("Accept / Unfriend / Block / Message")}
 
-🚫 fb block
-   └ ${B("Block List Manager")}
-   └ ${B("View & Unblock users")}
-
 📨 fb inbox
    └ ${B("Recent DM Conversations")}
 
@@ -179,11 +203,6 @@ ${D}
    └ ${B("View your profile info")}
    └ ${B("Reply with image to change DP")}
 
-📖 fb s [<emoji>]
-   └ ${B("View story list")}
-   └ ${B("Reply: <n> <emoji> → react to story")}
-   └ ${B("React ❤️ to msg → next page")}
-
 ${D}
 ${B("🕹️ NAVIGATION (reply to bot's menu OR react)")}
 ${D}
@@ -195,9 +214,8 @@ ${D}
   Reply: <n>b      → ${B("Block")}
   Reply: <n>uf     → ${B("Unfriend (list)")}
   Reply: <n>bl     → ${B("Block (list)")}
-  Reply: <n>u      → ${B("Unblock (block list)")}
   Reply: <n>msg [text] → ${B("Open / Send message")}
-  Reply: bulk a/d/b/uf/bl/u → ${B("Bulk actions")}
+  Reply: bulk a/d/b/uf/bl → ${B("Bulk actions")}
   Reply: s <name>  → ${B("Search (list only)")}
   Reply: sort az / sort new → ${B("Sort (list)")}
 ${D}`
@@ -270,41 +288,6 @@ function buildListMenu(friends, page) {
   msg += `  <n>a ${B("Accept")}  <n> ${B("View Profile")}\n`;
   msg += `  s <name> → ${B("Search")}\n`;
   msg += `  sort az / sort new\n`;
-  msg += `${D}\n`;
-  if (page + 1 >= tp) {
-    msg += `👍✅ ${B("এটাই শেষ পেজ — আর পেজ নেই")}\n`;
-  } else {
-    msg += `  ❤️ React → ${B("Next")}   📩 Reply 0 → ${B("Prev")}\n`;
-  }
-  return msg;
-}
-
-function buildBlockMenu(blocked, page) {
-  const tp = Math.max(1, Math.ceil(blocked.length / PER_PAGE));
-  const items = blocked.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
-  const start = page * PER_PAGE;
-
-  let msg = `╔══════════════════════════╗\n`;
-  msg += `║  ${B("🚫 BLOCK LIST")}            ║\n`;
-  msg += `║  ${B("Page")} ${B(String(page + 1))} / ${B(String(tp))} │ ${B("Total:")} ${B(String(blocked.length))}  ║\n`;
-  msg += `╚══════════════════════════╝\n`;
-  msg += `${D}\n`;
-
-  if (items.length === 0) {
-    msg += `\n  📭 No blocked users.\n\n`;
-  } else {
-    items.forEach((u, i) => {
-      const num = start + i + 1;
-      msg += `\n${B(String(num))}. 👤 ${B(u.name)}\n`;
-      msg += `   🆔 UID: ${u.uid}\n`;
-      msg += `   ✅u Unblock  💬msg\n`;
-    });
-  }
-
-  msg += `\n${D}\n`;
-  msg += `${B("🕹️ CONTROLS")} (reply to this msg)\n`;
-  msg += `  <n>u Unblock  <n>msg Message\n`;
-  msg += `  bulk u → Bulk unblock\n`;
   msg += `${D}\n`;
   if (page + 1 >= tp) {
     msg += `👍✅ ${B("এটাই শেষ পেজ — আর পেজ নেই")}\n`;
@@ -388,41 +371,6 @@ function buildMRMenu(requests, page) {
   return msg;
 }
 
-function buildStoryMenu(stories, page) {
-  const tp = Math.max(1, Math.ceil(stories.length / PER_PAGE));
-  const items = stories.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
-  const start = page * PER_PAGE;
-
-  let msg = `╔══════════════════════════╗\n`;
-  msg += `║  ${B("📖 STORY LIST")}            ║\n`;
-  msg += `║  ${B("Page")} ${B(String(page + 1))} / ${B(String(tp))} │ ${B("Total:")} ${B(String(stories.length))}  ║\n`;
-  msg += `╚══════════════════════════╝\n`;
-  msg += `${D}\n`;
-
-  if (items.length === 0) {
-    msg += `\n  📭 No stories found.\n\n`;
-  } else {
-    items.forEach((s, i) => {
-      const num = start + i + 1;
-      msg += `\n${B(String(num))}. 👤 ${B(s.name)}\n`;
-      if (s.time) msg += `   🕐 ${s.time}\n`;
-      msg += `   💬 Reply: ${num} ❤️ → react & seen\n`;
-    });
-  }
-
-  msg += `\n${D}\n`;
-  msg += `${B("🕹️ CONTROLS")} (reply to this msg)\n`;
-  msg += `  <n> <emoji> → React + mark seen\n`;
-  msg += `  Example: 1 ❤️  or  2 😆\n`;
-  msg += `${D}\n`;
-  if (page + 1 >= tp) {
-    msg += `👍✅ ${B("এটাই শেষ পেজ — আর পেজ নেই")}\n`;
-  } else {
-    msg += `  ❤️ React → ${B("Next")}   📩 Reply 0 → ${B("Prev")}\n`;
-  }
-  return msg;
-}
-
 // ─────────────────────────────────────────────
 //  COOKIE / HTTP HELPERS
 // ─────────────────────────────────────────────
@@ -470,66 +418,45 @@ function httpsGet(url, cookieStr, depth = 0) {
   });
 }
 
-// Generic POST helper for story reactions
-function httpsPost(url, cookieStr, postData, referer) {
+// Binary image downloader — uses bot cookies (no 429 from Facebook CDN)
+function downloadImageBuffer(url, cookieStr, depth = 0) {
+  if (depth > 4) return Promise.reject(new Error("Too many redirects"));
   const https = require("https");
-  const body = Object.keys(postData).map(k => `${encodeURIComponent(k)}=${encodeURIComponent(postData[k])}`).join("&");
+  const http = require("http");
   const urlObj = new URL(url);
+  const mod = urlObj.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
-    const req = https.request({
+    const req = mod.request({
       hostname: urlObj.hostname,
       path: urlObj.pathname + urlObj.search,
-      method: "POST",
+      method: "GET",
       headers: {
         "Cookie": cookieStr || "",
-        "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/120.0.6099.230 Mobile Safari/537.36",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Content-Length": Buffer.byteLength(body),
-        "Accept": "text/html,application/xhtml+xml",
-        "Referer": referer || "https://mbasic.facebook.com/",
-        "Origin": "https://mbasic.facebook.com"
+        "User-Agent": "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36",
+        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+        "Referer": "https://www.facebook.com/"
       }
     }, (res) => {
-      let data = "";
-      res.on("data", chunk => data += chunk);
-      res.on("end", () => resolve({ status: res.statusCode, body: data }));
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        const next = res.headers.location.startsWith("http")
+          ? res.headers.location
+          : `${urlObj.protocol}//${urlObj.hostname}${res.headers.location}`;
+        return downloadImageBuffer(next, cookieStr, depth + 1).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`HTTP ${res.statusCode} from image URL`));
+      }
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => {
+        const buf = Buffer.concat(chunks);
+        if (buf.length < 500) return reject(new Error("Downloaded file too small — may not be a valid image"));
+        resolve(buf);
+      });
     });
     req.on("error", reject);
-    req.setTimeout(12000, () => { req.destroy(); reject(new Error("Timeout")); });
-    req.write(body);
+    req.setTimeout(20000, () => { req.destroy(); reject(new Error("Download timeout")); });
     req.end();
-  });
-}
-
-// ─────────────────────────────────────────────
-//  PROMISE/CALLBACK HYBRID WRAPPER
-//  Handles both fca callback-based and promise-based getThreadList
-// ─────────────────────────────────────────────
-function callWithCallbackOrPromise(fn, ...args) {
-  return new Promise((resolve, reject) => {
-    const TIMEOUT = 20000;
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (!settled) { settled = true; reject(new Error("Timeout: API call took too long")); }
-    }, TIMEOUT);
-
-    function done(err, data) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (err) return reject(err);
-      resolve(data);
-    }
-
-    try {
-      const ret = fn(...args, done);
-      // If the function returned a Promise (Promise-based adapter)
-      if (ret && typeof ret.then === "function") {
-        ret.then(data => done(null, data)).catch(err => done(err));
-      }
-    } catch (e) {
-      done(e);
-    }
   });
 }
 
@@ -591,161 +518,25 @@ async function fetchFriendsList(rawApi) {
 }
 
 // ─────────────────────────────────────────────
-//  FIXED: fetchBlockList — Multi-strategy scraper
-//  Handles Facebook's changing page format with 5 different extraction methods
-// ─────────────────────────────────────────────
-async function fetchBlockList(rawApi) {
-  const cookieStr = buildCookieString(rawApi);
-  if (!cookieStr) return { data: [], error: "Could not read cookies." };
-
-  const urls = [
-    "https://mbasic.facebook.com/settings/blocking/",
-    "https://mbasic.facebook.com/privacy/blocked",
-    "https://mbasic.facebook.com/settings/?section=blocking"
-  ];
-
-  for (const url of urls) {
-    try {
-      const res = await httpsGet(url, cookieStr);
-      const html = res.body || "";
-      if (res.status !== 200 || html.length < 300) continue;
-
-      const results = [];
-
-      // Strategy 1: unblock href contains UID directly
-      // e.g. href="/nfx/basic/direct_actions/?uid=12345&..."
-      // or href="/settings/unblock/?uid=12345"
-      const unblockHrefRe = /href="[^"]*(?:unblock|block)[^"]*[?&](?:uid|id)=(\d+)[^"]*"/gi;
-      let m;
-      while ((m = unblockHrefRe.exec(html)) !== null) {
-        const uid = m[1];
-        if (results.find(r => r.uid === uid)) continue;
-        // Find name: scan the HTML before this match for a person's name
-        const before = html.slice(Math.max(0, m.index - 1000), m.index);
-        const name = extractNearestName(before, uid);
-        results.push({ uid, name });
-      }
-
-      // Strategy 2: Split by "Unblock" text and look for UIDs before each occurrence
-      if (results.length === 0) {
-        const unblockParts = html.split(/(?:Unblock|unblock)/);
-        for (let i = 0; i < unblockParts.length - 1; i++) {
-          const chunk = unblockParts[i].slice(-1200);
-
-          // Look for UID in profile links (profile.php?id=UID)
-          const profileRe = /profile\.php\?id=(\d+)/g;
-          let uidMatch = null;
-          let pm;
-          while ((pm = profileRe.exec(chunk)) !== null) uidMatch = pm[1];
-
-          // Also look for /UID patterns in href
-          if (!uidMatch) {
-            const directRe = /href="\/(\d{8,})[?"/]/g;
-            let dm;
-            while ((dm = directRe.exec(chunk)) !== null) uidMatch = dm[1];
-          }
-
-          // Look for name in anchor tags
-          const nameRe = /<a[^>]*href="[^"]*(?:profile|\/\d)[^"]*"[^>]*>([^<]{2,80})<\/a>/gi;
-          let lastName = null, nm;
-          while ((nm = nameRe.exec(chunk)) !== null) {
-            const candidate = nm[1].replace(/&amp;/g, "&").replace(/&#039;/g, "'").trim();
-            if (isPersonName(candidate)) lastName = candidate;
-          }
-
-          if (uidMatch && !results.find(r => r.uid === uidMatch)) {
-            results.push({ uid: uidMatch, name: lastName || uidMatch });
-          }
-        }
-      }
-
-      // Strategy 3: Look for form actions with uid parameter
-      if (results.length === 0) {
-        const formRe = /<form[^>]*action="[^"]*[?&](?:uid|id)=(\d+)[^"]*"[^>]*>([\s\S]{0,1500}?)<\/form>/gi;
-        while ((m = formRe.exec(html)) !== null) {
-          const uid = m[1];
-          if (results.find(r => r.uid === uid)) continue;
-          const formContent = m[0];
-          // Check if this form is an unblock form
-          if (!formContent.match(/unblock/i)) continue;
-          const before = html.slice(Math.max(0, m.index - 500), m.index);
-          const name = extractNearestName(before, uid);
-          results.push({ uid, name });
-        }
-      }
-
-      // Strategy 4: JSON data embedded in page scripts
-      if (results.length === 0) {
-        const jsonPatterns = [
-          /"(?:userID|uid|id)"\s*:\s*"(\d+)"[^}]{0,300}"(?:name|fullName|userName)"\s*:\s*"([^"]+)"/g,
-          /"(?:name|fullName)"\s*:\s*"([^"]+)"[^}]{0,200}"(?:userID|uid|id)"\s*:\s*"(\d+)"/g
-        ];
-        for (const re of jsonPatterns) {
-          while ((m = re.exec(html)) !== null) {
-            let uid, name;
-            if (re.source.startsWith('"(?:userID')) { uid = m[1]; name = m[2]; }
-            else { name = m[1]; uid = m[2]; }
-            name = name.replace(/\\u[\da-f]{4}/gi, c => String.fromCharCode(parseInt(c.slice(2), 16))).trim();
-            if (!results.find(r => r.uid === uid) && uid.length >= 5) results.push({ uid, name });
-          }
-          if (results.length > 0) break;
-        }
-      }
-
-      // Strategy 5: data-store or data-gt attributes with userID
-      if (results.length === 0) {
-        const dataRe = /data-store="[^"]*&quot;userID&quot;:&quot;(\d+)&quot;/gi;
-        while ((m = dataRe.exec(html)) !== null) {
-          const uid = m[1];
-          if (!results.find(r => r.uid === uid)) {
-            const before = html.slice(Math.max(0, m.index - 400), m.index);
-            const name = extractNearestName(before, uid);
-            results.push({ uid, name });
-          }
-        }
-      }
-
-      if (results.length > 0) return { data: results, error: null };
-
-    } catch (_) { /* try next URL */ }
-  }
-
-  return {
-    data: [],
-    error: "Block list could not be loaded. Facebook has changed its page format.\nTry checking manually at: facebook.com/settings?section=blocking"
-  };
-}
-
-// Helper: find nearest person name in HTML snippet
-function extractNearestName(html, fallback) {
-  const nameRe = /<[^>]*>([A-Za-z\u00C0-\u024F\u0600-\u06FF][^<\n]{1,60})<\/[^>]*>/g;
-  let m, lastName = fallback;
-  while ((m = nameRe.exec(html)) !== null) {
-    const candidate = m[1].replace(/&amp;/g, "&").replace(/&#039;/g, "'").trim();
-    if (isPersonName(candidate)) lastName = candidate;
-  }
-  return lastName;
-}
-
-function isPersonName(str) {
-  if (!str || str.length < 2 || str.length > 80) return false;
-  const skip = /^(Unblock|Block|Settings|More|Facebook|Privacy|Blocking|Actions|Home|Help|Menu|Log|Sign|Create|Find|Search|Profile|Photos|Videos|About|Friends|Groups|See|Add|Edit|Delete|Report|Share|Like|Comment|Next|Prev|Page|Back|Close)$/i;
-  return !skip.test(str.trim());
-}
-
-// ─────────────────────────────────────────────
-//  FIXED: fetchInbox — handles callback AND promise-based getThreadList
+//  FIXED: fetchInbox
+//  - Uses ["INBOX"] tag explicitly (empty [] caused hangs)
+//  - Promise.race with 20s timeout so it never freezes forever
 // ─────────────────────────────────────────────
 async function fetchInbox(api) {
   try {
     if (typeof api.getThreadList !== "function")
-      return { data: [], error: "getThreadList not available." };
+      return { data: [], error: "getThreadList is not available on this API." };
 
     let threads;
     try {
-      threads = await callWithCallbackOrPromise(
-        (cb) => api.getThreadList(30, null, [], cb)
-      );
+      threads = await Promise.race([
+        api.getThreadList(30, null, ["INBOX"]),
+        new Promise((_, rej) =>
+          setTimeout(() =>
+            rej(new Error("Timeout — Facebook did not respond. Try again or check your connection.")),
+          20000)
+        )
+      ]);
     } catch (e) {
       return { data: [], error: e.message || String(e) };
     }
@@ -766,7 +557,7 @@ async function fetchInbox(api) {
 }
 
 // ─────────────────────────────────────────────
-//  FIXED: fetchMessageRequests — same hybrid approach
+//  fetchMessageRequests
 // ─────────────────────────────────────────────
 async function fetchMessageRequests(api) {
   try {
@@ -775,9 +566,10 @@ async function fetchMessageRequests(api) {
 
     async function getFolder(folder, limit) {
       try {
-        return await callWithCallbackOrPromise(
-          (cb) => api.getThreadList(limit, null, [folder], cb)
-        );
+        return await Promise.race([
+          api.getThreadList(limit, null, [folder]),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), 20000))
+        ]);
       } catch (_) { return []; }
     }
 
@@ -811,138 +603,7 @@ function buildMRList(threads, section) {
 }
 
 // ─────────────────────────────────────────────
-//  NEW: fetchStories — scrape story list from mbasic Facebook
-// ─────────────────────────────────────────────
-async function fetchStories(rawApi) {
-  const cookieStr = buildCookieString(rawApi);
-  if (!cookieStr) return { data: [], error: "Could not read cookies." };
-
-  const urls = [
-    "https://mbasic.facebook.com/",
-    "https://mbasic.facebook.com/?sk=h_chr"
-  ];
-
-  for (const url of urls) {
-    try {
-      const res = await httpsGet(url, cookieStr);
-      const html = res.body || "";
-      if (res.status !== 200 || html.length < 300) continue;
-
-      const results = [];
-
-      // Look for story links: /stories/viewer/?story_fbid=...
-      // mbasic format: href="/stories/viewer/?story_fbid=XXXXX&id=YYYYY"
-      const storyRe = /href="(\/stories\/[^"]+)"/gi;
-      let m;
-      while ((m = storyRe.exec(html)) !== null) {
-        const storyPath = m[1];
-        const storyUrl = `https://mbasic.facebook.com${storyPath.replace(/&amp;/g, "&")}`;
-
-        // Extract story_fbid and owner id from URL
-        const fbidMatch = storyPath.match(/story_fbid=(\d+)/);
-        const ownerMatch = storyPath.match(/[?&]id=(\d+)/);
-        const storyFbid = fbidMatch ? fbidMatch[1] : null;
-        const ownerID = ownerMatch ? ownerMatch[1] : null;
-        if (!storyFbid) continue;
-
-        // Find the name in the HTML near this story link
-        const before = html.slice(Math.max(0, m.index - 600), m.index);
-        const name = extractNearestName(before, ownerID || storyFbid);
-
-        // Try to find timestamp
-        const timeRe = /(\d+\s*(?:hour|min|sec|hr)[s]?\s*ago|\d{1,2}:\d{2}\s*(?:AM|PM)?)/i;
-        const afterChunk = html.slice(m.index, m.index + 200);
-        const timeMatch = afterChunk.match(timeRe);
-        const time = timeMatch ? timeMatch[1] : null;
-
-        if (!results.find(r => r.storyFbid === storyFbid)) {
-          results.push({ storyFbid, ownerID, storyUrl, name, time });
-        }
-      }
-
-      // Alternative: look for status story links
-      if (results.length === 0) {
-        // Try parsing JSON embedded stories data
-        const jsonStoryRe = /"story_fbid"\s*:\s*"(\d+)"[^}]{0,300}"(?:name|author)"\s*:\s*"([^"]+)"/g;
-        while ((m = jsonStoryRe.exec(html)) !== null) {
-          const storyFbid = m[1];
-          const name = m[2].replace(/\\u[\da-f]{4}/gi, c => String.fromCharCode(parseInt(c.slice(2), 16))).trim();
-          if (!results.find(r => r.storyFbid === storyFbid)) {
-            results.push({ storyFbid, ownerID: null, storyUrl: null, name, time: null });
-          }
-        }
-      }
-
-      if (results.length > 0) return { data: results, error: null };
-    } catch (_) { /* try next */ }
-  }
-
-  return { data: [], error: "No stories found or stories feed could not be loaded." };
-}
-
-// ─────────────────────────────────────────────
-//  NEW: reactToStory — mark story seen + send reaction
-// ─────────────────────────────────────────────
-async function reactToStory(rawApi, story, emoji) {
-  const cookieStr = buildCookieString(rawApi);
-  if (!cookieStr) throw new Error("Could not read cookies.");
-  if (!story.storyUrl && !story.storyFbid) throw new Error("No story URL available.");
-
-  const storyUrl = story.storyUrl || `https://mbasic.facebook.com/stories/viewer/?story_fbid=${story.storyFbid}&id=${story.ownerID || ""}`;
-
-  // Step 1: Visit the story page (this marks it as seen)
-  const seenRes = await httpsGet(storyUrl, cookieStr);
-  const html = seenRes.body || "";
-
-  // Step 2: Look for the reaction form/endpoint in the page
-  // mbasic typically has a form like:
-  // <form action="/reactions/react/?ft_ent_identifier=STORY_FBID&..."
-  const reactFormRe = /action="([^"]*(?:react|reaction)[^"]*)"/i;
-  const formMatch = html.match(reactFormRe);
-
-  // Map emoji to Facebook reaction type
-  const emojiToReaction = {
-    "❤️": "LOVE", "❤": "LOVE",
-    "😆": "HAHA", "😂": "HAHA",
-    "😮": "WOW", "😯": "WOW",
-    "😢": "SAD", "😭": "SAD",
-    "😡": "ANGRY", "🤬": "ANGRY",
-    "👍": "LIKE", "👎": "NONE"
-  };
-  const reactionType = emojiToReaction[emoji] || "LOVE";
-
-  if (formMatch) {
-    const actionUrl = formMatch[1].replace(/&amp;/g, "&");
-    const fullUrl = actionUrl.startsWith("http") ? actionUrl : `https://mbasic.facebook.com${actionUrl}`;
-
-    // Extract fb_dtsg token from page
-    const dtsgMatch = html.match(/name="fb_dtsg"\s+value="([^"]+)"/i);
-    const dtsg = dtsgMatch ? dtsgMatch[1] : "";
-
-    const jadaMatch = html.match(/name="jazoest"\s+value="([^"]+)"/i);
-    const jazoest = jadaMatch ? jadaMatch[1] : "";
-
-    try {
-      await httpsPost(fullUrl, cookieStr, {
-        fb_dtsg: dtsg,
-        jazoest: jazoest,
-        reaction: reactionType,
-        ft_ent_identifier: story.storyFbid || "",
-        __user: story.ownerID || ""
-      }, storyUrl);
-      return { success: true, seen: true, reacted: true };
-    } catch (_) {
-      // Mark seen but reaction form failed
-      return { success: true, seen: true, reacted: false };
-    }
-  }
-
-  // Even if no reaction form found, story was seen by visiting
-  return { success: true, seen: true, reacted: false };
-}
-
-// ─────────────────────────────────────────────
-//  NEW: fetchOwnProfile — get bot account's own profile info
+//  fetchOwnProfile
 // ─────────────────────────────────────────────
 async function fetchOwnProfile(api, rawApi) {
   // Method 1: getCurrentUserID from fca
@@ -950,9 +611,11 @@ async function fetchOwnProfile(api, rawApi) {
     if (typeof rawApi.getCurrentUserID === "function") {
       const uid = rawApi.getCurrentUserID();
       if (uid) {
-        // Try to get name from getUserInfo
         if (typeof rawApi.getUserInfo === "function") {
-          const info = await callWithCallbackOrPromise((cb) => rawApi.getUserInfo(uid, cb));
+          const info = await Promise.race([
+            new Promise((res, rej) => rawApi.getUserInfo(uid, (e, d) => e ? rej(e) : res(d))),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), 10000))
+          ]);
           const userInfo = info && info[uid];
           if (userInfo) {
             return {
@@ -989,33 +652,57 @@ async function fetchOwnProfile(api, rawApi) {
 }
 
 // ─────────────────────────────────────────────
-//  NEW: changeProfilePicture — change bot's profile picture
+//  FIXED: changeProfilePicture
+//  Uses downloadImageBuffer (with bot cookies) instead of axios.
+//  This avoids 429 errors from Facebook CDN URLs.
+//  Also accepts image URL from Messenger attachment events.
 // ─────────────────────────────────────────────
-async function changeProfilePicture(api, rawApi, imageUrl, threadID) {
-  // Method 1: use fca's changeAvatar if available
-  if (typeof rawApi.changeAvatar === "function") {
-    const cacheDir = path.join(__dirname, "cache");
-    await fs.ensureDir(cacheDir);
-    const filePath = path.join(cacheDir, `new_dp_${Date.now()}.jpg`);
+async function changeProfilePicture(rawApi, imageUrl) {
+  if (typeof rawApi.changeAvatar !== "function") {
+    throw new Error(
+      "changeAvatar is not supported in this fca-riyad version.\n" +
+      "Please update fca-riyad or change your profile picture manually."
+    );
+  }
+
+  const cacheDir = path.join(__dirname, "cache");
+  await fs.ensureDir(cacheDir);
+  const filePath = path.join(cacheDir, `dp_${Date.now()}.jpg`);
+
+  let imgBuffer;
+  const cookieStr = buildCookieString(rawApi) || "";
+
+  // Try 1: download with bot cookies (works for Facebook/fbcdn URLs)
+  try {
+    imgBuffer = await downloadImageBuffer(imageUrl, cookieStr);
+  } catch (e1) {
+    // Try 2: download without cookies (works for external URLs like imgur, etc.)
     try {
-      const imgRes = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 10000 });
-      await fs.writeFile(filePath, imgRes.data);
-      await new Promise((resolve, reject) => {
-        rawApi.changeAvatar(fs.createReadStream(filePath), (err) => {
-          fs.remove(filePath).catch(() => {});
-          if (err) return reject(err);
-          resolve();
-        });
-      });
-      return { success: true, method: "changeAvatar" };
-    } catch (e) {
-      fs.remove(filePath).catch(() => {});
-      throw e;
+      imgBuffer = await downloadImageBuffer(imageUrl, "");
+    } catch (e2) {
+      throw new Error(
+        `Could not download the image.\n` +
+        `Try 1 (with cookies): ${e1.message}\n` +
+        `Try 2 (without cookies): ${e2.message}`
+      );
     }
   }
 
-  // Method 2: Inform user that changeAvatar is not supported
-  throw new Error("changeAvatar is not supported in this bot version. Please use the Facebook app to change profile picture.");
+  await fs.writeFile(filePath, imgBuffer);
+
+  try {
+    await new Promise((resolve, reject) => {
+      rawApi.changeAvatar(fs.createReadStream(filePath), (err) => {
+        fs.remove(filePath).catch(() => {});
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+    return { success: true };
+  } catch (e) {
+    fs.remove(filePath).catch(() => {});
+    throw e;
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -1213,50 +900,6 @@ async function doListAction(api, rawApi, session, input, threadID, replyManager,
   return false;
 }
 
-async function doBlockAction(api, rawApi, session, input, threadID) {
-  const uMatch = input.match(/^(\d+)u$/i);
-  const msgMatch = input.match(/^(\d+)msg(?:\s+(.+))?$/i);
-  const bulkMatch = input.match(/^bulk\s+u$/i);
-  if (!uMatch && !msgMatch && !bulkMatch) return false;
-  const items = session.data;
-
-  if (bulkMatch) {
-    const pageItems = items.slice(session.page * PER_PAGE, (session.page + 1) * PER_PAGE);
-    let done = 0;
-    for (const u of pageItems) {
-      try { await new Promise((res, rej) => rawApi.changeBlockedStatus(u.uid, false, e => e ? rej(e) : res())); done++; } catch (_) {}
-    }
-    session.data = items.filter(u => !pageItems.find(p => p.uid === u.uid));
-    api.sendMessage(`✅ Bulk Unblocked: ${done} done.`, threadID);
-    return true;
-  }
-  if (uMatch) {
-    const num = parseInt(uMatch[1]); const target = items[num - 1];
-    if (!target) { api.sendMessage(`❌ No user #${num}.`, threadID); return true; }
-    try {
-      await new Promise((res, rej) => rawApi.changeBlockedStatus(target.uid, false, e => e ? rej(e) : res()));
-      session.data = items.filter(u => u.uid !== target.uid);
-      api.sendMessage(`✅ Unblocked: ${target.name}`, threadID);
-    } catch (e) { api.sendMessage(`❌ Error: ${e.message || String(e)}`, threadID); }
-    return true;
-  }
-  if (msgMatch) {
-    const num = parseInt(msgMatch[1]); const msgText = (msgMatch[2] || "").trim();
-    const target = items[num - 1];
-    if (!target) { api.sendMessage(`❌ No user #${num}.`, threadID); return true; }
-    if (msgText) {
-      try {
-        await new Promise((res, rej) => api.sendMessage(msgText, target.uid, e => e ? rej(e) : res()));
-        api.sendMessage(`✅ Message sent to ${target.name}`, threadID);
-      } catch (e) { api.sendMessage(`❌ Failed: ${e.message}`, threadID); }
-    } else {
-      api.sendMessage(`💬 ${B(target.name)}\n🆔 UID: ${target.uid}`, threadID);
-    }
-    return true;
-  }
-  return false;
-}
-
 async function doMRAction(api, rawApi, session, input, threadID) {
   const match = input.match(/^(\d+)(a|d|b)$/i);
   const bulkMatch = input.match(/^bulk\s+(a|d|b)$/i);
@@ -1314,20 +957,22 @@ async function navigatePage(api, session, dir, replyManager, reactionManager) {
   }
   session.page = newPage;
   let text;
-  if (session.type === "req")    text = buildReqMenu(session.data, newPage);
-  if (session.type === "list")   text = buildListMenu(session.data, newPage);
-  if (session.type === "block")  text = buildBlockMenu(session.data, newPage);
-  if (session.type === "inbox")  text = buildInboxMenu(session.data, newPage);
-  if (session.type === "mr")     text = buildMRMenu(session.data, newPage);
-  if (session.type === "story")  text = buildStoryMenu(session.data, newPage);
-  if (text) { await sendPage(api, session.threadID, text, session, replyManager, reactionManager); sessionResetTimer(session.authorID); }
+  if (session.type === "req")   text = buildReqMenu(session.data, newPage);
+  if (session.type === "list")  text = buildListMenu(session.data, newPage);
+  if (session.type === "inbox") text = buildInboxMenu(session.data, newPage);
+  if (session.type === "mr")    text = buildMRMenu(session.data, newPage);
+  if (text) {
+    await sendPage(api, session.threadID, text, session, replyManager, reactionManager);
+    sessionResetTimer(session.authorID);
+  }
   return true;
 }
 
 // ─────────────────────────────────────────────
 //  SHARED SESSION INPUT HANDLER
+//  NOTE: `event` param is needed for image attachment support in profile session
 // ─────────────────────────────────────────────
-async function handleSessionInput(api, rawApi, session, input, senderID, threadID, replyManager, reactionManager) {
+async function handleSessionInput(api, rawApi, session, input, senderID, threadID, replyManager, reactionManager, event) {
   sessionResetTimer(senderID);
 
   if (input === "0") { await navigatePage(api, session, -1, replyManager, reactionManager); return true; }
@@ -1343,18 +988,17 @@ async function handleSessionInput(api, rawApi, session, input, senderID, threadI
     const handled = await doReqAction(api, rawApi, session, input, threadID);
     if (handled) return true;
   }
+
   if (session.type === "list") {
     const handled = await doListAction(api, rawApi, session, input, threadID, replyManager, reactionManager);
     if (handled) return true;
   }
-  if (session.type === "block") {
-    const handled = await doBlockAction(api, rawApi, session, input, threadID);
-    if (handled) return true;
-  }
+
   if (session.type === "mr") {
     const handled = await doMRAction(api, rawApi, session, input, threadID);
     if (handled) return true;
   }
+
   if (session.type === "inbox") {
     const msgMatch = input.match(/^(\d+)msg(?:\s+(.+))?$/i);
     if (msgMatch) {
@@ -1374,46 +1018,42 @@ async function handleSessionInput(api, rawApi, session, input, senderID, threadI
     }
   }
 
-  // Story session: reply "<n> <emoji>" to react
-  if (session.type === "story") {
-    // Pattern: "1 ❤️" or "2 😆" or just "1" to view
-    const storyReactMatch = input.match(/^(\d+)\s*(.+)?$/i);
-    if (storyReactMatch) {
-      const num = parseInt(storyReactMatch[1]);
-      const emoji = (storyReactMatch[2] || "❤️").trim() || "❤️";
-      const story = session.data[num - 1];
-      if (!story) { api.sendMessage(`❌ No story #${num}.`, threadID); return true; }
-
-      api.sendMessage(`⏳ Reacting to ${story.name}'s story...`, threadID);
-      try {
-        const result = await reactToStory(rawApi, story, emoji);
-        let msg = `✅ Done!\n👤 ${B(story.name)}\n`;
-        if (result.seen) msg += `👁️ Story marked as seen\n`;
-        if (result.reacted) msg += `${emoji} Reaction sent`;
-        else msg += `⚠️ Story seen, but reaction form not found (Facebook may block API reactions)`;
-        api.sendMessage(msg, threadID);
-      } catch (e) {
-        api.sendMessage(`❌ Error: ${e.message || String(e)}`, threadID);
-      }
-      return true;
-    }
-  }
-
-  // Profile session: reply with image URL to change DP
+  // ── PROFILE SESSION: reply with image (attachment) or image URL to change DP ──
   if (session.type === "profile") {
-    const urlMatch = input.match(/https?:\/\/[^\s]+/i);
-    if (urlMatch) {
-      const imgUrl = urlMatch[0];
-      api.sendMessage("⏳ Changing profile picture...", threadID);
+    // Check for image attachment first (user sends photo in chat)
+    const evAttachments = (event && event.attachments) || [];
+    const imgAtt = evAttachments.find(a =>
+      a && (a.type === "photo" || a.type === "image" || a.type === "sticker" ||
+            (a.url && /\.(jpg|jpeg|png|gif|webp)/i.test(a.url)))
+    );
+
+    // Also check for URL in text
+    const urlMatch = input.match(/https?:\/\/\S+/i);
+
+    const imageUrl = (imgAtt && (imgAtt.url || imgAtt.largePreviewUrl || imgAtt.previewUrl))
+                   || (urlMatch && urlMatch[0]);
+
+    if (imageUrl) {
+      api.sendMessage("⏳ Downloading image and changing profile picture...", threadID);
       try {
-        await changeProfilePicture(api, rawApi, imgUrl, threadID);
+        await changeProfilePicture(rawApi, imageUrl);
         api.sendMessage("✅ Profile picture changed successfully!", threadID);
         sessionClear(senderID);
       } catch (e) {
-        api.sendMessage(`❌ Failed: ${e.message || String(e)}`, threadID);
+        api.sendMessage(`❌ Failed to change profile picture:\n${e.message || String(e)}`, threadID);
       }
       return true;
     }
+
+    // No image or URL found in the reply — tell user what to do
+    api.sendMessage(
+      `📸 ${B("To change profile picture:")}\n` +
+      `   • ${B("Attach/send an image")} in your reply, OR\n` +
+      `   • Reply with a direct image URL\n` +
+      `   Example: https://i.imgur.com/xxxxx.jpg`,
+      threadID
+    );
+    return true;
   }
 
   return false;
@@ -1465,44 +1105,51 @@ module.exports = {
   config: {
     name: "fbcontrol",
     aliases: ["fb", "fbc", "fbm"],
-    version: "3.4.0",
+    version: "3.5.0",
     author: "Riyad Bot Team",
     countDown: 3,
     role: 2,
     shortDescription: "Facebook Account Manager",
-    longDescription: "Manage friend requests, friends list, block list, inbox, message requests, profile, and stories.",
+    longDescription: "Manage friend requests, friends list, inbox, message requests, and your own profile.",
     category: "account",
-    guide: { en: "fb | fb list | fb block | fb inbox | fb mr | fb sms <n|uid> <text> | fb sms all <text> | fb p | fb s" }
+    guide: { en: "fb | fb list | fb inbox | fb mr | fb sms <n|uid> <text> | fb sms all <text> | fb p" }
   },
 
-  // ❤️ REACTION → next page (for all paged sessions)
+  // ─── ❤️ REACTION → next page ───────────────────────────────────────────────
+  // This fires because sendPage (await form) registers AFTER __global__, so
+  // reactionManager correctly routes ❤️ reactions to fbcontrol's onReaction.
   onReaction: async function({ api, event, Reaction, reactionData, replyManager, reactionManager }) {
     try {
       const { userID, messageID } = event;
-      const authorID = (Reaction && Reaction.authorID) || (reactionData && reactionData.authorID) || userID;
+      const authorID = (Reaction && Reaction.authorID)
+                    || (reactionData && reactionData.authorID)
+                    || userID;
       const session = sessionGet(authorID);
       if (!session) return;
+      // messageID = the message being reacted to; lastMsgID = our last sent menu
       if (session.lastMsgID !== messageID) return;
-      if (["req", "list", "block", "inbox", "mr", "story"].includes(session.type))
+      if (["req", "list", "inbox", "mr"].includes(session.type))
         await navigatePage(api, session, 1, replyManager, reactionManager);
     } catch (err) { console.error("[fbcontrol] onReaction error:", err); }
   },
 
-  // 📩 REPLY → navigation & actions
+  // ─── 📩 REPLY → navigation & actions ──────────────────────────────────────
   onReply: async function({ api, event, Reply, replyData, replyManager, reactionManager }) {
     try {
       const { senderID, threadID, body } = event;
       const rawApi = getRawApi(api);
-      const authorID = (Reply && Reply.authorID) || (replyData && replyData.authorID) || senderID;
+      const authorID = (Reply && Reply.authorID)
+                    || (replyData && replyData.authorID)
+                    || senderID;
       const session = sessionGet(authorID);
       if (!session) return;
       const input = (body || "").trim().toLowerCase();
-      if (!input) return;
-      await handleSessionInput(api, rawApi, session, input, authorID, threadID, replyManager, reactionManager);
+      // Pass full event so profile session can detect image attachments
+      await handleSessionInput(api, rawApi, session, input, authorID, threadID, replyManager, reactionManager, event);
     } catch (err) { console.error("[fbcontrol] onReply error:", err); }
   },
 
-  // MAIN COMMAND ENTRY
+  // ─── MAIN COMMAND ENTRY ────────────────────────────────────────────────────
   onStart: async function({ api, event, args, replyManager, reactionManager }) {
     try {
       await handleRun({ api, event, args, replyManager, reactionManager });
@@ -1522,7 +1169,7 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
   const sub = (args[0] || "").toLowerCase();
   const session = sessionGet(senderID);
 
-  // ── SMS COMMANDS ──────────────────────────
+  // ── SMS COMMANDS ──────────────────────────────────────────────────────────
   if (sub === "sms") {
     const target = args[1];
     if (!target) return api.sendMessage("❌ Usage: fb sms <n|uid> <text>  OR  fb sms all <text>", threadID);
@@ -1545,6 +1192,7 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
     if (isNaN(n)) return api.sendMessage("❌ Usage: fb sms <number|uid> <text>", threadID);
 
     if (String(n).length <= 5) {
+      // Treat as list index
       const result = await fetchFriendsList(rawApi);
       if (result.error || !result.data.length)
         return api.sendMessage(`❌ Could not load friends: ${result.error || "Empty"}`, threadID);
@@ -1555,6 +1203,7 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
         api.sendMessage(`✅ Message sent to ${friend.fullName}`, threadID);
       } catch (e) { api.sendMessage(`❌ Failed to send to ${friend.fullName}: ${e.message}`, threadID); }
     } else {
+      // Treat as UID
       try {
         await new Promise((res, rej) => api.sendMessage(msg, String(n), e => e ? rej(e) : res()));
         api.sendMessage(`✅ Message sent to UID ${n}`, threadID);
@@ -1563,67 +1212,51 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
     return;
   }
 
-  // ── NEW: PROFILE COMMAND (fb p) ──────────────────────────
+  // ── PROFILE COMMAND (fb p) ────────────────────────────────────────────────
   if (sub === "p") {
     api.sendMessage("⏳ Loading your profile...", threadID);
     try {
       const profile = await fetchOwnProfile(api, rawApi);
-      if (!profile) {
-        return api.sendMessage("❌ Could not load profile info.", threadID);
-      }
+      if (!profile) return api.sendMessage("❌ Could not load profile info.", threadID);
 
       await sendProfileCard(api, profile.uid, profile.name, profile.vanity, threadID);
 
-      // Start profile session so user can reply with image URL to change DP
+      // Start profile session
       sessionCreate(senderID, "profile", [profile], threadID);
       const sess = sessionGet(senderID);
-      await new Promise((resolve) => {
-        api.sendMessage(
-          `${D}\n👤 ${B("YOUR PROFILE")}\n${D}\n` +
-          `🆔 UID: ${profile.uid}\n` +
-          `📛 Name: ${profile.name}\n` +
-          `🔗 ${profile.profileUrl}\n\n` +
-          `📸 ${B("To change profile picture:")}\n` +
-          `   Reply to this message with a direct image URL\n` +
-          `   Example: https://i.imgur.com/xxxxx.jpg\n${D}`,
-          threadID,
-          (err, info) => {
-            if (!err && info && info.messageID && sess) {
-              sess.lastMsgID = info.messageID;
-              const payload = { commandName: "fbcontrol", authorID: String(senderID), sessionType: "profile" };
-              try { replyManager.set(info.messageID, payload); } catch (_) {}
-            }
-            resolve(info);
-          }
-        );
-      });
+
+      // FIXED: await (Promise form) so our registration runs AFTER __global__
+      const profileText =
+        `${D}\n👤 ${B("YOUR PROFILE")}\n${D}\n` +
+        `🆔 UID: ${profile.uid}\n` +
+        `📛 Name: ${profile.name}\n` +
+        `🔗 ${profile.profileUrl}\n\n` +
+        `📸 ${B("To change profile picture:")}\n` +
+        `   • ${B("Attach/send a photo")} as a reply, OR\n` +
+        `   • Reply with a direct image URL\n` +
+        `${D}`;
+
+      const info = await api.sendMessage(profileText, threadID);
+      if (info && info.messageID && sess) {
+        sess.lastMsgID = info.messageID;
+        const payload = { commandName: "fbcontrol", authorID: String(senderID), sessionType: "profile" };
+        try { replyManager.set(info.messageID, payload); } catch (_) {}
+        // No reactionManager needed for profile — reaction navigates to next page (doesn't apply)
+      }
     } catch (e) {
       api.sendMessage(`❌ Error: ${e.message || String(e)}`, threadID);
     }
     return;
   }
 
-  // ── NEW: STORY COMMAND (fb s) ──────────────────────────
-  if (sub === "s") {
-    api.sendMessage("⏳ Loading story list...", threadID);
-    const result = await fetchStories(rawApi);
-    if (result.error && result.data.length === 0)
-      return api.sendMessage(`❌ ${result.error}`, threadID);
-
-    sessionCreate(senderID, "story", result.data, threadID);
-    await sendPage(api, threadID, buildStoryMenu(result.data, 0), sessionGet(senderID), replyManager, reactionManager);
-    return;
-  }
-
-  // ── SESSION NAVIGATION (inline command while session active) ──
+  // ── SESSION NAVIGATION (re-invoked command while session active) ──────────
   if (session) {
-    const rawInput = (body || "").trim().replace(/^(?:fbcontrol|fb\w*|fbc|fbm)\s*/i, "").trim().toLowerCase();
-    const handled = await handleSessionInput(api, rawApi, session, rawInput, senderID, threadID, replyManager, reactionManager);
-    if (handled) return;
+    const rawInput = (body || "").trim().replace(/^(?:fbcontrol|fbc|fbm|fb)\s*/i, "").trim().toLowerCase();
+    await handleSessionInput(api, rawApi, session, rawInput, senderID, threadID, replyManager, reactionManager, event);
     return;
   }
 
-  // ── FRESH COMMANDS ────────────────────────
+  // ── FRESH COMMANDS ────────────────────────────────────────────────────────
   if (!sub || sub === "help") return api.sendMessage(buildHelpMenu(), threadID);
 
   if (sub === "list") {
@@ -1632,15 +1265,6 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
     if (result.error && result.data.length === 0) return api.sendMessage(`❌ ${result.error}`, threadID);
     sessionCreate(senderID, "list", result.data, threadID);
     await sendPage(api, threadID, buildListMenu(result.data, 0), sessionGet(senderID), replyManager, reactionManager);
-    return;
-  }
-
-  if (sub === "block") {
-    api.sendMessage("⏳ Loading block list...", threadID);
-    const result = await fetchBlockList(rawApi);
-    if (result.error && result.data.length === 0) return api.sendMessage(`❌ ${result.error}`, threadID);
-    sessionCreate(senderID, "block", result.data, threadID);
-    await sendPage(api, threadID, buildBlockMenu(result.data, 0), sessionGet(senderID), replyManager, reactionManager);
     return;
   }
 
