@@ -75,11 +75,43 @@ function clearSessionTimer(authorID) {
 }
 
 // ─────────────────────────────────────────────
+//  LAST DM THREAD TRACKER (per bot-command author)
+//  Used by `fb sms reply <text>` to know where to send.
+// ─────────────────────────────────────────────
+const LAST_DM_THREAD = new Map();
+function setLastDmThread(authorID, threadID, name) {
+  LAST_DM_THREAD.set(String(authorID), { threadID: String(threadID), name: name || String(threadID) });
+}
+function getLastDmThread(authorID) {
+  return LAST_DM_THREAD.get(String(authorID)) || null;
+}
+
+// ─────────────────────────────────────────────
 //  UNSEND HELPER
 // ─────────────────────────────────────────────
 function unsendMsg(api, msgID) {
   if (!msgID) return;
   try { if (typeof api.unsendMessage === "function") api.unsendMessage(msgID, () => {}); } catch (_) {}
+}
+
+// ─────────────────────────────────────────────
+//  SAFE DM SEND HELPER
+//
+//  KEY FIX: api.sendMessage() from the FcaMessengerAdapter already returns a
+//  real Promise that RESOLVES on success and REJECTS on failure. The old code
+//  in this file wrapped it in ANOTHER manual `new Promise((res,rej) => api.sendMessage(..., cb))`.
+//  But the adapter only invokes that callback on the SUCCESS path — on error it
+//  calls reject() on its own internal promise and returns WITHOUT calling our
+//  callback at all. That means our manual wrapper promise never resolves NOR
+//  rejects on failure — it just hangs forever. In a broadcast loop (`fb sms all`)
+//  this made every send after the first failure freeze the whole loop, which is
+//  why only 1-2 people ever received the broadcast.
+//
+//  Fix: await the Promise api.sendMessage() already returns, wrapped in a plain
+//  try/catch. No manual Promise/callback wrapper needed.
+// ─────────────────────────────────────────────
+async function safeSendDM(api, text, threadID) {
+  return await api.sendMessage(text, threadID);
 }
 
 // ─────────────────────────────────────────────
@@ -731,17 +763,95 @@ async function sendFriendRequest(rawApi, uid) {
 }
 
 // ─────────────────────────────────────────────
-//  ACTION HANDLERS
+//  FIXED: FRIEND REQUEST ACCEPT / REJECT
+//
+//  OLD CODE relied on rawApi.handleFriendRequest(), which posts to a very
+//  old Facebook endpoint (facebook.com/requests/friends/ajax/) using a form
+//  that never even includes WHICH request to act on. Facebook now just
+//  redirects/rejects this, so `resData` comes back undefined and the code
+//  crashed with "Cannot read properties of undefined (reading 'payload')"
+//  every single time, for both `fb list` and `fb` (requests) accept.
+//
+//  FIX: scrape the mbasic requests page (same technique fetchFriendRequests
+//  already uses to list requests) for the actual Confirm/Delete links tied
+//  to this uid, then hit that link directly with the bot's cookies. This is
+//  the same mechanism that already works for viewing requests, so it keeps
+//  working even though the old ajax endpoint doesn't.
 // ─────────────────────────────────────────────
-function callFriendAction(rawApi, uid, accept) {
-  return new Promise((resolve, reject) => {
-    if (typeof rawApi.handleFriendRequest === "function") {
-      rawApi.handleFriendRequest(uid, accept, (err) => err ? reject(err) : resolve());
-    } else {
-      reject(new Error("handleFriendRequest not available"));
+async function findFriendRequestLinks(rawApi, uid) {
+  const cookieStr = buildCookieString(rawApi);
+  if (!cookieStr) throw new Error("Cookie unavailable");
+  const res = await httpsGet("https://mbasic.facebook.com/friends/requests/", cookieStr);
+  const html = res.body || "";
+
+  // Split around each Confirm link, keeping the link itself.
+  const parts = html.split(/(<a href="[^"]*confirm[^"]*">)/i);
+  // parts = [before0, confirmTag0, after0, confirmTag1, after1, ...]
+  for (let i = 1; i < parts.length - 1; i += 2) {
+    const beforeText = parts[i - 1];
+    const confirmTag = parts[i];
+    const afterText = parts[i + 1] || "";
+
+    const confirmHrefMatch = confirmTag.match(/href="([^"]+)"/i);
+    if (!confirmHrefMatch) continue;
+
+    // Find the nearest profile link BEFORE this Confirm button — that's the uid it belongs to.
+    const linkRe = /href="\/(?:profile\.php\?id=)?([^"?&\/\n]{1,60})[^"]*"/gi;
+    let m, lastUid = null;
+    while ((m = linkRe.exec(beforeText)) !== null) {
+      const cand = m[1].replace(/^profile\.php\?id=/, "").split("?")[0].trim();
+      if (cand && !cand.includes("/") && !["friends", "home", "settings", "requests"].includes(cand)) {
+        lastUid = cand;
+      }
     }
+    if (lastUid !== String(uid)) continue;
+
+    const confirmHrefRaw = confirmHrefMatch[1];
+    const deleteMatch = afterText.match(/href="([^"]*(?:delete|reject)[^"]*)"/i);
+
+    return {
+      confirmUrl: confirmHrefRaw.startsWith("http") ? confirmHrefRaw : `https://mbasic.facebook.com${confirmHrefRaw}`,
+      deleteUrl: deleteMatch
+        ? (deleteMatch[1].startsWith("http") ? deleteMatch[1] : `https://mbasic.facebook.com${deleteMatch[1]}`)
+        : null
+    };
+  }
+  return null;
+}
+
+async function callFriendAction(rawApi, uid, accept) {
+  const links = await findFriendRequestLinks(rawApi, uid);
+  if (!links) {
+    throw new Error("Request not found (it may already be accepted/removed, or the uid doesn't match a pending request).");
+  }
+  const targetUrl = accept ? links.confirmUrl : links.deleteUrl;
+  if (!targetUrl) throw new Error(accept ? "Confirm link not found on requests page." : "Delete link not found on requests page.");
+
+  const cookieStr = buildCookieString(rawApi);
+  const res = await httpsGet(targetUrl, cookieStr);
+  if (res.status < 200 || res.status >= 400) throw new Error(`HTTP ${res.status}`);
+}
+
+// ─────────────────────────────────────────────
+//  FIXED: MESSAGE REQUEST ACCEPT
+//  OLD CODE never actually called any API for "accept" — it just edited the
+//  local session data and told the user it was accepted. Nothing happened on
+//  Facebook's side. fca-riyad exposes rawApi.handleMessageRequest(threadID,
+//  accept, cb) which moves the thread from "other/pending" into the real
+//  inbox — that's the real accept call, now wired up below.
+// ─────────────────────────────────────────────
+function callMessageRequestAction(rawApi, threadID, accept) {
+  return new Promise((resolve, reject) => {
+    if (typeof rawApi.handleMessageRequest !== "function") {
+      return reject(new Error("handleMessageRequest is not available on this fca-riyad version."));
+    }
+    rawApi.handleMessageRequest(threadID, accept, (err) => err ? reject(err) : resolve());
   });
 }
+
+// ─────────────────────────────────────────────
+//  ACTION HANDLERS
+// ─────────────────────────────────────────────
 
 async function doReqAction(api, rawApi, session, input, threadID) {
   const match = input.match(/^(\d+)(a|d|b)$/i);
@@ -811,7 +921,8 @@ async function doListAction(api, rawApi, session, input, threadID, replyManager,
     if (!target) { api.sendMessage(`❌ No friend #${num}.`, threadID); return true; }
     if (msgText) {
       try {
-        await new Promise((res, rej) => api.sendMessage(msgText, target.userID, e => e ? rej(e) : res()));
+        await safeSendDM(api, msgText, target.userID);
+        setLastDmThread(session.authorID, target.userID, target.fullName);
         api.sendMessage(`✅ Message sent to ${target.fullName}`, threadID);
       } catch (e) { api.sendMessage(`❌ Failed to send: ${e.message || String(e)}`, threadID); }
     } else {
@@ -912,7 +1023,9 @@ async function doMRAction(api, rawApi, session, input, threadID) {
     let done = 0;
     for (const r of pageItems) {
       try {
-        if (action === "d" && typeof rawApi.deleteThread === "function")
+        if (action === "a")
+          await callMessageRequestAction(rawApi, r.threadID, true);
+        else if (action === "d" && typeof rawApi.deleteThread === "function")
           await new Promise(res => rawApi.deleteThread(r.threadID, res));
         else if (action === "b")
           await new Promise((res, rej) => rawApi.changeBlockedStatus(r.threadID, true, e => e ? rej(e) : res()));
@@ -929,8 +1042,9 @@ async function doMRAction(api, rawApi, session, input, threadID) {
   if (!target) { api.sendMessage(`❌ No request #${num}.`, threadID); return true; }
   try {
     if (action === "a") {
-      api.sendMessage(`✅ Accepted: ${target.name}\nYou can now message them.`, threadID);
+      await callMessageRequestAction(rawApi, target.threadID, true);
       session.data = items.filter(r => r.threadID !== target.threadID);
+      api.sendMessage(`✅ Accepted: ${target.name}\nYou can now message them.`, threadID);
     } else if (action === "d") {
       if (typeof rawApi.deleteThread === "function")
         await new Promise(res => rawApi.deleteThread(target.threadID, res));
@@ -1008,7 +1122,8 @@ async function handleSessionInput(api, rawApi, session, input, senderID, threadI
       if (!t) { api.sendMessage(`❌ No thread #${num}.`, threadID); return true; }
       if (msgText) {
         try {
-          await new Promise((res, rej) => api.sendMessage(msgText, t.threadID, e => e ? rej(e) : res()));
+          await safeSendDM(api, msgText, t.threadID);
+          setLastDmThread(senderID, t.threadID, t.name);
           api.sendMessage(`✅ Sent to ${t.name}`, threadID);
         } catch (e) { api.sendMessage(`❌ Failed: ${e.message}`, threadID); }
       } else {
@@ -1061,6 +1176,13 @@ async function handleSessionInput(api, rawApi, session, input, senderID, threadI
 
 // ─────────────────────────────────────────────
 //  SMS ALL BROADCAST
+//
+//  FIXED: previously wrapped api.sendMessage() in a manual callback-based
+//  Promise. The adapter's sendMessage only invokes that callback on SUCCESS —
+//  on failure it rejects its own internal promise and never calls the
+//  callback, so the manual wrapper never resolved/rejected and the whole
+//  loop froze on the first failed send. That's why broadcasts only ever
+//  reached 1-2 friends. Now we await the real promise directly.
 // ─────────────────────────────────────────────
 async function runSmsAll(api, rawApi, threadID, text, authorID) {
   const result = await fetchFriendsList(rawApi);
@@ -1071,27 +1193,32 @@ async function runSmsAll(api, rawApi, threadID, text, authorID) {
   const state = { cancelled: false };
   sessionCreate(authorID, "sms_all", [], threadID, { smsAll: state });
 
-  const statusInfo = await new Promise(res =>
-    api.sendMessage(`📢 Sending to ${friends.length} friends...\n0/${friends.length} done`, threadID, (e, i) => res(i))
-  );
+  const statusInfo = await (async () => {
+    try { return await api.sendMessage(`📢 Sending to ${friends.length} friends...\n0/${friends.length} done`, threadID); }
+    catch (_) { return null; }
+  })();
   const statusMsgID = statusInfo ? statusInfo.messageID : null;
 
   let sent = 0;
+  let failed = 0;
   for (const friend of friends) {
     if (state.cancelled) break;
     try {
-      await new Promise(res => api.sendMessage(text, friend.userID, (e, i) => res(i)));
+      await safeSendDM(api, text, friend.userID);
       sent++;
-      if (statusMsgID && sent % 5 === 0)
-        api.sendMessage(`📢 Sending...\n${sent}/${friends.length} done`, threadID);
-    } catch (_) {}
-    await new Promise(r => setTimeout(r, 200));
+    } catch (_) {
+      failed++;
+    }
+    if ((sent + failed) % 10 === 0) {
+      try { api.sendMessage(`📢 Sending...\n${sent + failed}/${friends.length} processed (${sent} sent)`, threadID); } catch (_) {}
+    }
+    await new Promise(r => setTimeout(r, 300));
   }
 
   api.sendMessage(
     state.cancelled
       ? `📴 Broadcast cancelled. Sent: ${sent}/${friends.length}`
-      : `✅ Broadcast complete!\n📤 Sent to: ${sent}/${friends.length} friends`,
+      : `✅ Broadcast complete!\n📤 Sent to: ${sent}/${friends.length} friends${failed ? `\n⚠️ Failed: ${failed}` : ""}`,
     threadID
   );
   if (statusMsgID) try { api.unsendMessage(statusMsgID, () => {}); } catch (_) {}
@@ -1112,22 +1239,36 @@ module.exports = {
     shortDescription: "Facebook Account Manager",
     longDescription: "Manage friend requests, friends list, inbox, message requests, and your own profile.",
     category: "account",
-    guide: { en: "fb | fb list | fb inbox | fb mr | fb sms <n|uid> <text> | fb sms all <text> | fb p" }
+    guide: { en: "fb | fb list | fb inbox | fb mr | fb sms <n|uid> <text> | fb sms reply <text> | fb sms all <text> | fb p" }
   },
 
   // ─── ❤️ REACTION → next page ───────────────────────────────────────────────
   // This fires because sendPage (await form) registers AFTER __global__, so
   // reactionManager correctly routes ❤️ reactions to fbcontrol's onReaction.
+  //
+  // FIXED: previously ANY user's reaction moved the ORIGINAL command author's
+  // session to the next page, because the code looked up the session using
+  // the authorID stored in the payload (the session owner) without ever
+  // checking who actually reacted (event.userID). Now we compare the real
+  // reactor against the session owner and politely refuse if they don't match.
   onReaction: async function({ api, event, Reaction, reactionData, replyManager, reactionManager }) {
     try {
       const { userID, messageID } = event;
-      const authorID = (Reaction && Reaction.authorID)
-                    || (reactionData && reactionData.authorID)
-                    || userID;
-      const session = sessionGet(authorID);
+      const ownerID = (Reaction && Reaction.authorID)
+                    || (reactionData && reactionData.authorID);
+      if (!ownerID) return;
+
+      const session = sessionGet(ownerID);
       if (!session) return;
       // messageID = the message being reacted to; lastMsgID = our last sent menu
       if (session.lastMsgID !== messageID) return;
+
+      // Only the person who opened this menu may navigate it.
+      if (String(userID) !== String(ownerID)) {
+        try { api.sendMessage("⚠️ এই মেনুটি আপনার জন্য নয়!", session.threadID); } catch (_) {}
+        return;
+      }
+
       if (["req", "list", "inbox", "mr"].includes(session.type))
         await navigatePage(api, session, 1, replyManager, reactionManager);
     } catch (err) { console.error("[fbcontrol] onReaction error:", err); }
@@ -1170,9 +1311,12 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
   const session = sessionGet(senderID);
 
   // ── SMS COMMANDS ──────────────────────────────────────────────────────────
+  // FIXED: usage message unified, and "fb sms reply <text>" is now handled
+  // instead of falling through to the generic usage error.
   if (sub === "sms") {
     const target = args[1];
-    if (!target) return api.sendMessage("❌ Usage: fb sms <n|uid> <text>  OR  fb sms all <text>", threadID);
+    const smsUsage = "❌ Usage:\n  fb sms <number|uid> <text>\n  fb sms reply <text>\n  fb sms all <text>";
+    if (!target) return api.sendMessage(smsUsage, threadID);
 
     if (target.toLowerCase() === "all") {
       const msg = args.slice(2).join(" ");
@@ -1184,12 +1328,24 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
       if (s && s.smsAll) { s.smsAll.cancelled = true; sessionClear(senderID); return api.sendMessage("📴 Broadcast cancelled.", threadID); }
       return api.sendMessage("ℹ️ No active broadcast.", threadID);
     }
+    if (target.toLowerCase() === "reply") {
+      const msg = args.slice(2).join(" ");
+      if (!msg) return api.sendMessage("❌ Usage: fb sms reply <text>", threadID);
+      const last = getLastDmThread(senderID);
+      if (!last) return api.sendMessage("❌ No previous DM thread found yet. Send one with `fb sms <n|uid> <text>` first.", threadID);
+      try {
+        await safeSendDM(api, msg, last.threadID);
+        setLastDmThread(senderID, last.threadID, last.name);
+        api.sendMessage(`✅ Replied to ${last.name}`, threadID);
+      } catch (e) { api.sendMessage(`❌ Failed to send: ${e.message || String(e)}`, threadID); }
+      return;
+    }
 
     const msg = args.slice(2).join(" ");
-    if (!msg) return api.sendMessage("❌ Please include a message text.", threadID);
+    if (!msg) return api.sendMessage(smsUsage, threadID);
 
     const n = parseInt(target);
-    if (isNaN(n)) return api.sendMessage("❌ Usage: fb sms <number|uid> <text>", threadID);
+    if (isNaN(n)) return api.sendMessage(smsUsage, threadID);
 
     if (String(n).length <= 5) {
       // Treat as list index
@@ -1199,13 +1355,15 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
       const friend = result.data[n - 1];
       if (!friend) return api.sendMessage(`❌ No friend #${n}.`, threadID);
       try {
-        await new Promise((res, rej) => api.sendMessage(msg, friend.userID, e => e ? rej(e) : res()));
+        await safeSendDM(api, msg, friend.userID);
+        setLastDmThread(senderID, friend.userID, friend.fullName);
         api.sendMessage(`✅ Message sent to ${friend.fullName}`, threadID);
       } catch (e) { api.sendMessage(`❌ Failed to send to ${friend.fullName}: ${e.message}`, threadID); }
     } else {
       // Treat as UID
       try {
-        await new Promise((res, rej) => api.sendMessage(msg, String(n), e => e ? rej(e) : res()));
+        await safeSendDM(api, msg, String(n));
+        setLastDmThread(senderID, String(n));
         api.sendMessage(`✅ Message sent to UID ${n}`, threadID);
       } catch (e) { api.sendMessage(`❌ Failed to send to UID ${n}: ${e.message}`, threadID); }
     }
@@ -1292,4 +1450,4 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
   if (result.error && result.data.length === 0) return api.sendMessage(`❌ ${result.error}`, threadID);
   sessionCreate(senderID, "req", result.data, threadID);
   await sendPage(api, threadID, buildReqMenu(result.data, 0), sessionGet(senderID), replyManager, reactionManager);
-}
+                 }
