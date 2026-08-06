@@ -215,7 +215,7 @@ function formatSize(bytes) {
 module.exports = {
   config: {
     name: "autodl",
-    aliases: ["fb", "tiktok", "ig", "yt", "alldl", "dl", "download"],
+    aliases: ["tiktok", "ig", "yt", "alldl", "dl", "download"],
     version: "1.1.0",
     author: "Riyad",
     countDown: 5,
