@@ -2,10 +2,18 @@
  * ╔══════════════════════════════════════════════════════════╗
  * ║        FACEBOOK ACCOUNT MANAGER — RIYAD FRAMEWORK        ║
  * ║  Command: fbcontrol  |  Aliases: fb, fbc, fbm            ║
- * ║  Version: 3.1.0  (FIXED by Riyad)                        ║
+ * ║  Version: 3.2.0  (FIXED for RIYAD_BOT-V2 reply/reaction) ║
  * ╚══════════════════════════════════════════════════════════╝
  *
- * FIXES:
+ * FIXES (3.2.0):
+ *  - sendPage now registers into the framework's real replyManager /
+ *    reactionManager stores instead of non-existent global.GoatBot /
+ *    global.client objects. This is why replies (1a, 0, bulk a, ...)
+ *    and ❤️ reactions were not working before.
+ *  - replyManager / reactionManager are threaded through every function
+ *    that eventually calls sendPage() or navigatePage().
+ *
+ * FIXES (3.1.0, kept):
  *  - handleFriendRequest: boolean fix (true/false, not "confirm"/"delete")
  *  - onReply handler added — reply করলে navigation কাজ করবে
  *  - Reaction next page সঠিকভাবে কাজ করবে
@@ -29,7 +37,7 @@ const SESSIONS = new Map();
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
 const PER_PAGE = 10;
 
-// Reply tracker: msgID → authorID (for onReply matching)
+// Reply tracker: msgID → authorID (local backup only, framework uses replyManager)
 const REPLY_TRACKER = new Map();
 
 function sessionCreate(authorID, type, data, threadID, extra = {}) {
@@ -89,16 +97,15 @@ function unsendAfter(api, msgID, ms = 5000) {
 //  SEND PAGE HELPER
 //  - unsends previous page message
 //  - sends new message
-//  - registers msgID for onReply + onReaction
+//  - registers msgID for onReply + onReaction via the REAL framework
+//    replyManager / reactionManager (RIYAD_BOT-V2), not GoatBot globals
 // ─────────────────────────────────────────────
-async function sendPage(api, threadID, text, session) {
-  // Unregister old reply tracker
+async function sendPage(api, threadID, text, session, replyManager, reactionManager) {
+  // Unregister old listeners
   if (session.lastMsgID) {
     REPLY_TRACKER.delete(session.lastMsgID);
-    // GoatBot onReply store
-    if (global.GoatBot && global.GoatBot.onReply && typeof global.GoatBot.onReply.delete === "function") {
-      global.GoatBot.onReply.delete(session.lastMsgID);
-    }
+    replyManager.delete(session.lastMsgID);
+    reactionManager.delete(session.lastMsgID);
     unsendMsg(api, session.lastMsgID);
     session.lastMsgID = null;
   }
@@ -108,23 +115,18 @@ async function sendPage(api, threadID, text, session) {
       if (!err && info && info.messageID) {
         session.lastMsgID = info.messageID;
 
-        // Register in local reply tracker
+        // Local backup tracker
         REPLY_TRACKER.set(info.messageID, session.authorID);
 
-        // Register in GoatBot onReply store (standard GoatBot/Mirai pattern)
-        if (global.GoatBot && global.GoatBot.onReply && typeof global.GoatBot.onReply.set === "function") {
-          global.GoatBot.onReply.set(info.messageID, {
-            commandName: "fbcontrol",
-            authorID: session.authorID
-          });
-        }
-        // Riyad Bot framework may use different store name — try both
-        if (global.client && global.client.onReply && typeof global.client.onReply.set === "function") {
-          global.client.onReply.set(info.messageID, {
-            commandName: "fbcontrol",
-            authorID: session.authorID
-          });
-        }
+        // Register in the actual Riyad Bot V2 framework stores
+        replyManager.set(info.messageID, {
+          commandName: "fbcontrol",
+          authorID: session.authorID
+        });
+        reactionManager.set(info.messageID, {
+          commandName: "fbcontrol",
+          authorID: session.authorID
+        });
       }
       resolve(info);
     });
@@ -448,19 +450,15 @@ async function fetchFriendRequests(rawApi) {
     const results = [];
 
     // Pattern 1: mbasic HTML — find name links near Confirm buttons
-    // mbasic format: <a href="/uid_or_name">Name</a> then later <a href="...confirm...">Confirm</a>
-    // We look for all uid+name pairs before a Confirm href
     const chunks = html.split(/<a href="[^"]*confirm[^"]*">/i);
     for (let i = 0; i < chunks.length - 1; i++) {
       const chunk = chunks[i];
-      // Find the last profile link in this chunk
       const linkRe = /href="\/(?:profile\.php\?id=)?([^"?&\/\n]{1,60})[^"]*"\s*[^>]*>([^<]{2,80})<\/a>/gi;
       let m;
       let last = null;
       while ((m = linkRe.exec(chunk)) !== null) {
         const uid = m[1].replace(/^profile\.php\?id=/, "").split("?")[0].trim();
         const name = m[2].replace(/&amp;/g, "&").replace(/&#039;/g, "'").trim();
-        // Skip known non-person links
         if (!uid || uid.includes("/") || uid === "friends" || uid === "home" || uid === "settings") continue;
         if (name.length < 2 || name.length > 80) continue;
         last = { uid, name };
@@ -525,12 +523,9 @@ async function fetchBlockList(rawApi) {
 
       const results = [];
 
-      // Strategy 1: Find user links that appear within 600 chars of "Unblock" text
-      // Split at each Unblock marker and look backward for name/uid
       const unblockSplit = html.split(/Unblock/i);
       for (let i = 0; i < unblockSplit.length - 1; i++) {
         const chunk = unblockSplit[i];
-        // Look for last profile link in the chunk (up to 800 chars before Unblock)
         const searchIn = chunk.slice(-800);
         const linkRe = /href="\/(?:profile\.php\?id=)?([^"?&\/\n]{1,60})[^"]*"\s*[^>]*>([^<]{2,80})<\/a>/gi;
         let m, last = null;
@@ -546,7 +541,6 @@ async function fetchBlockList(rawApi) {
         }
       }
 
-      // Strategy 2: JSON in page — look for blocked user data objects
       if (results.length === 0) {
         const jsonPatterns = [
           /"uid"\s*:\s*"?(\d+)"?[^}]{0,200}"name"\s*:\s*"([^"]+)"/g,
@@ -600,10 +594,8 @@ async function fetchMessageRequests(api) {
     if (typeof api.getThreadList !== "function") {
       return resolve({ data: [], error: "getThreadList not available." });
     }
-    // Message requests are in "OTHER" folder
     api.getThreadList(30, null, ["OTHER"], (err, threads) => {
       if (err) {
-        // Fallback: try without folder filter
         api.getThreadList(30, null, [], (err2, threads2) => {
           if (err2) return resolve({ data: [], error: err2.message });
           resolve({ data: buildMRList(threads2 || [], "other"), error: null });
@@ -612,7 +604,6 @@ async function fetchMessageRequests(api) {
       }
       const known = buildMRList(threads || [], "you_may_know");
 
-      // Also try SPAM folder
       api.getThreadList(20, null, ["SPAM"], (err3, spamThreads) => {
         let all = known;
         if (!err3 && spamThreads && spamThreads.length > 0) {
@@ -677,12 +668,10 @@ async function doReqAction(api, rawApi, session, input, threadID) {
 
   try {
     if (action === "a") {
-      // FIX: pass boolean true for "accept/confirm"
       await callFriendAction(rawApi, target.uid, true);
       session.data = items.filter(r => r.uid !== target.uid);
       api.sendMessage(`✅ Accepted: ${target.name}`, threadID);
     } else if (action === "d") {
-      // FIX: pass boolean false for "delete/reject"
       await callFriendAction(rawApi, target.uid, false);
       session.data = items.filter(r => r.uid !== target.uid);
       api.sendMessage(`🗑️ Deleted: ${target.name}`, threadID);
@@ -699,13 +688,10 @@ async function doReqAction(api, rawApi, session, input, threadID) {
   return true;
 }
 
-// FIX: fca-riyad handleFriendRequest takes (userID, accept: boolean, callback)
-// NOT a string like "confirm" or "delete"
+// fca-riyad handleFriendRequest takes (userID, accept: boolean, callback)
 function callFriendAction(rawApi, uid, accept /* boolean */) {
   return new Promise((resolve, reject) => {
     if (typeof rawApi.handleFriendRequest === "function") {
-      // accept = true  → confirm/accept the request
-      // accept = false → reject/delete the request
       rawApi.handleFriendRequest(uid, accept, (err) => err ? reject(err) : resolve());
     } else {
       reject(new Error("handleFriendRequest not available in this fca version"));
@@ -713,7 +699,7 @@ function callFriendAction(rawApi, uid, accept /* boolean */) {
   });
 }
 
-async function doListAction(api, rawApi, session, input, threadID) {
+async function doListAction(api, rawApi, session, input, threadID, replyManager, reactionManager) {
   const msgMatch = input.match(/^(\d+)msg$/i);
   const ufMatch = input.match(/^(\d+)uf$/i);
   const blMatch = input.match(/^(\d+)bl$/i);
@@ -743,7 +729,7 @@ async function doListAction(api, rawApi, session, input, threadID) {
       session.data = [...items].reverse();
     }
     session.page = 0;
-    await sendPage(api, threadID, buildListMenu(session.data, 0), session);
+    await sendPage(api, threadID, buildListMenu(session.data, 0), session, replyManager, reactionManager);
     return true;
   }
 
@@ -863,7 +849,6 @@ async function doMRAction(api, rawApi, session, input, threadID) {
         } else if (action === "b") {
           await new Promise((res, rej) => rawApi.changeBlockedStatus(r.threadID, true, (e) => e ? rej(e) : res()));
         }
-        // "a" (accept) — just continue, we mark it done
         done++;
       } catch (_) {}
     }
@@ -880,7 +865,6 @@ async function doMRAction(api, rawApi, session, input, threadID) {
 
   try {
     if (action === "a") {
-      // Accept = mark as seen / allow messaging
       api.sendMessage(`✅ Accepted request from: ${target.name}\nYou can now message them.`, threadID);
       session.data = items.filter(r => r.threadID !== target.threadID);
     } else if (action === "d") {
@@ -902,12 +886,12 @@ async function doMRAction(api, rawApi, session, input, threadID) {
 // ─────────────────────────────────────────────
 //  SESSION INPUT HANDLER (shared between onReply & run)
 // ─────────────────────────────────────────────
-async function handleSessionInput(api, rawApi, session, input, senderID, threadID) {
+async function handleSessionInput(api, rawApi, session, input, senderID, threadID, replyManager, reactionManager) {
   sessionResetTimer(senderID);
 
   // Previous page
   if (input === "0") {
-    await navigatePage(api, session, -1);
+    await navigatePage(api, session, -1, replyManager, reactionManager);
     return true;
   }
 
@@ -926,7 +910,7 @@ async function handleSessionInput(api, rawApi, session, input, senderID, threadI
   }
 
   if (session.type === "list") {
-    const handled = await doListAction(api, rawApi, session, input, threadID);
+    const handled = await doListAction(api, rawApi, session, input, threadID, replyManager, reactionManager);
     if (handled) return true;
   }
 
@@ -1004,7 +988,7 @@ async function runSmsAll(api, rawApi, threadID, text, authorID) {
 // ─────────────────────────────────────────────
 //  NAVIGATION HELPER (next/prev page)
 // ─────────────────────────────────────────────
-async function navigatePage(api, session, dir) {
+async function navigatePage(api, session, dir, replyManager, reactionManager) {
   const tp = Math.max(1, Math.ceil(session.data.length / PER_PAGE));
   const newPage = session.page + dir;
   if (newPage < 0 || newPage >= tp) {
@@ -1021,7 +1005,7 @@ async function navigatePage(api, session, dir) {
   if (session.type === "mr")    text = buildMRMenu(session.data, newPage);
 
   if (text) {
-    await sendPage(api, session.threadID, text, session);
+    await sendPage(api, session.threadID, text, session, replyManager, reactionManager);
     sessionResetTimer(session.authorID);
   }
   return true;
@@ -1034,7 +1018,7 @@ module.exports = {
   config: {
     name: "fbcontrol",
     aliases: ["fb", "fbc", "fbm"],
-    version: "3.1.0",
+    version: "3.2.0",
     author: "Riyad Bot Team",
     countDown: 3,
     role: 0,
@@ -1047,7 +1031,7 @@ module.exports = {
   },
 
   // ── REACTION → next page ───────────────────
-  onReaction: async function({ api, event }) {
+  onReaction: async function({ api, event, replyManager, reactionManager }) {
     try {
       const { userID, messageID } = event;
       const session = sessionGet(userID);
@@ -1057,7 +1041,7 @@ module.exports = {
       if (session.lastMsgID !== messageID) return;
 
       if (["req", "list", "block", "inbox", "mr"].includes(session.type)) {
-        await navigatePage(api, session, 1);
+        await navigatePage(api, session, 1, replyManager, reactionManager);
       }
     } catch (err) {
       console.error("[fbcontrol] onReaction error:", err);
@@ -1066,7 +1050,7 @@ module.exports = {
 
   // ── REPLY → navigation & actions ──────────
   // Called when user replies to any of the bot's menu messages
-  onReply: async function({ api, event }) {
+  onReply: async function({ api, event, replyManager, reactionManager }) {
     try {
       const { senderID, threadID, body, messageReply } = event;
       const rawApi = getRawApi(api);
@@ -1086,16 +1070,16 @@ module.exports = {
       const input = (body || "").trim().toLowerCase();
       if (!input) return;
 
-      await handleSessionInput(api, rawApi, session, input, session.authorID, threadID);
+      await handleSessionInput(api, rawApi, session, input, session.authorID, threadID, replyManager, reactionManager);
     } catch (err) {
       console.error("[fbcontrol] onReply error:", err);
     }
   },
 
   // ── RUN — main command entry ───────────────
-  run: async function({ api, event, args }) {
+  run: async function({ api, event, args, replyManager, reactionManager }) {
     try {
-      await handleRun({ api, event, args });
+      await handleRun({ api, event, args, replyManager, reactionManager });
     } catch (err) {
       console.error("[fbcontrol] Uncaught error in run():", err);
       try {
@@ -1111,7 +1095,7 @@ module.exports = {
 // ─────────────────────────────────────────────
 //  HANDLE RUN (internal)
 // ─────────────────────────────────────────────
-async function handleRun({ api, event, args }) {
+async function handleRun({ api, event, args, replyManager, reactionManager }) {
   const { senderID, threadID, body } = event;
   const rawApi = getRawApi(api);
   const sub = (args[0] || "").toLowerCase();
@@ -1165,7 +1149,7 @@ async function handleRun({ api, event, args }) {
   if (session) {
     // Strip any "fb ..." prefix from the body to get the raw input
     const rawInput = (body || "").trim().replace(/^(?:fb\w*|fbc|fbm)\s*/i, "").trim().toLowerCase();
-    const handled = await handleSessionInput(api, rawApi, session, rawInput, senderID, threadID);
+    const handled = await handleSessionInput(api, rawApi, session, rawInput, senderID, threadID, replyManager, reactionManager);
     if (handled) return;
     // unknown input while session active — silently ignore
     return;
@@ -1186,7 +1170,7 @@ async function handleRun({ api, event, args }) {
 
     sessionCreate(senderID, "list", result.data, threadID);
     const s = sessionGet(senderID);
-    await sendPage(api, threadID, buildListMenu(result.data, 0), s);
+    await sendPage(api, threadID, buildListMenu(result.data, 0), s, replyManager, reactionManager);
     return;
   }
 
@@ -1199,7 +1183,7 @@ async function handleRun({ api, event, args }) {
 
     sessionCreate(senderID, "block", result.data, threadID);
     const s = sessionGet(senderID);
-    await sendPage(api, threadID, buildBlockMenu(result.data, 0), s);
+    await sendPage(api, threadID, buildBlockMenu(result.data, 0), s, replyManager, reactionManager);
     return;
   }
 
@@ -1212,7 +1196,7 @@ async function handleRun({ api, event, args }) {
 
     sessionCreate(senderID, "inbox", result.data, threadID);
     const s = sessionGet(senderID);
-    await sendPage(api, threadID, buildInboxMenu(result.data, 0), s);
+    await sendPage(api, threadID, buildInboxMenu(result.data, 0), s, replyManager, reactionManager);
     return;
   }
 
@@ -1225,7 +1209,7 @@ async function handleRun({ api, event, args }) {
 
     sessionCreate(senderID, "mr", result.data, threadID);
     const s = sessionGet(senderID);
-    await sendPage(api, threadID, buildMRMenu(result.data, 0), s);
+    await sendPage(api, threadID, buildMRMenu(result.data, 0), s, replyManager, reactionManager);
     return;
   }
 
@@ -1237,5 +1221,5 @@ async function handleRun({ api, event, args }) {
 
   sessionCreate(senderID, "req", result.data, threadID);
   const s = sessionGet(senderID);
-  await sendPage(api, threadID, buildReqMenu(result.data, 0), s);
+  await sendPage(api, threadID, buildReqMenu(result.data, 0), s, replyManager, reactionManager);
 }
