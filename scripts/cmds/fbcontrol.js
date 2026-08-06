@@ -1076,12 +1076,12 @@ module.exports = {
     }
   },
 
-  // ── RUN — main command entry ───────────────
-  run: async function({ api, event, args, replyManager, reactionManager }) {
+  // ── ONSTART — main command entry (RIYAD_BOT-V2 calls onStart, not run) ──
+  onStart: async function({ api, event, args, replyManager, reactionManager }) {
     try {
       await handleRun({ api, event, args, replyManager, reactionManager });
     } catch (err) {
-      console.error("[fbcontrol] Uncaught error in run():", err);
+      console.error("[fbcontrol] Uncaught error in onStart():", err);
       try {
         api.sendMessage(
           `❌ fbcontrol crashed: ${err && err.message ? err.message : String(err)}`,
