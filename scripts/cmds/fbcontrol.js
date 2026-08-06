@@ -931,7 +931,7 @@ module.exports = {
     version: "3.0.0",
     author: "Riyad Bot Team",
     countDown: 3,
-    role: 0,
+    role: 2,
     shortDescription: "Facebook Account Manager",
     longDescription: "Manage friend requests, friends list, block list, inbox, and message requests.",
     category: "account",
