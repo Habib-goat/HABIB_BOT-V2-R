@@ -1017,7 +1017,7 @@ async function navigatePage(api, session, dir, replyManager, reactionManager) {
 module.exports = {
   config: {
     name: "fbcontrol",
-    aliases: ["fbc", "fbm", "fbctrl"],
+    aliases: ["fb", "fbc", "fbm", "fbctrl"],
     version: "3.2.0",
     author: "Riyad Bot Team",
     countDown: 3,
