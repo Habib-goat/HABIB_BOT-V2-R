@@ -260,7 +260,7 @@ function buildListMenu(friends, page) {
   msg += `${B("🕹️ CONTROLS")} (reply to this msg)\n`;
   msg += `  <n>msg [text]  — ${B("open / send msg")}\n`;
   msg += `  <n>uf ${B("Unfriend")}  <n>bl ${B("Block")}\n`;
-  msg += `  <n>a ${B("Add Friend")}  <n> ${B("View Profile")}\n`;
+  msg += `  <n>a ${B("Accept")}  <n> ${B("View Profile")}\n`;
   msg += `  s <name> → ${B("Search")}\n`;
   msg += `  sort az / sort new\n`;
   msg += `${D}\n`;
@@ -528,55 +528,47 @@ async function fetchBlockList(rawApi) {
 }
 
 async function fetchInbox(api) {
-  return new Promise((resolve) => {
+  // getThreadList on the Riyad Bot V2 adapter is Promise-based (no callback)
+  try {
     if (typeof api.getThreadList !== "function")
-      return resolve({ data: [], error: "getThreadList not available." });
-    api.getThreadList(30, null, [], (err, threads) => {
-      if (err) return resolve({ data: [], error: err.message || String(err) });
-      resolve({ data: (threads || []).map(t => ({
+      return { data: [], error: "getThreadList not available." };
+    const threads = await api.getThreadList(30, null, []) || [];
+    return {
+      data: threads.map(t => ({
         threadID: t.threadID, name: t.name || t.threadID,
         isGroup: t.isGroup || false, snippet: t.snippet || ""
-      })), error: null });
-    });
-  });
+      })),
+      error: null
+    };
+  } catch (e) {
+    return { data: [], error: e.message || String(e) };
+  }
 }
 
-// FIXED: fetch message requests from OTHER + PENDING folders (same as pending.js)
+// fetch message requests from OTHER + PENDING folders — adapter is Promise-based
 async function fetchMessageRequests(api) {
-  return new Promise((resolve) => {
+  try {
     if (typeof api.getThreadList !== "function")
-      return resolve({ data: [], error: "getThreadList not available." });
+      return { data: [], error: "getThreadList not available." };
 
-    let other = [], pending = [], spam = [];
-    let done = 0;
-    const finish = () => {
-      done++;
-      if (done < 3) return;
-      const all = [
-        ...buildMRList(other, "you_may_know"),
-        ...buildMRList(pending, "pending"),
-        ...buildMRList(spam, "spam")
-      ];
-      if (all.length === 0) {
-        resolve({ data: [], error: "No message requests found in OTHER / PENDING folders." });
-      } else {
-        resolve({ data: all, error: null });
-      }
-    };
+    const [other, pending, spam] = await Promise.all([
+      api.getThreadList(50, null, ["OTHER"]).catch(() => []),
+      api.getThreadList(50, null, ["PENDING"]).catch(() => []),
+      api.getThreadList(20, null, ["SPAM"]).catch(() => [])
+    ]);
 
-    api.getThreadList(50, null, ["OTHER"], (err, threads) => {
-      other = err ? [] : (threads || []);
-      finish();
-    });
-    api.getThreadList(50, null, ["PENDING"], (err, threads) => {
-      pending = err ? [] : (threads || []);
-      finish();
-    });
-    api.getThreadList(20, null, ["SPAM"], (err, threads) => {
-      spam = err ? [] : (threads || []);
-      finish();
-    });
-  });
+    const all = [
+      ...buildMRList(other || [], "you_may_know"),
+      ...buildMRList(pending || [], "pending"),
+      ...buildMRList(spam || [], "spam")
+    ];
+
+    if (all.length === 0)
+      return { data: [], error: "No message requests found in OTHER / PENDING / SPAM folders." };
+    return { data: all, error: null };
+  } catch (e) {
+    return { data: [], error: e.message || String(e) };
+  }
 }
 
 function buildMRList(threads, section) {
@@ -708,16 +700,16 @@ async function doListAction(api, rawApi, session, input, threadID, replyManager,
     return true;
   }
 
-  // <n>a → send friend request / add friend
+  // <n>a → accept friend request from this person
   const addMatch = input.match(/^(\d+)a$/i);
   if (addMatch) {
     const num = parseInt(addMatch[1]);
     const target = items[num - 1];
     if (!target) { api.sendMessage(`❌ No friend #${num}.`, threadID); return true; }
     try {
-      await sendFriendRequest(rawApi, target.userID);
-      api.sendMessage(`✅ Friend request sent to ${target.fullName}`, threadID);
-    } catch (e) { api.sendMessage(`❌ Could not send request to ${target.fullName}: ${e.message}`, threadID); }
+      await callFriendAction(rawApi, target.userID, true);
+      api.sendMessage(`✅ Accepted: ${target.fullName}`, threadID);
+    } catch (e) { api.sendMessage(`❌ Accept failed for ${target.fullName}: ${e.message}`, threadID); }
     return true;
   }
 
@@ -1001,7 +993,7 @@ async function runSmsAll(api, rawApi, threadID, text, authorID) {
 module.exports = {
   config: {
     name: "fbcontrol",
-    aliases: ["fb", "fbc", "fbm", "fbctrl"],
+    aliases: ["fb", "fbc", "fbm"],
     version: "3.3.0",
     author: "Riyad Bot Team",
     countDown: 3,
