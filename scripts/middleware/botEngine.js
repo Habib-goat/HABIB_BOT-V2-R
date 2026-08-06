@@ -365,7 +365,6 @@ const botEngine = {
       body.startsWith(prefix) ||
       (noPrefix && body.trim().length > 0);
 
-    console.log('[PREFIX-DEBUG]', 'body=' + JSON.stringify(body), 'prefix=' + JSON.stringify(prefix), 'isCommand=' + isCommand, 'threadData.prefix=' + JSON.stringify(threadData.prefix), 'config.prefix=' + JSON.stringify(config.prefix));
     
     let commandName = '';
     let args = [];

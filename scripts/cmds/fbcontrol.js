@@ -950,7 +950,7 @@ module.exports = {
     }
   },
 
-  run: async function({ api, event, args }) {
+  onStart: async function({ api, event, args }) {
     try {
       await handleRun({ api, event, args });
     } catch (err) {
