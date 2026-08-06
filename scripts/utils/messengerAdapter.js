@@ -475,6 +475,79 @@ getCurrentUserID() {
 
   return this.api.currentUserID || this.api.userID || null;
 }
+
+// ── Friends / Requests management (added for fbcontrol.js) ──────────────
+// NOTE: these were previously missing from the adapter entirely, which is
+// why any command calling api.getFriendsList()/unfriend()/etc used to
+// throw "is not a function" immediately — including the message-request
+// (mr) accept flow, which relies on handleMessageRequest below.
+async getFriendsList() {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.getFriendsList !== "function") {
+      return reject(new Error("Underlying FCA getFriendsList function is not available."));
+    }
+
+    this.api.getFriendsList((err, list) => {
+      if (err) return reject(err);
+      resolve(list || []);
+    });
+  });
+}
+
+async unfriend(userID) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.unfriend !== "function") {
+      return reject(new Error("Underlying FCA unfriend function is not available."));
+    }
+
+    this.api.unfriend(userID, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
+
+async changeBlockedStatus(userID, block) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.changeBlockedStatus !== "function") {
+      return reject(new Error("Underlying FCA changeBlockedStatus function is not available."));
+    }
+
+    this.api.changeBlockedStatus(userID, block, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
+
+// accept/reject an incoming FRIEND request (by the sender's userID)
+async handleFriendRequest(userID, accept) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.handleFriendRequest !== "function") {
+      return reject(new Error("Underlying FCA handleFriendRequest function is not available."));
+    }
+
+    this.api.handleFriendRequest(userID, !!accept, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
+
+// accept/reject an incoming MESSAGE request thread (moves thread between
+// inbox <-> other/message-requests)
+async handleMessageRequest(threadID, accept) {
+  return new Promise((resolve, reject) => {
+    if (typeof this.api.handleMessageRequest !== "function") {
+      return reject(new Error("Underlying FCA handleMessageRequest function is not available."));
+    }
+
+    this.api.handleMessageRequest(threadID, !!accept, (err) => {
+      if (err) return reject(err);
+      resolve(true);
+    });
+  });
+}
 }
 /**
  * Adapter implementation for Simulated Environment (Local / Dashboard testing)
