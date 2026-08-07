@@ -163,11 +163,19 @@ console.log("VIDEO URL:", videoUrl);
         api.sendMessage(`❌ | Error downloading the video.`, threadID, messageID);
       });
     } catch (err) {
-      console.error("videos2 fetch error:", err);
-      console.error(err.response?.data || err.message);
-      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-      return api.sendMessage(`❌ | Failed to fetch the video.`, threadID, messageID);
-    }
+  console.error("videos2 fetch error:", err.response?.data || err.message);
+
+  if (filePath && fs.existsSync(filePath))
+    fs.unlinkSync(filePath);
+
+  if (hasReaction)
+    api.setMessageReaction("❌", messageID, () => {}, true);
+
+  return api.sendMessage(
+    `❌ ${err.response?.data?.detail || err.message}`,
+    threadID,
+    messageID
+  );
+}
   }
 };
