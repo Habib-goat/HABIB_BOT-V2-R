@@ -54,14 +54,14 @@ module.exports = {
             const msg = await message.reply(msgBody);
             
             // onReply হুকের জন্য ডেটা সেভ করা হচ্ছে (GoatBot V2 & ST-BOT supported)
-            if (global.GoatBot && global.GoatBot.onReply) {
-                global.GoatBot.onReply.set(msg.messageID, {
-                    commandName: this.config.name,
-                    messageID: msg.messageID,
-                    author: event.senderID,
-                    videos: videos
-                });
-            }
+            if (global.RiyadBot && global.RiyadBot.onReply) {
+    global.RiyadBot.onReply.set(msg.messageID, {
+        commandName: this.config.name,
+        messageID: msg.messageID,
+        authorID: event.senderID,
+        videos
+    });
+}
         } catch (err) {
             console.error(err);
             return message.reply("❌ | The video search API is currently unavailable or returned an error. Please try again later.");
@@ -73,7 +73,7 @@ module.exports = {
         if (!Reply) return;
         
         // শুধুমাত্র যে ইউজার সার্চ করেছে সে-ই রিপ্লাই দিতে পারবে
-        if (event.senderID !== Reply.author) return; 
+        if (event.senderID !== Reply.authorID) return;
 
         const choice = parseInt(event.body);
         if (isNaN(choice) || choice < 1 || choice > Reply.videos.length) {
@@ -132,8 +132,8 @@ module.exports = {
         }
 
         // কাজ শেষ, তাই onReply লিসেনার ডিলিট করে দেওয়া হচ্ছে
-        if (global.GoatBot && global.GoatBot.onReply) {
-            global.GoatBot.onReply.delete(Reply.messageID);
-        }
+        if (global.RiyadBot && global.RiyadBot.onReply) {
+    global.RiyadBot.onReply.delete(Reply.messageID);
+}
     }
 };
