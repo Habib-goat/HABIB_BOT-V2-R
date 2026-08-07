@@ -74,14 +74,18 @@ module.exports = {
         }
       }, messageID);
     } catch (err) {
-      console.error(err);
+      console.log("Status:", err.response?.status);
+      console.log("Data:", err.response?.data);
+      console.log("Message:", err.message);
+
       if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
+
       return api.sendMessage(
-        "❌ | The video search API is currently unavailable or returned an error. Please try again later.",
+        `Status: ${err.response?.status}\n${JSON.stringify(err.response?.data)}`,
         threadID,
         messageID
       );
-    }
+}
   },
 
   onReply: async function ({ api, event, Reply }) {
