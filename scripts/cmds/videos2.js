@@ -4,7 +4,7 @@ const path = require("path");
 
 // 👇 এখানে আপনার YouTube search API এর URL বসান
 // উদাহরণ: const API_URL = "https://your-api.onrender.com/ytSearch?query=";
-const API_URL = "https://videos2-api.onrender.com/search?query=${encodeURIComponent(query)}&pages=1";
+const API_URL = "https://videos2-api.onrender.com/search";
 
 module.exports = {
   config: {
@@ -35,7 +35,9 @@ module.exports = {
     try {
       if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
 
-      const response = await axios.get(`${API_URL}${encodeURIComponent(query)}`);
+      const response = await axios.get(
+  `${API_URL}?query=${encodeURIComponent(query)}&pages=1`
+);
       const data = response.data;
 
       // API রেসপন্স স্ট্রাকচার হ্যান্ডেল করার জন্য (API ভেদে ভিন্ন হতে পারে)
