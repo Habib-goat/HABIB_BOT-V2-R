@@ -2,33 +2,37 @@
  * ╔══════════════════════════════════════════════════════════════╗
  * ║         FACEBOOK ACCOUNT MANAGER — RIYAD FRAMEWORK           ║
  * ║  Command: fbcontrol  |  Aliases: fb, fbc, fbm                ║
- * ║  Version: 3.5.1                                              ║
+ * ║  Version: 3.6.0                                              ║
  * ╚══════════════════════════════════════════════════════════════╝
  *
- * CHANGES IN 3.5.1 (this patch):
+ * CHANGES IN 3.6.0 (this patch):
+ *  - "fb sms" already worked regardless of friend status for UID targets
+ *    (it never checked the friend list for raw UIDs) — kept that behavior,
+ *    just confirming: friend or not, a send is always attempted the same way.
+ *  - ADDED real "blocked" detection: when a send comes back with no
+ *    messageID, safeSendDM() now does a secondary check (scrapes the mbasic
+ *    message-compose page for that UID) to tell apart "this person has you
+ *    blocked / restricts messages" from a generic silent failure. If blocked,
+ *    the error shown is now "🚫 You're blocked by this user." instead of the
+ *    generic spam/rate-limit message.
+ *  - ADDED mention support to "fb sms": `fb sms @SomeoneTagged <text>` now
+ *    sends directly to whichever user you @-mentioned in the message,
+ *    reading the real userID from event.mentions instead of needing a list
+ *    number or UID.
+ *
+ * CHANGES IN 3.5.1:
  *  - FIXED "fb sms" / "fb sms all": showed "✅ sent" but the message never
  *    actually arrived. Root cause: safeSendDM() called api.sendMessage()
  *    (the FcaMessengerAdapter wrapper). That wrapper's Promise resolves as
  *    soon as it hands the message to the outgoing queue/adapter layer, NOT
  *    when Facebook actually confirms delivery — so it can resolve
  *    successfully even when the underlying fca-riyad call silently failed
- *    or Facebook's spam/abuse system accepted-then-dropped it. There was
- *    also no logging of what the adapter actually returned, so failures
- *    were invisible.
- *
- *    FIX: safeSendDM() now calls rawApi.sendMessage() directly — the raw
- *    fca-riyad call with its real Node-style callback — which is the same
- *    call path fca-riyad itself uses to talk to Facebook, bypassing the
- *    adapter layer entirely. It also now logs the real messageID (or the
- *    real error) to the console for every send, and rejects with the ACTUAL
- *    error instead of silently resolving.
- *  - `fb sms all`: increased per-send delay (300ms → 1200ms) with a little
- *    random jitter, because sending 1 DM every 300ms to dozens/hundreds of
- *    friends in a row is exactly the pattern Facebook's spam filters flag
- *    and silently drop — even though the API call itself reports success.
- *  - `fb sms all`: now reports sent vs. genuinely-failed counts separately,
- *    and prints the failed friends' names/UIDs so you can see exactly who
- *    didn't get it and why (from the real error message).
+ *    or Facebook's spam/abuse system accepted-then-dropped it.
+ *    FIX: safeSendDM() now calls rawApi.sendMessage() directly (real
+ *    fca-riyad callback), logs every real outcome, and rejects with the
+ *    ACTUAL error/failure instead of silently resolving.
+ *  - `fb sms all`: increased per-send delay (300ms → 1200ms) with jitter.
+ *  - `fb sms all`: reports sent vs. genuinely-failed counts, with reasons.
  */
 "use strict";
 
@@ -111,7 +115,35 @@ function unsendMsg(api, msgID) {
 }
 
 // ─────────────────────────────────────────────
-//  SAFE DM SEND HELPER  ★★★ FIXED IN 3.5.1 ★★★
+//  BLOCKED-STATUS CHECK  (used by safeSendDM on silent-fail)
+//
+//  When a send returns no messageID and no error, that alone doesn't tell
+//  us WHY — could be a block, a rate-limit, or a recipient who restricts
+//  messages from non-friends. We scrape the mbasic message-compose page for
+//  that UID, which shows explicit text like "You can't send this message"
+//  or similar when the recipient has the sender blocked/restricted. This is
+//  best-effort — if the page shape doesn't match, we return null (unknown)
+//  rather than falsely claiming blocked.
+// ─────────────────────────────────────────────
+async function checkIfBlockedByUser(rawApi, uid) {
+  try {
+    const cookieStr = buildCookieString(rawApi);
+    if (!cookieStr) return null;
+    const res = await httpsGet(`https://mbasic.facebook.com/messages/compose/?ids[0]=${uid}`, cookieStr);
+    const html = res.body || "";
+    if (
+      /you\W?re blocked|has blocked you|can\W?t send (this|a) message|message.{0,25}restricted|unable to reach/i.test(html)
+    ) {
+      return true;
+    }
+    return false;
+  } catch (_) {
+    return null; // unknown — don't guess
+  }
+}
+
+// ─────────────────────────────────────────────
+//  SAFE DM SEND HELPER  ★★★ FIXED IN 3.5.1, EXTENDED IN 3.6.0 ★★★
 //
 //  OLD (broken): `return await api.sendMessage(text, threadID);`
 //  This called the FcaMessengerAdapter wrapper, whose Promise can resolve
@@ -119,34 +151,48 @@ function unsendMsg(api, msgID) {
 //  hand-off vs real delivery), and gave zero visibility into what happened.
 //
 //  NEW: call rawApi.sendMessage() directly — fca-riyad's real callback-based
-//  send, the same one every other working command in this framework relies
-//  on for real delivery. We wrap it in a Promise ourselves so the calling
-//  code can still `await` it, but the resolve/reject now reflects fca-riyad's
-//  ACTUAL callback result, not the adapter's queue hand-off. Every call also
-//  logs the outcome so failures are visible in the server log instead of
-//  silently vanishing.
+//  send — and reflect its ACTUAL result. Every call logs the outcome. On a
+//  silent failure (no error, no messageID) we now also check whether the
+//  recipient has the bot blocked, and say so explicitly instead of a vague
+//  "rate-limit?" guess.
+//
+//  Friend-status is intentionally irrelevant here — this function sends to
+//  whatever threadID/UID it's given, whether or not that person is a friend
+//  of the bot account. Non-friend sends land as Facebook message requests,
+//  which still counts as delivered (messageID returned) unless blocked.
 // ─────────────────────────────────────────────
 async function safeSendDM(api, text, threadID) {
   const rawApi = getRawApi(api);
   if (typeof rawApi.sendMessage !== "function") {
     throw new Error("rawApi.sendMessage is not available — cannot send DM.");
   }
-  return await new Promise((resolve, reject) => {
-    rawApi.sendMessage(text, threadID, (err, info) => {
-      if (err) {
-        console.error(`[fbcontrol] DM send FAILED → ${threadID}:`, err && err.message ? err.message : err);
-        return reject(err instanceof Error ? err : new Error(String(err)));
-      }
-      if (!info || !info.messageID) {
-        // fca-riyad returned no error but also no messageID — treat as
-        // suspicious rather than silently declaring success.
-        console.warn(`[fbcontrol] DM send to ${threadID} returned no messageID — Facebook may have silently rejected it. info:`, JSON.stringify(info));
-        return reject(new Error("No messageID returned — Facebook likely rejected the message silently (possible spam/rate-limit block)."));
-      }
-      console.log(`[fbcontrol] DM sent OK → ${threadID} | messageID: ${info.messageID}`);
-      resolve(info);
+
+  let info;
+  try {
+    info = await new Promise((resolve, reject) => {
+      rawApi.sendMessage(text, threadID, (err, res) => {
+        if (err) return reject(err instanceof Error ? err : new Error(String(err)));
+        resolve(res);
+      });
     });
-  });
+  } catch (err) {
+    console.error(`[fbcontrol] DM send FAILED → ${threadID}:`, err && err.message ? err.message : err);
+    throw err;
+  }
+
+  if (!info || !info.messageID) {
+    console.warn(`[fbcontrol] DM send to ${threadID} returned no messageID. info:`, JSON.stringify(info));
+    const blocked = await checkIfBlockedByUser(rawApi, threadID);
+    if (blocked === true) {
+      const blockedErr = new Error("🚫 You're blocked by this user.");
+      blockedErr.isBlocked = true;
+      throw blockedErr;
+    }
+    throw new Error("No messageID returned — Facebook likely rejected the message silently (possible spam/rate-limit block).");
+  }
+
+  console.log(`[fbcontrol] DM sent OK → ${threadID} | messageID: ${info.messageID}`);
+  return info;
 }
 
 // ─────────────────────────────────────────────
@@ -251,6 +297,9 @@ function buildHelpMenu() {
 
 📤 │ fb sms <n> / <uid> <text>
    └─ ✉️ DM a specific friend by number or UID
+
+📤 │ fb sms @mention <text>
+   └─ 🏷️ DM whoever you @-tagged (works for non-friends too)
 
 📤 │ fb sms reply <text>
    └─ ↩️ Reply to last DM thread
@@ -1216,14 +1265,14 @@ module.exports = {
   config: {
     name: "fbcontrol",
     aliases: ["fb", "fbc", "fbm"],
-    version: "3.5.1",
+    version: "3.6.0",
     author: "Riyad Bot Team",
     countDown: 3,
     role: 2,
     shortDescription: "Facebook Account Manager",
     longDescription: "Manage friend requests, friends list, inbox, message requests, and your own profile.",
     category: "account",
-    guide: { en: "fb | fb list | fb inbox | fb mr | fb sms <n|uid> <text> | fb sms reply <text> | fb sms all <text> | fb p" }
+    guide: { en: "fb | fb list | fb inbox | fb mr | fb sms <n|uid> <text> | fb sms @mention <text> | fb sms reply <text> | fb sms all <text> | fb p" }
   },
 
   onReaction: async function({ api, event, Reaction, reactionData, replyManager, reactionManager }) {
@@ -1283,7 +1332,37 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
   // ── SMS COMMANDS ──────────────────────────────────────────────────────────
   if (sub === "sms") {
     const target = args[1];
-    const smsUsage = "❌ Usage:\n  fb sms <number|uid> <text>\n  fb sms reply <text>\n  fb sms all <text>";
+    const smsUsage = "❌ Usage:\n  fb sms <number|uid> <text>\n  fb sms @mention <text>\n  fb sms reply <text>\n  fb sms all <text>";
+
+    // ── MENTION SUPPORT: "fb sms @SomeoneTagged <text>" ──────────────────
+    // Reads the real userID straight from event.mentions instead of a list
+    // number or UID, so tagging someone works regardless of friend status.
+    if (event.mentions && Object.keys(event.mentions).length > 0) {
+      const mentionEntries = Object.entries(event.mentions);
+      const [mentionUID, mentionTagRaw] = mentionEntries[0];
+      const mentionTag = typeof mentionTagRaw === "string"
+        ? mentionTagRaw
+        : (mentionTagRaw && (mentionTagRaw.tag || mentionTagRaw.name)) || "";
+
+      // Strip the leading "fb sms" / "fbcontrol sms" trigger and the mention
+      // tag itself out of the raw message body, leaving just the text.
+      let msgText = (body || "").replace(/^\S+\s+sms\s+/i, "");
+      if (mentionTag) msgText = msgText.split(mentionTag).join(" ");
+      msgText = msgText.trim();
+
+      if (!msgText) return api.sendMessage("❌ Usage: fb sms @mention <text>", threadID);
+      if (!mentionUID) return api.sendMessage("❌ Could not read the mentioned user's ID.", threadID);
+
+      try {
+        await safeSendDM(api, msgText, mentionUID);
+        setLastDmThread(senderID, mentionUID, mentionTag || mentionUID);
+        api.sendMessage(`✅ Message sent to ${mentionTag || `UID ${mentionUID}`}`, threadID);
+      } catch (e) {
+        api.sendMessage(`❌ Failed to send: ${e.message || String(e)}`, threadID);
+      }
+      return;
+    }
+
     if (!target) return api.sendMessage(smsUsage, threadID);
 
     if (target.toLowerCase() === "all") {
