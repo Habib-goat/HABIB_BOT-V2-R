@@ -127,8 +127,10 @@ module.exports = {
 
 			let response;
 			let lastError;
+			let anyQuotaHit = false;
 
-			for (const apiKey of apiKeys) {
+			for (let i = 0; i < apiKeys.length; i++) {
+				const apiKey = apiKeys[i];
 				try {
 					const ai = new GoogleGenAI({ apiKey });
 					response = await ai.models.generateContent({
@@ -139,16 +141,24 @@ module.exports = {
 					break;
 				} catch (err) {
 					lastError = err;
-					if (isQuotaOrRateLimitError(err)) continue;
-					throw err;
+					const rawMsg = String(err?.message || err?.error?.message || err);
+					console.error(`Image Command - Gemini key #${i + 1} failed:`, rawMsg);
+					if (isQuotaOrRateLimitError(err)) {
+						anyQuotaHit = true;
+						continue;
+					}
+					// Non-quota error (e.g. invalid key, model access denied, bad request) -
+					// stop immediately and surface the real reason instead of masking it.
+					throw new Error(rawMsg);
 				}
 			}
 
 			if (!response) {
-				if (lastError && isQuotaOrRateLimitError(lastError)) {
-					throw new Error("All Gemini API keys have exceeded their quota. Please try again later.");
+				const rawMsg = String(lastError?.message || lastError?.error?.message || lastError || "Unknown error");
+				if (anyQuotaHit) {
+					throw new Error(`All Gemini API keys failed. Last error: ${rawMsg}`);
 				}
-				throw lastError || new Error("Gemini AI did not return a response.");
+				throw new Error(rawMsg || "Gemini AI did not return a response.");
 			}
 
 			const image = extractImageFromResponse(response);
