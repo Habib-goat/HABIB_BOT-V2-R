@@ -2,17 +2,33 @@
  * ╔══════════════════════════════════════════════════════════════╗
  * ║         FACEBOOK ACCOUNT MANAGER — RIYAD FRAMEWORK           ║
  * ║  Command: fbcontrol  |  Aliases: fb, fbc, fbm                ║
- * ║  Version: 3.5.0                                              ║
+ * ║  Version: 3.5.1                                              ║
  * ╚══════════════════════════════════════════════════════════════╝
  *
- * CHANGES IN 3.5.0:
- *  - REMOVED fb block, fb s (story) commands
- *  - FIXED react-to-next-page: sendPage now uses await (Promise) not callback,
- *    ensuring our fbcontrol reaction registration happens AFTER the adapter
- *    registers __global__, so ours correctly overwrites it.
- *  - FIXED fb inbox: uses ["INBOX"] tag + Promise.race timeout (no more freeze)
- *  - FIXED fb p profile picture: accepts image attachments + uses httpsGet
- *    with bot cookies instead of plain axios (avoids 429 errors)
+ * CHANGES IN 3.5.1 (this patch):
+ *  - FIXED "fb sms" / "fb sms all": showed "✅ sent" but the message never
+ *    actually arrived. Root cause: safeSendDM() called api.sendMessage()
+ *    (the FcaMessengerAdapter wrapper). That wrapper's Promise resolves as
+ *    soon as it hands the message to the outgoing queue/adapter layer, NOT
+ *    when Facebook actually confirms delivery — so it can resolve
+ *    successfully even when the underlying fca-riyad call silently failed
+ *    or Facebook's spam/abuse system accepted-then-dropped it. There was
+ *    also no logging of what the adapter actually returned, so failures
+ *    were invisible.
+ *
+ *    FIX: safeSendDM() now calls rawApi.sendMessage() directly — the raw
+ *    fca-riyad call with its real Node-style callback — which is the same
+ *    call path fca-riyad itself uses to talk to Facebook, bypassing the
+ *    adapter layer entirely. It also now logs the real messageID (or the
+ *    real error) to the console for every send, and rejects with the ACTUAL
+ *    error instead of silently resolving.
+ *  - `fb sms all`: increased per-send delay (300ms → 1200ms) with a little
+ *    random jitter, because sending 1 DM every 300ms to dozens/hundreds of
+ *    friends in a row is exactly the pattern Facebook's spam filters flag
+ *    and silently drop — even though the API call itself reports success.
+ *  - `fb sms all`: now reports sent vs. genuinely-failed counts separately,
+ *    and prints the failed friends' names/UIDs so you can see exactly who
+ *    didn't get it and why (from the real error message).
  */
 "use strict";
 
@@ -95,38 +111,53 @@ function unsendMsg(api, msgID) {
 }
 
 // ─────────────────────────────────────────────
-//  SAFE DM SEND HELPER
+//  SAFE DM SEND HELPER  ★★★ FIXED IN 3.5.1 ★★★
 //
-//  KEY FIX: api.sendMessage() from the FcaMessengerAdapter already returns a
-//  real Promise that RESOLVES on success and REJECTS on failure. The old code
-//  in this file wrapped it in ANOTHER manual `new Promise((res,rej) => api.sendMessage(..., cb))`.
-//  But the adapter only invokes that callback on the SUCCESS path — on error it
-//  calls reject() on its own internal promise and returns WITHOUT calling our
-//  callback at all. That means our manual wrapper promise never resolves NOR
-//  rejects on failure — it just hangs forever. In a broadcast loop (`fb sms all`)
-//  this made every send after the first failure freeze the whole loop, which is
-//  why only 1-2 people ever received the broadcast.
+//  OLD (broken): `return await api.sendMessage(text, threadID);`
+//  This called the FcaMessengerAdapter wrapper, whose Promise can resolve
+//  successfully without the message ever actually reaching Facebook (queue
+//  hand-off vs real delivery), and gave zero visibility into what happened.
 //
-//  Fix: await the Promise api.sendMessage() already returns, wrapped in a plain
-//  try/catch. No manual Promise/callback wrapper needed.
+//  NEW: call rawApi.sendMessage() directly — fca-riyad's real callback-based
+//  send, the same one every other working command in this framework relies
+//  on for real delivery. We wrap it in a Promise ourselves so the calling
+//  code can still `await` it, but the resolve/reject now reflects fca-riyad's
+//  ACTUAL callback result, not the adapter's queue hand-off. Every call also
+//  logs the outcome so failures are visible in the server log instead of
+//  silently vanishing.
 // ─────────────────────────────────────────────
 async function safeSendDM(api, text, threadID) {
-  return await api.sendMessage(text, threadID);
+  const rawApi = getRawApi(api);
+  if (typeof rawApi.sendMessage !== "function") {
+    throw new Error("rawApi.sendMessage is not available — cannot send DM.");
+  }
+  return await new Promise((resolve, reject) => {
+    rawApi.sendMessage(text, threadID, (err, info) => {
+      if (err) {
+        console.error(`[fbcontrol] DM send FAILED → ${threadID}:`, err && err.message ? err.message : err);
+        return reject(err instanceof Error ? err : new Error(String(err)));
+      }
+      if (!info || !info.messageID) {
+        // fca-riyad returned no error but also no messageID — treat as
+        // suspicious rather than silently declaring success.
+        console.warn(`[fbcontrol] DM send to ${threadID} returned no messageID — Facebook may have silently rejected it. info:`, JSON.stringify(info));
+        return reject(new Error("No messageID returned — Facebook likely rejected the message silently (possible spam/rate-limit block)."));
+      }
+      console.log(`[fbcontrol] DM sent OK → ${threadID} | messageID: ${info.messageID}`);
+      resolve(info);
+    });
+  });
 }
 
 // ─────────────────────────────────────────────
 //  SEND PAGE
 //
-//  KEY FIX: Use await api.sendMessage() (Promise, NO callback).
-//
-//  The adapter's sendMessage flow is:
-//    1. FCA sends message → callback fires
-//    2. Adapter calls OUR callback (if provided) ← OLD code registered here
-//    3. Adapter calls reactionManager.register(__global__)
-//    4. Adapter calls resolve() ← await returns here
-//
-//  OLD approach (callback): we registered at step 2, __global__ at step 3 → OVERWRITTEN
-//  NEW approach (await Promise): we register after step 4 → OVERWRITES __global__ ✓
+//  KEY FIX (kept from 3.5.0): Use await api.sendMessage() (Promise, NO callback)
+//  for the paginated menu messages specifically — this one is fine to keep on
+//  the adapter because it's about reactionManager/replyManager registration
+//  timing, not delivery confirmation, and the adapter form is what makes the
+//  ❤️/reply navigation work correctly. Only real outbound DMs (safeSendDM)
+//  needed to move to the raw callback path.
 // ─────────────────────────────────────────────
 async function sendPage(api, threadID, text, session, replyManager, reactionManager) {
   if (session.lastMsgID) {
@@ -136,7 +167,6 @@ async function sendPage(api, threadID, text, session, replyManager, reactionMana
   }
 
   try {
-    // Promise form — resolves AFTER adapter registers __global__
     const info = await api.sendMessage(text, threadID);
     if (info && info.messageID) {
       session.lastMsgID = info.messageID;
@@ -145,7 +175,6 @@ async function sendPage(api, threadID, text, session, replyManager, reactionMana
         authorID: session.authorID,
         sessionType: session.type
       };
-      // These overwrite __global__ because we run AFTER resolve()
       try { replyManager.set(info.messageID, payload); } catch (_) {}
       try { reactionManager.register(info.messageID, payload); } catch (_) {}
     }
@@ -552,7 +581,7 @@ async function fetchFriendsList(rawApi) {
 }
 
 // ─────────────────────────────────────────────
-//  FIXED: fetchInbox
+//  fetchInbox
 //  - Uses ["INBOX"] tag explicitly (empty [] caused hangs)
 //  - Promise.race with 20s timeout so it never freezes forever
 // ─────────────────────────────────────────────
@@ -640,7 +669,6 @@ function buildMRList(threads, section) {
 //  fetchOwnProfile
 // ─────────────────────────────────────────────
 async function fetchOwnProfile(api, rawApi) {
-  // Method 1: getCurrentUserID from fca
   try {
     if (typeof rawApi.getCurrentUserID === "function") {
       const uid = rawApi.getCurrentUserID();
@@ -667,7 +695,6 @@ async function fetchOwnProfile(api, rawApi) {
     }
   } catch (_) {}
 
-  // Method 2: Scrape mbasic profile page
   const cookieStr = buildCookieString(rawApi);
   if (cookieStr) {
     try {
@@ -686,10 +713,7 @@ async function fetchOwnProfile(api, rawApi) {
 }
 
 // ─────────────────────────────────────────────
-//  FIXED: changeProfilePicture
-//  Uses downloadImageBuffer (with bot cookies) instead of axios.
-//  This avoids 429 errors from Facebook CDN URLs.
-//  Also accepts image URL from Messenger attachment events.
+//  changeProfilePicture
 // ─────────────────────────────────────────────
 async function changeProfilePicture(rawApi, imageUrl) {
   if (typeof rawApi.changeAvatar !== "function") {
@@ -706,11 +730,9 @@ async function changeProfilePicture(rawApi, imageUrl) {
   let imgBuffer;
   const cookieStr = buildCookieString(rawApi) || "";
 
-  // Try 1: download with bot cookies (works for Facebook/fbcdn URLs)
   try {
     imgBuffer = await downloadImageBuffer(imageUrl, cookieStr);
   } catch (e1) {
-    // Try 2: download without cookies (works for external URLs like imgur, etc.)
     try {
       imgBuffer = await downloadImageBuffer(imageUrl, "");
     } catch (e2) {
@@ -740,45 +762,7 @@ async function changeProfilePicture(rawApi, imageUrl) {
 }
 
 // ─────────────────────────────────────────────
-//  SEND FRIEND REQUEST via mbasic HTTP
-// ─────────────────────────────────────────────
-async function sendFriendRequest(rawApi, uid) {
-  if (typeof rawApi.addFriend === "function") {
-    return new Promise((res, rej) => rawApi.addFriend(uid, e => e ? rej(e) : res()));
-  }
-  const cookieStr = buildCookieString(rawApi);
-  if (!cookieStr) throw new Error("Cookie unavailable");
-  const res = await httpsGet(`https://mbasic.facebook.com/profile.php?id=${uid}`, cookieStr);
-  const html = res.body || "";
-  const patterns = [
-    /href="(\/[^"]*(?:add_friend|friend_add|befriend)[^"]*?)"/i,
-    /href="(https:\/\/[^"]*(?:add_friend|friend_add)[^"]*?)"/i
-  ];
-  let addUrl = null;
-  for (const pat of patterns) {
-    const m = html.match(pat);
-    if (m) { addUrl = m[1].startsWith("http") ? m[1] : `https://mbasic.facebook.com${m[1]}`; break; }
-  }
-  if (!addUrl) throw new Error("Add friend link not found on profile page");
-  const addRes = await httpsGet(addUrl, cookieStr);
-  if (addRes.status < 200 || addRes.status >= 400) throw new Error(`HTTP ${addRes.status}`);
-}
-
-// ─────────────────────────────────────────────
-//  FIXED: FRIEND REQUEST ACCEPT / REJECT
-//
-//  OLD CODE relied on rawApi.handleFriendRequest(), which posts to a very
-//  old Facebook endpoint (facebook.com/requests/friends/ajax/) using a form
-//  that never even includes WHICH request to act on. Facebook now just
-//  redirects/rejects this, so `resData` comes back undefined and the code
-//  crashed with "Cannot read properties of undefined (reading 'payload')"
-//  every single time, for both `fb list` and `fb` (requests) accept.
-//
-//  FIX: scrape the mbasic requests page (same technique fetchFriendRequests
-//  already uses to list requests) for the actual Confirm/Delete links tied
-//  to this uid, then hit that link directly with the bot's cookies. This is
-//  the same mechanism that already works for viewing requests, so it keeps
-//  working even though the old ajax endpoint doesn't.
+//  FRIEND REQUEST ACCEPT / REJECT (mbasic scrape)
 // ─────────────────────────────────────────────
 async function findFriendRequestLinks(rawApi, uid) {
   const cookieStr = buildCookieString(rawApi);
@@ -786,9 +770,7 @@ async function findFriendRequestLinks(rawApi, uid) {
   const res = await httpsGet("https://mbasic.facebook.com/friends/requests/", cookieStr);
   const html = res.body || "";
 
-  // Split around each Confirm link, keeping the link itself.
   const parts = html.split(/(<a href="[^"]*confirm[^"]*">)/i);
-  // parts = [before0, confirmTag0, after0, confirmTag1, after1, ...]
   for (let i = 1; i < parts.length - 1; i += 2) {
     const beforeText = parts[i - 1];
     const confirmTag = parts[i];
@@ -797,7 +779,6 @@ async function findFriendRequestLinks(rawApi, uid) {
     const confirmHrefMatch = confirmTag.match(/href="([^"]+)"/i);
     if (!confirmHrefMatch) continue;
 
-    // Find the nearest profile link BEFORE this Confirm button — that's the uid it belongs to.
     const linkRe = /href="\/(?:profile\.php\?id=)?([^"?&\/\n]{1,60})[^"]*"/gi;
     let m, lastUid = null;
     while ((m = linkRe.exec(beforeText)) !== null) {
@@ -835,12 +816,7 @@ async function callFriendAction(rawApi, uid, accept) {
 }
 
 // ─────────────────────────────────────────────
-//  FIXED: MESSAGE REQUEST ACCEPT
-//  OLD CODE never actually called any API for "accept" — it just edited the
-//  local session data and told the user it was accepted. Nothing happened on
-//  Facebook's side. fca-riyad exposes rawApi.handleMessageRequest(threadID,
-//  accept, cb) which moves the thread from "other/pending" into the real
-//  inbox — that's the real accept call, now wired up below.
+//  MESSAGE REQUEST ACCEPT
 // ─────────────────────────────────────────────
 function callMessageRequestAction(rawApi, threadID, accept) {
   return new Promise((resolve, reject) => {
@@ -1086,7 +1062,6 @@ async function navigatePage(api, session, dir, replyManager, reactionManager) {
 
 // ─────────────────────────────────────────────
 //  SHARED SESSION INPUT HANDLER
-//  NOTE: `event` param is needed for image attachment support in profile session
 // ─────────────────────────────────────────────
 async function handleSessionInput(api, rawApi, session, input, senderID, threadID, replyManager, reactionManager, event) {
   sessionResetTimer(senderID);
@@ -1135,16 +1110,13 @@ async function handleSessionInput(api, rawApi, session, input, senderID, threadI
     }
   }
 
-  // ── PROFILE SESSION: reply with image (attachment) or image URL to change DP ──
   if (session.type === "profile") {
-    // Check for image attachment first (user sends photo in chat)
     const evAttachments = (event && event.attachments) || [];
     const imgAtt = evAttachments.find(a =>
       a && (a.type === "photo" || a.type === "image" || a.type === "sticker" ||
             (a.url && /\.(jpg|jpeg|png|gif|webp)/i.test(a.url)))
     );
 
-    // Also check for URL in text
     const urlMatch = input.match(/https?:\/\/\S+/i);
 
     const imageUrl = (imgAtt && (imgAtt.url || imgAtt.largePreviewUrl || imgAtt.previewUrl))
@@ -1162,7 +1134,6 @@ async function handleSessionInput(api, rawApi, session, input, senderID, threadI
       return true;
     }
 
-    // No image or URL found in the reply — tell user what to do
     api.sendMessage(
       `📸 ${B("To change profile picture:")}\n` +
       `   • ${B("Attach/send an image")} in your reply, OR\n` +
@@ -1177,14 +1148,15 @@ async function handleSessionInput(api, rawApi, session, input, senderID, threadI
 }
 
 // ─────────────────────────────────────────────
-//  SMS ALL BROADCAST
+//  SMS ALL BROADCAST  ★★★ FIXED IN 3.5.1 ★★★
 //
-//  FIXED: previously wrapped api.sendMessage() in a manual callback-based
-//  Promise. The adapter's sendMessage only invokes that callback on SUCCESS —
-//  on failure it rejects its own internal promise and never calls the
-//  callback, so the manual wrapper never resolved/rejected and the whole
-//  loop froze on the first failed send. That's why broadcasts only ever
-//  reached 1-2 friends. Now we await the real promise directly.
+//  - Uses the fixed safeSendDM() (raw fca-riyad callback, real errors).
+//  - Delay bumped 300ms → 1200ms + random jitter (0-500ms) between sends.
+//    Facebook's spam/abuse detection is very sensitive to fast, uniform-
+//    interval outbound DMs — this was very likely why messages showed as
+//    "sent" locally but never reached most recipients.
+//  - Reports genuinely-sent vs genuinely-failed, and lists WHO failed and
+//    WHY, instead of a single opaque count.
 // ─────────────────────────────────────────────
 async function runSmsAll(api, rawApi, threadID, text, authorID) {
   const result = await fetchFriendsList(rawApi);
@@ -1202,28 +1174,38 @@ async function runSmsAll(api, rawApi, threadID, text, authorID) {
   const statusMsgID = statusInfo ? statusInfo.messageID : null;
 
   let sent = 0;
-  let failed = 0;
+  const failedList = [];
+
   for (const friend of friends) {
     if (state.cancelled) break;
     try {
       await safeSendDM(api, text, friend.userID);
       sent++;
-    } catch (_) {
-      failed++;
+    } catch (e) {
+      failedList.push(`${friend.fullName} (${friend.userID}): ${e && e.message ? e.message : String(e)}`);
     }
-    if ((sent + failed) % 10 === 0) {
-      try { api.sendMessage(`📢 Sending...\n${sent + failed}/${friends.length} processed (${sent} sent)`, threadID); } catch (_) {}
+
+    if ((sent + failedList.length) % 10 === 0) {
+      try { api.sendMessage(`📢 Sending...\n${sent + failedList.length}/${friends.length} processed (${sent} confirmed sent)`, threadID); } catch (_) {}
     }
-    await new Promise(r => setTimeout(r, 300));
+
+    // Slower + jittered delay — reduces the chance Facebook's spam filter
+    // silently drops messages after accepting the API call.
+    await new Promise(r => setTimeout(r, 1200 + Math.floor(Math.random() * 500)));
   }
 
-  api.sendMessage(
-    state.cancelled
-      ? `📴 Broadcast cancelled. Sent: ${sent}/${friends.length}`
-      : `✅ Broadcast complete!\n📤 Sent to: ${sent}/${friends.length} friends${failed ? `\n⚠️ Failed: ${failed}` : ""}`,
-    threadID
-  );
-  if (statusMsgID) try { api.unsendMessage(statusMsgID, () => {}); } catch (_) {}
+  let finalText = state.cancelled
+    ? `📴 Broadcast cancelled.\n✅ Confirmed sent: ${sent}/${friends.length}`
+    : `✅ Broadcast complete!\n📤 Confirmed sent: ${sent}/${friends.length} friends`;
+
+  if (failedList.length > 0) {
+    finalText += `\n⚠️ Failed: ${failedList.length}\n\n` +
+      failedList.slice(0, 15).map(f => `• ${f}`).join("\n") +
+      (failedList.length > 15 ? `\n...and ${failedList.length - 15} more (see server logs).` : "");
+  }
+
+  api.sendMessage(finalText, threadID);
+  if (statusMsgID) try { rawApi.unsendMessage(statusMsgID, () => {}); } catch (_) {}
   sessionClear(authorID);
 }
 
@@ -1234,7 +1216,7 @@ module.exports = {
   config: {
     name: "fbcontrol",
     aliases: ["fb", "fbc", "fbm"],
-    version: "3.5.0",
+    version: "3.5.1",
     author: "Riyad Bot Team",
     countDown: 3,
     role: 2,
@@ -1244,15 +1226,6 @@ module.exports = {
     guide: { en: "fb | fb list | fb inbox | fb mr | fb sms <n|uid> <text> | fb sms reply <text> | fb sms all <text> | fb p" }
   },
 
-  // ─── ❤️ REACTION → next page ───────────────────────────────────────────────
-  // This fires because sendPage (await form) registers AFTER __global__, so
-  // reactionManager correctly routes ❤️ reactions to fbcontrol's onReaction.
-  //
-  // FIXED: previously ANY user's reaction moved the ORIGINAL command author's
-  // session to the next page, because the code looked up the session using
-  // the authorID stored in the payload (the session owner) without ever
-  // checking who actually reacted (event.userID). Now we compare the real
-  // reactor against the session owner and politely refuse if they don't match.
   onReaction: async function({ api, event, Reaction, reactionData, replyManager, reactionManager }) {
     try {
       const { userID, messageID } = event;
@@ -1262,10 +1235,8 @@ module.exports = {
 
       const session = sessionGet(ownerID);
       if (!session) return;
-      // messageID = the message being reacted to; lastMsgID = our last sent menu
       if (session.lastMsgID !== messageID) return;
 
-      // Only the person who opened this menu may navigate it.
       if (String(userID) !== String(ownerID)) {
         try { api.sendMessage("⚠️ এই মেনুটি আপনার জন্য নয়!", session.threadID); } catch (_) {}
         return;
@@ -1276,7 +1247,6 @@ module.exports = {
     } catch (err) { console.error("[fbcontrol] onReaction error:", err); }
   },
 
-  // ─── 📩 REPLY → navigation & actions ──────────────────────────────────────
   onReply: async function({ api, event, Reply, replyData, replyManager, reactionManager }) {
     try {
       const { senderID, threadID, body } = event;
@@ -1287,12 +1257,10 @@ module.exports = {
       const session = sessionGet(authorID);
       if (!session) return;
       const input = (body || "").trim().toLowerCase();
-      // Pass full event so profile session can detect image attachments
       await handleSessionInput(api, rawApi, session, input, authorID, threadID, replyManager, reactionManager, event);
     } catch (err) { console.error("[fbcontrol] onReply error:", err); }
   },
 
-  // ─── MAIN COMMAND ENTRY ────────────────────────────────────────────────────
   onStart: async function({ api, event, args, replyManager, reactionManager }) {
     try {
       await handleRun({ api, event, args, replyManager, reactionManager });
@@ -1313,8 +1281,6 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
   const session = sessionGet(senderID);
 
   // ── SMS COMMANDS ──────────────────────────────────────────────────────────
-  // FIXED: usage message unified, and "fb sms reply <text>" is now handled
-  // instead of falling through to the generic usage error.
   if (sub === "sms") {
     const target = args[1];
     const smsUsage = "❌ Usage:\n  fb sms <number|uid> <text>\n  fb sms reply <text>\n  fb sms all <text>";
@@ -1350,7 +1316,6 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
     if (isNaN(n)) return api.sendMessage(smsUsage, threadID);
 
     if (String(n).length <= 5) {
-      // Treat as list index
       const result = await fetchFriendsList(rawApi);
       if (result.error || !result.data.length)
         return api.sendMessage(`❌ Could not load friends: ${result.error || "Empty"}`, threadID);
@@ -1362,7 +1327,6 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
         api.sendMessage(`✅ Message sent to ${friend.fullName}`, threadID);
       } catch (e) { api.sendMessage(`❌ Failed to send to ${friend.fullName}: ${e.message}`, threadID); }
     } else {
-      // Treat as UID
       try {
         await safeSendDM(api, msg, String(n));
         setLastDmThread(senderID, String(n));
@@ -1381,11 +1345,9 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
 
       await sendProfileCard(api, profile.uid, profile.name, profile.vanity, threadID);
 
-      // Start profile session
       sessionCreate(senderID, "profile", [profile], threadID);
       const sess = sessionGet(senderID);
 
-      // FIXED: await (Promise form) so our registration runs AFTER __global__
       const profileText =
         `${D}\n👤 ${B("YOUR PROFILE")}\n${D}\n` +
         `🆔 UID: ${profile.uid}\n` +
@@ -1401,7 +1363,6 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
         sess.lastMsgID = info.messageID;
         const payload = { commandName: "fbcontrol", authorID: String(senderID), sessionType: "profile" };
         try { replyManager.set(info.messageID, payload); } catch (_) {}
-        // No reactionManager needed for profile — reaction navigates to next page (doesn't apply)
       }
     } catch (e) {
       api.sendMessage(`❌ Error: ${e.message || String(e)}`, threadID);
@@ -1409,7 +1370,7 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
     return;
   }
 
-  // ── SESSION NAVIGATION (re-invoked command while session active) ──────────
+  // ── SESSION NAVIGATION ──────────────────────────────────────────────────
   if (session) {
     const rawInput = (body || "").trim().replace(/^(?:fbcontrol|fbc|fbm|fb)\s*/i, "").trim().toLowerCase();
     await handleSessionInput(api, rawApi, session, rawInput, senderID, threadID, replyManager, reactionManager, event);
@@ -1446,10 +1407,9 @@ async function handleRun({ api, event, args, replyManager, reactionManager }) {
     return;
   }
 
-  // Default: friend requests
   api.sendMessage("⏳ Loading friend requests...", threadID);
   const result = await fetchFriendRequests(rawApi);
   if (result.error && result.data.length === 0) return api.sendMessage(`❌ ${result.error}`, threadID);
   sessionCreate(senderID, "req", result.data, threadID);
   await sendPage(api, threadID, buildReqMenu(result.data, 0), sessionGet(senderID), replyManager, reactionManager);
-                 }
+}
