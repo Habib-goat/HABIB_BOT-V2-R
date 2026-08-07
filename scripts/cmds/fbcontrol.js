@@ -199,58 +199,60 @@ const D = "━━━━━━━━━━━━━━━━━━━━━━";
 
 function buildHelpMenu() {
   return (
-`╔══════════════════════════╗
-║  ${B("📘 FB CONTROL — COMMANDS")}  ║
-╚══════════════════════════╝
+`╭───────────────────╮
+          📘 𝗙𝗕 𝗖𝗢𝗡𝗧𝗥𝗢𝗟 📘
+           ✦ ᴏꜰꜰɪᴄɪᴀʟ ᴍᴇɴᴜ ✦
+╰───────────────────╯
 
-${D}
-${B("📋 AVAILABLE COMMANDS")}
-${D}
+━━ ◈ 📋 𝗔𝗟𝗟 𝗖𝗢𝗠𝗠𝗔𝗡𝗗𝗦 ◈ ━━
 
-📩 fb
-   └ ${B("list commands & menus")}
+📩 │ fb
+   └─ 🗂️ List commands & menus
 
-👥 fb list
-   └ ${B("Friends List Manager")}
-   └ ${B("Accept / Unfriend / Block / Message")}
+👥 │ fb list
+   └─ 👫 Friends List Manager
+   └─ ✅ Accept • ❌ Unfriend • 🚫 Block • 💬 Message
 
-📨 fb inbox
-   └ ${B("Recent DM Conversations")}
+📨 │ fb inbox
+   └─ 💬 Recent DM conversations
 
-📬 fb mr
-   └ ${B("Message Requests (OTHER/PENDING)")}
-   └ ${B("Accept / Delete / Block")}
+📬 │ fb mr
+   └─ 📥 Message Requests (OTHER/PENDING)
+   └─ ✅ Accept • 🗑️ Delete • 🚫 Block
 
-📤 fb sms <n> / <uid> <text>
-   └ ${B("DM a specific friend by number or UID")}
+📤 │ fb sms <n> / <uid> <text>
+   └─ ✉️ DM a specific friend by number or UID
 
-📤 fb sms reply <text>
-   └ ${B("Reply to last DM thread")}
+📤 │ fb sms reply <text>
+   └─ ↩️ Reply to last DM thread
 
-📢 fb sms all <text>
-   └ ${B("Broadcast to ALL friends")}
-   └ ${B("Reply \"off\" to cancel")}
+📢 │ fb sms all <text>
+   └─ 📡 Broadcast to ALL friends
+   └─ ⛔ Reply "off" to cancel
 
-👤 fb p
-   └ ${B("View your profile info")}
-   └ ${B("Reply with image to change DP")}
+👤 │ fb p
+   └─ 🪪 View your profile info
+   └─ 🖼️ Reply with image to change DP
 
-${D}
-${B("🕹️ NAVIGATION (reply to bot's menu OR react)")}
-${D}
-  ❤️ React  → ${B("Next page")}
-  Reply: 0  → ${B("Previous page")}
-  Reply: <n>       → ${B("View profile + picture")}
-  Reply: <n>a      → ${B("Add/Send friend request")}
-  Reply: <n>d      → ${B("Delete / Reject")}
-  Reply: <n>b      → ${B("Block")}
-  Reply: <n>uf     → ${B("Unfriend (list)")}
-  Reply: <n>bl     → ${B("Block (list)")}
-  Reply: <n>msg [text] → ${B("Open / Send message")}
-  Reply: bulk a/d/b/uf/bl → ${B("Bulk actions")}
-  Reply: s <name>  → ${B("Search (list only)")}
-  Reply: sort az / sort new → ${B("Sort (list)")}
-${D}`
+━━━ ◈ 🕹️ 𝗡𝗔𝗩𝗜𝗚𝗔𝗧𝗜𝗢𝗡 ◈ ━━━━
+    (reply to bot's menu OR react)
+
+❤️  React                    ➤ 📄 Next page
+0️⃣  Reply: 0                ➤ ⬅️ Previous page
+🔢  Reply: <n>              ➤ 👤 View profile + picture
+➕  Reply: <n>a             ➤ 📤 Add / Send friend request
+❌  Reply: <n>d             ➤ 🗑️ Delete / Reject
+🚫  Reply: <n>b             ➤ ⛔ Block
+💔  Reply: <n>uf            ➤ ➖ Unfriend (list)
+⚫  Reply: <n>bl            ➤ 🚫 Block (list)
+💬  Reply: <n>msg [text]    ➤ ✉️ Open / Send message
+📦  Reply: bulk a/d/b/uf/bl ➤ ⚡ Bulk actions
+🔍  Reply: s <name>         ➤ 🔎 Search (list only)
+🔃  Reply: sort az / sort new ➤ 🧹 Sort (list)
+
+━━━━━━━━━━━━━━━━━━━━━━
+    ⚡ ᴘᴏᴡᴇʀᴇᴅ ʙʏ 𝗥𝗜𝗬𝗔𝗗 ⚡
+━━━━━━━━━━━━━━━━━━━━━━`
   );
 }
 
