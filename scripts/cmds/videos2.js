@@ -10,7 +10,7 @@ const API_URL = "https://videos2-api.onrender.com/search";
 module.exports = {
   config: {
     name: "videos2",
-    version: "1.0.0",
+    version: "1.0.1",
     author: "Riyad",
     countDown: 5,
     role: 2,
@@ -107,18 +107,21 @@ module.exports = {
     }
 
     const selectedVideo = Reply.videos[choice - 1];
-const videoUrl = selectedVideo.url || selectedVideo.link || selectedVideo.download_url;
 
-console.log("SELECTED VIDEO:", selectedVideo);
-console.log("VIDEO URL:", videoUrl);
-
-if (!videoUrl) {
+if (!selectedVideo.url) {
   return api.sendMessage(
-    `❌ | No direct download URL found for: ${selectedVideo.title || "this video"}`,
+    "❌ | Video URL not found.",
     threadID,
     messageID
   );
 }
+
+const videoUrl =
+  "https://videos2-api.onrender.com/download?url=" +
+  encodeURIComponent(selectedVideo.url);
+
+console.log("SELECTED VIDEO:", selectedVideo);
+console.log("VIDEO URL:", videoUrl);
 
     let filePath;
     try {
@@ -161,6 +164,7 @@ if (!videoUrl) {
       });
     } catch (err) {
       console.error("videos2 fetch error:", err);
+      console.error(err.response?.data || err.message);
       if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
       if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
       return api.sendMessage(`❌ | Failed to fetch the video.`, threadID, messageID);
