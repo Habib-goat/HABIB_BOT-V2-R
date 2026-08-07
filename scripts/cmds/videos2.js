@@ -1,3 +1,4 @@
+const replyManager = require("../replies/replyManager");
 const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
@@ -65,14 +66,14 @@ module.exports = {
       if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
 
       return api.sendMessage(msgBody, threadID, (err, info) => {
-        if (!err && info?.messageID && this.replyManager) {
-          this.replyManager.set(info.messageID, {
-            commandName: this.config.name,
-            author: senderID,
-            videos
-          });
-        }
-      }, messageID);
+  if (!err && info?.messageID) {
+    replyManager.set(info.messageID, {
+      commandName: this.config.name,
+      author: senderID,
+      videos
+    });
+  }
+}, messageID);
     } catch (err) {
       console.log("Status:", err.response?.status);
       console.log("Data:", err.response?.data);
