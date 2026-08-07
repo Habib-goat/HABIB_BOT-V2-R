@@ -1,139 +1,159 @@
-const axios = require('axios');
-const fs = require('fs-extra');
-const path = require('path');
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
+
+// 👇 এখানে আপনার YouTube search API এর URL বসান
+// উদাহরণ: const API_URL = "https://your-api.onrender.com/ytSearch?query=";
+const API_URL = "https://videos2-api.onrender.com/search?query=${encodeURIComponent(query)}&pages=1";
 
 module.exports = {
-    config: {
-        name: "videos2",
-        version: "1.0.0",
-        author: "Riyad", // আপনার নাম
-        countDown: 5,
-        role: 0,
-        description: "Search videos and download",
-        category: "media",
-        guide: "{pn} <search query>"
-    },
+  config: {
+    name: "videos2",
+    version: "1.0.0",
+    author: "Riyad",
+    countDown: 5,
+    role: 0,
+    category: "media",
+    shortDescription: "Search & download videos",
+    longDescription: "Search YouTube videos and download by replying with a number",
+    guide: "{pn} <search query>"
+  },
 
-    onStart: async function ({ api, event, args, message }) {
-        const query = args.join(" ");
-        if (!query) return message.reply("❌ | Please provide a search query!\nExample: videos2 funny cat");
+  onStart: async function ({ api, event, args }) {
+    const { threadID, messageID, senderID } = event;
+    const query = args.join(" ");
+    const hasReaction = typeof api.setMessageReaction === "function";
 
-        try {
-            // API কল করা হচ্ছে
-            const apiUrl = `https://videos2-api.onrender.com/search?query=${encodeURIComponent(query)}&pages=1`;
-            const response = await axios.get(apiUrl);
-            const data = response.data;
-
-            // API থেকে আসা ডেটা স্ট্রাকচার হ্যান্ডেল করার জন্য
-            let results = [];
-            if (Array.isArray(data)) {
-                results = data;
-            } else if (data && Array.isArray(data.results)) {
-                results = data.results;
-            } else if (data && Array.isArray(data.videos)) {
-                results = data.videos;
-            } else if (data && Array.isArray(data.data)) {
-                results = data.data;
-            }
-
-            // প্রথম ৫টি ভিডিও নেওয়া হচ্ছে
-            const videos = results.slice(0, 5);
-
-            if (videos.length === 0) {
-                return message.reply("❌ | No videos found for your query.");
-            }
-
-            // মেসেজ ফরম্যাট করা হচ্ছে
-            let msgBody = "🔎 | Top 5 Search Results:\n\n";
-            videos.forEach((v, i) => {
-                const title = v.title || v.name || "Unknown Title";
-                msgBody += `${i + 1}. ${title}\n`;
-            });
-            msgBody += "\n👉 Reply to this message with a number (1-5) to get the video.";
-
-            const msg = await message.reply(msgBody);
-            
-            // onReply হুকের জন্য ডেটা সেভ করা হচ্ছে (GoatBot V2 & ST-BOT supported)
-            if (global.RiyadBot && global.RiyadBot.onReply) {
-    global.RiyadBot.onReply.set(msg.messageID, {
-        commandName: this.config.name,
-        messageID: msg.messageID,
-        authorID: event.senderID,
-        videos
-    });
-}
-        } catch (err) {
-            console.error(err);
-            return message.reply("❌ | The video search API is currently unavailable or returned an error. Please try again later.");
-        }
-    },
-
-    // রিপ্লাই হ্যান্ডলার (ST-BOT বা Modified GoatBot এর জন্য অটোমেটিক কাজ করবে)
-    onReply: async function ({ message, Reply, event, api }) {
-        if (!Reply) return;
-        
-        // শুধুমাত্র যে ইউজার সার্চ করেছে সে-ই রিপ্লাই দিতে পারবে
-        if (event.senderID !== Reply.authorID) return;
-
-        const choice = parseInt(event.body);
-        if (isNaN(choice) || choice < 1 || choice > Reply.videos.length) {
-            return message.reply("❌ | Invalid choice. Please reply with a number between 1 and " + Reply.videos.length + ".");
-        }
-
-        const selectedVideo = Reply.videos[choice - 1];
-        const videoUrl = selectedVideo.url || selectedVideo.link || selectedVideo.download_url;
-
-        if (!videoUrl) {
-            return message.reply(`▶️ | No direct download URL found for: ${selectedVideo.title || "this video"}`);
-        }
-
-        await message.reply("⏳ | Downloading your video, please wait...");
-
-        try {
-            // ভিডিও স্ট্রিম করা হচ্ছে
-            const stream = await axios({
-                method: 'GET',
-                url: videoUrl,
-                responseType: 'stream'
-            });
-
-            // টেম্পোরারি ফোল্ডার সেটআপ
-            const tmpDir = path.join(__dirname, "tmp");
-            if (!fs.existsSync(tmpDir)) {
-                fs.mkdirSync(tmpDir);
-            }
-            const filePath = path.join(tmpDir, `video_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`);
-
-            const writer = fs.createWriteStream(filePath);
-            stream.data.pipe(writer);
-
-            writer.on('finish', async () => {
-                try {
-                    await message.reply({
-                        body: `▶️ | Here is your video: ${selectedVideo.title || ""}`,
-                        attachment: fs.createReadStream(filePath)
-                    });
-                } catch (err) {
-                    await message.reply(`❌ | Failed to send video attachment. Direct link: ${videoUrl}`);
-                } finally {
-                    // সার্ভারের জায়গা বাঁচাতে ফাইল ডিলিট করে দেওয়া হচ্ছে
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                    }
-                }
-            });
-
-            writer.on('error', async () => {
-                await message.reply(`❌ | Error downloading the video. Direct link:\n${videoUrl}`);
-            });
-
-        } catch (err) {
-            await message.reply(`❌ | Failed to fetch the video. Direct link:\n${videoUrl}`);
-        }
-
-        // কাজ শেষ, তাই onReply লিসেনার ডিলিট করে দেওয়া হচ্ছে
-        if (global.RiyadBot && global.RiyadBot.onReply) {
-    global.RiyadBot.onReply.delete(Reply.messageID);
-}
+    if (!query) {
+      return api.sendMessage(
+        "❌ | Please provide a search query!\nExample: videos2 funny cat",
+        threadID,
+        messageID
+      );
     }
+
+    try {
+      if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
+
+      const response = await axios.get(`${API_URL}${encodeURIComponent(query)}`);
+      const data = response.data;
+
+      // API রেসপন্স স্ট্রাকচার হ্যান্ডেল করার জন্য (API ভেদে ভিন্ন হতে পারে)
+      let results = [];
+      if (Array.isArray(data)) results = data;
+      else if (Array.isArray(data?.results)) results = data.results;
+      else if (Array.isArray(data?.videos)) results = data.videos;
+      else if (Array.isArray(data?.data)) results = data.data;
+
+      const videos = results.slice(0, 10);
+
+      if (!videos.length) {
+        if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
+        return api.sendMessage("❌ | No videos found for your query.", threadID, messageID);
+      }
+
+      let msgBody = "🔎 | Search Results:\n\n";
+      videos.forEach((v, i) => {
+        const title = v.title || v.name || "Unknown Title";
+        const duration = v.timestamp || v.duration || "";
+        msgBody += `${i + 1}. ${title}${duration ? ` (${duration})` : ""}\n`;
+      });
+      msgBody += `\n👉 Reply with a number (1-${videos.length}) to get that video.`;
+
+      if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
+
+      return api.sendMessage(msgBody, threadID, (err, info) => {
+        if (!err && info?.messageID && this.replyManager) {
+          this.replyManager.set(info.messageID, {
+            commandName: this.config.name,
+            author: senderID,
+            videos
+          });
+        }
+      }, messageID);
+    } catch (err) {
+      console.error(err);
+      if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
+      return api.sendMessage(
+        "❌ | The video search API is currently unavailable or returned an error. Please try again later.",
+        threadID,
+        messageID
+      );
+    }
+  },
+
+  onReply: async function ({ api, event, Reply }) {
+    const { threadID, messageID, senderID, body } = event;
+
+    // শুধুমাত্র যে ইউজার সার্চ করেছে সে-ই রিপ্লাই দিতে পারবে
+    if (senderID !== Reply.author) return;
+
+    const hasReaction = typeof api.setMessageReaction === "function";
+    const choice = parseInt(body);
+
+    if (isNaN(choice) || choice < 1 || choice > Reply.videos.length) {
+      return api.sendMessage(
+        `❌ | Invalid choice. Reply with a number between 1 and ${Reply.videos.length}.`,
+        threadID,
+        messageID
+      );
+    }
+
+    const selectedVideo = Reply.videos[choice - 1];
+    const videoUrl = selectedVideo.url || selectedVideo.link || selectedVideo.download_url;
+
+    if (!videoUrl) {
+      return api.sendMessage(
+        `❌ | No direct download URL found for: ${selectedVideo.title || "this video"}`,
+        threadID,
+        messageID
+      );
+    }
+
+    let filePath;
+    try {
+      if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
+
+      const cacheDir = path.join(__dirname, "cache");
+      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+      filePath = path.join(cacheDir, `video2_${Date.now()}.mp4`);
+
+      const stream = await axios({
+        method: "GET",
+        url: videoUrl,
+        responseType: "stream",
+        headers: { "User-Agent": "Mozilla/5.0" }
+      });
+
+      const writer = fs.createWriteStream(filePath);
+      stream.data.pipe(writer);
+
+      writer.on("finish", () => {
+        if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
+        api.sendMessage(
+          {
+            body: `▶️ | Here is your video: ${selectedVideo.title || ""}`,
+            attachment: fs.createReadStream(filePath)
+          },
+          threadID,
+          () => {
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          },
+          messageID
+        );
+      });
+
+      writer.on("error", (err) => {
+        console.error("videos2 write error:", err);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
+        api.sendMessage(`❌ | Error downloading the video.`, threadID, messageID);
+      });
+    } catch (err) {
+      console.error("videos2 fetch error:", err);
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
+      return api.sendMessage(`❌ | Failed to fetch the video.`, threadID, messageID);
+    }
+  }
 };
