@@ -131,17 +131,24 @@ console.log("VIDEO URL:", videoUrl);
       if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
       filePath = path.join(cacheDir, `video2_${Date.now()}.mp4`);
 
-      const stream = await axios({
-        method: "GET",
-        url: videoUrl,
-        responseType: "stream",
-        headers: { "User-Agent": "Mozilla/5.0" }
-      });
+      console.log("Downloading from:", videoUrl);
+
+const stream = await axios({
+  method: "GET",
+  url: videoUrl,
+  responseType: "stream",
+  headers: { "User-Agent": "Mozilla/5.0" }
+});
+
+console.log("Response:", stream.status, stream.headers["content-type"]);
 
       const writer = fs.createWriteStream(filePath);
       stream.data.pipe(writer);
 
       writer.on("finish", () => {
+        console.log("File saved:", filePath);
+console.log("File size:", fs.statSync(filePath).size);
+        
         if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
         api.sendMessage(
           {
