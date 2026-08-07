@@ -151,16 +151,25 @@ console.log("File size:", fs.statSync(filePath).size);
         
         if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
         api.sendMessage(
-          {
-            body: `▶️ | Here is your video: ${selectedVideo.title || ""}`,
-            attachment: fs.createReadStream(filePath)
-          },
-          threadID,
-          () => {
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-          },
-          messageID
-        );
+  {
+    body: `▶️ | Here is your video: ${selectedVideo.title || ""}`,
+    attachment: fs.createReadStream(filePath)
+  },
+  threadID,
+  (err) => {
+    console.log("SEND ERROR:", err);
+
+    if (err) {
+      console.error("UPLOAD FAILED:", err);
+    } else {
+      console.log("UPLOAD SUCCESS");
+    }
+
+    if (fs.existsSync(filePath))
+      fs.unlinkSync(filePath);
+  },
+  messageID
+);
       });
 
       writer.on("error", (err) => {
