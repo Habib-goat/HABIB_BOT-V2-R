@@ -13,7 +13,7 @@ module.exports = {
     version: "1.0.0",
     author: "Riyad",
     countDown: 5,
-    role: 0,
+    role: 2,
     category: "media",
     shortDescription: "Search & download videos",
     longDescription: "Search YouTube videos and download by replying with a number",
@@ -107,15 +107,18 @@ module.exports = {
     }
 
     const selectedVideo = Reply.videos[choice - 1];
-    const videoUrl = selectedVideo.url || selectedVideo.link || selectedVideo.download_url;
+const videoUrl = selectedVideo.url || selectedVideo.link || selectedVideo.download_url;
 
-    if (!videoUrl) {
-      return api.sendMessage(
-        `❌ | No direct download URL found for: ${selectedVideo.title || "this video"}`,
-        threadID,
-        messageID
-      );
-    }
+console.log("SELECTED VIDEO:", selectedVideo);
+console.log("VIDEO URL:", videoUrl);
+
+if (!videoUrl) {
+  return api.sendMessage(
+    `❌ | No direct download URL found for: ${selectedVideo.title || "this video"}`,
+    threadID,
+    messageID
+  );
+}
 
     let filePath;
     try {
