@@ -1,8 +1,8 @@
 module.exports = {
   config: {
     name: "kick",
-    version: "1.4.0",
-    author: "NTKhang (Converted & Fixed)",
+    version: "1.5.0",
+    author: "Riyad (E2EE & Fixed)",
     countDown: 5,
     role: 1,
     description: "Remove members from the chat box.",
@@ -67,22 +67,7 @@ const kickAndCheckError = async (uid) => {
       }
       await kickAndCheckError(messageReply.senderID);
     } else {
-      let uids = Object.keys(mentions || {});
-
-      // E2EE fallback: encrypted messages carry no mentions metadata,
-      // only raw text. Match the tagged name against known group
-      // members by name instead.
-      if (uids.length === 0) {
-        const rawText = args.join(" ").replace(/^@/, "").trim().toLowerCase();
-        const members = (threadInfo.members || []);
-        const matched = members.filter(m =>
-          m.name && rawText.includes(m.name.toLowerCase()) && String(m.userID) !== String(botID)
-        );
-        if (matched.length > 0) {
-          uids = matched.map(m => String(m.userID));
-        }
-      }
-
+      const uids = Object.keys(mentions || {});
       if (uids.length === 0) {
         return api.sendMessage("⚠️ Please tag the member you want to kick.", threadID, messageID);
       }
