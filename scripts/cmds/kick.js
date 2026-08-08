@@ -34,7 +34,7 @@ const botMember = (threadInfo.members || []).find(
 
 if (botID && botMember && botMember.isAdmin === false) {
   return api.sendMessage(
-    "Permission Denied: bot needs to be Group Admin to remove members.",
+    "Permission Denied: The bot needs to be a Group Administrator to remove members.",
     threadID,
     messageID
   );
