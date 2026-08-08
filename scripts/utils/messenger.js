@@ -348,7 +348,7 @@ autoTimerService.setApi(adaptedApi);
   }
 
   console.log("================");
-console.log(JSON.stringify(event, null, 2));
+console.log(JSON.stringify(event, (k, v) => typeof v === "bigint" ? v.toString() : v, 2));
 console.log("================");
 
 console.log("EVENT TYPE:", event.type);
