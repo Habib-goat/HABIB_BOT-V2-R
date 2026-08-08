@@ -67,7 +67,22 @@ const kickAndCheckError = async (uid) => {
       }
       await kickAndCheckError(messageReply.senderID);
     } else {
-      const uids = Object.keys(mentions || {});
+      let uids = Object.keys(mentions || {});
+
+      // E2EE fallback: encrypted messages carry no mentions metadata,
+      // only raw text. Match the tagged name against known group
+      // members by name instead.
+      if (uids.length === 0) {
+        const rawText = args.join(" ").replace(/^@/, "").trim().toLowerCase();
+        const members = (threadInfo.members || []);
+        const matched = members.filter(m =>
+          m.name && rawText.includes(m.name.toLowerCase()) && String(m.userID) !== String(botID)
+        );
+        if (matched.length > 0) {
+          uids = matched.map(m => String(m.userID));
+        }
+      }
+
       if (uids.length === 0) {
         return api.sendMessage("⚠️ Please tag the member you want to kick.", threadID, messageID);
       }
