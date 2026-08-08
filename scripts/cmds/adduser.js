@@ -81,7 +81,20 @@ module.exports = {
         }
     }
 
-    const __res = await api.addUserToGroup(uid, threadID); console.log("[ADDUSER RAW RESPONSE]", JSON.stringify(__res, null, 2));
+    await api.addUserToGroup(uid, threadID);
+
+    await new Promise(r => setTimeout(r, 2000));
+    let actuallyAdded = false;
+    try {
+      const check = await api.getThreadInfo(threadID);
+      const ids = (check && check.participantIDs) || [];
+      actuallyAdded = ids.includes(String(uid)) || ids.includes(Number(uid));
+    } catch (_) {}
+
+    if (!actuallyAdded) {
+      failed.push({ item, reason: "Facebook silently rejected the add (E2EE group restriction, privacy setting, or not mutual friends)." });
+      continue;
+    }
 
     if (approvalMode === true && !adminIDs.includes(botID)) {
           waitApproval.push(uid);
