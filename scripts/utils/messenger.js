@@ -383,7 +383,9 @@ try {
     if (event.isE2EE && event.threadID && typeof adaptedApi.markE2EEThread === 'function') {
       adaptedApi.markE2EEThread(event.threadID);
     }
-
+if (event.isE2EE && event.messageID && event.threadID && typeof adaptedApi.markE2EEMessage === 'function') {
+      adaptedApi.markE2EEMessage(event.messageID, event.threadID, event.e2ee && event.e2ee.senderJid);
+    }
     await botEngine.processMessage(
       event,
       commandLoader,
