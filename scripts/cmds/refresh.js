@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "refresh",
     aliases: ["reload-info", "sync"],
-    version: "1.0.0",
+    version: "1.1.0",
     author: "Riyad Bot",
     countDown: 10,
     role: 0,
@@ -27,10 +27,23 @@ module.exports = {
 
         try {
           const info = await api.getThreadInfo(targetID);
+          // getThreadInfo() never returns a "members" field directly — the
+          // participant list comes back as info.userInfo (id/name pairs).
+          // This was never mapped into thread.members before, which is why
+          // it always stayed [] and E2EE-fallback name-matching (e.g. in
+          // kick.js) could never find anyone.
+          const adminIDs = (info.adminIDs || []).map(x => String(x.id || x));
+          const members = (info.userInfo || []).map(u => ({
+            userID: String(u.id),
+            name: u.name || "",
+            inGroup: true,
+            isAdmin: adminIDs.includes(String(u.id))
+          }));
           await threadsData.updateThread(targetID, {
             id: String(targetID),
             name: info.threadName || info.name || "Unknown Group",
-            adminIDs: (info.adminIDs || []).map(x => String(x.id || x)),
+            adminIDs,
+            members,
             approvalMode: Boolean(info.approvalMode),
             lastSync: Date.now()
           });
