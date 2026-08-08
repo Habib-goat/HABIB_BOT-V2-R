@@ -37,18 +37,10 @@ module.exports = {
       if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
 
       const response = await axios.get(
-  `${API_URL}?query=${encodeURIComponent(query)}&pages=1`
+  `https://videos2-api.onrender.com/search?query=${encodeURIComponent(query)}&pages=1`
 );
-      const data = response.data;
 
-      // API রেসপন্স স্ট্রাকচার হ্যান্ডেল করার জন্য (API ভেদে ভিন্ন হতে পারে)
-      let results = [];
-      if (Array.isArray(data)) results = data;
-      else if (Array.isArray(data?.results)) results = data.results;
-      else if (Array.isArray(data?.videos)) results = data.videos;
-      else if (Array.isArray(data?.data)) results = data.data;
-
-      const videos = results.slice(0, 10);
+const videos = (response.data.results || []).slice(0, 20);
 
       if (!videos.length) {
         if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
@@ -57,9 +49,10 @@ module.exports = {
 
       let msgBody = "🔎 | Search Results:\n\n";
       videos.forEach((v, i) => {
-        const title = v.title || v.name || "Unknown Title";
-        const duration = v.timestamp || v.duration || "";
-        msgBody += `${i + 1}. ${title}${duration ? ` (${duration})` : ""}\n`;
+        const title = v.title || "Unknown Title";
+const duration = v.duration || "";
+
+msgBody += `${i + 1}. ${title}${duration ? ` (${duration})` : ""}\n`;
       });
       msgBody += `\n👉 Reply with a number (1-${videos.length}) to get that video.`;
 
@@ -121,7 +114,7 @@ const videoUrl =
   encodeURIComponent(selectedVideo.url);
 
 console.log("SELECTED VIDEO:", selectedVideo);
-console.log("VIDEO URL:", videoUrl);
+console.log("DOWNLOAD API URL:", videoUrl);
 
     let filePath;
     try {
