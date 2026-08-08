@@ -17,11 +17,11 @@
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@napi-rs/canvas": "^1.0.3",
     "axios": "^1.18.1",
-    "canvas": "^2.11.2",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "fca-riyad": "37.1.0",
+    "fca-riyad": "github:riyad761/fca-riyad",
     "fluent-ffmpeg": "^2.1.3",
     "fs-extra": "^11.3.6",
     "koffi": "3.1.4",
@@ -41,9 +41,9 @@
   "allowScripts": {
     "@google/genai@2.15.0": true,
     "@signalapp/libsignal-client@0.70.0": true,
-    "canvas@2.11.2": true,
     "protobufjs@8.7.1": true,
     "protobufjs@7.6.5": true,
-    "sqlite3@5.1.7": true
+    "sqlite3@5.1.7": true,
+    "koffi@3.1.4": true
   }
 }
