@@ -185,9 +185,11 @@ async react(emoji, messageID) {
                 } catch (_) { duration = undefined; }
               }
               info = await this.api.e2ee.sendAttachment(jid, buffer, filename, mime, kind, duration);
+              if (info && !info.messageID) { info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`; }
             } else {
               const text = typeof message === 'object' ? (message.body || '') : String(message);
               info = await this.api.e2ee.sendMessage(jid, text, replyMessageID);
+              if (info && !info.messageID) { info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`; }
             }
             if (callback) { try { callback(null, info); } catch (_) {} }
             resolve(info);
