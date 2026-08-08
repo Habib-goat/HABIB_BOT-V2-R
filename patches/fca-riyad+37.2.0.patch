@@ -1498,7 +1498,10 @@ index 0000000..b8653a7
 +function cookiesFromJar(ctx) {
 +    const out = {};
 +    let jar = [];
-+    try { jar = ctx.jar.getCookiesSync("https://www.facebook.com"); } catch (_) {}
++    try {
++        const raw = ctx.jar.getCookiesSync("https://www.facebook.com");
++        if (Array.isArray(raw)) jar = raw;
++    } catch (_) {}
 +    jar.forEach((c) => { if (c && c.key) out[c.key] = c.value; });
 +    if (!out.c_user && out.i_user) out.c_user = out.i_user;
 +    return out;
