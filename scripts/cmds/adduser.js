@@ -81,7 +81,7 @@ module.exports = {
         }
     }
 
-    await api.addUserToGroup(uid, threadID);
+    const __res = await api.addUserToGroup(uid, threadID); console.log("[ADDUSER RAW RESPONSE]", JSON.stringify(__res, null, 2));
 
     if (approvalMode === true && !adminIDs.includes(botID)) {
           waitApproval.push(uid);
