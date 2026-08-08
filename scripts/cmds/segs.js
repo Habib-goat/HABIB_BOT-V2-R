@@ -71,7 +71,7 @@ module.exports = {
   onChat: async ({ api, event }) => {
     const sender = event.senderID;
     const thread = event.threadID;
-    const msg = event.body.trim();
+    const msg = (event.body || "").trim();
 
     if (!userSession[sender]) return;
     
