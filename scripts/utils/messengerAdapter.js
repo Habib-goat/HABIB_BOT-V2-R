@@ -102,6 +102,7 @@ class FcaMessengerAdapter extends BaseMessengerAdapter {
   constructor(underlyingApi, wsServer, restLogs) {
     super(underlyingApi, wsServer, restLogs);
     this.e2eeThreads = new Set();
+    this.e2eeMessages = new Map(); // messageID -> {threadID, senderJid}, needed for setReaction()
   }
 
   markE2EEThread(threadID) {
@@ -110,7 +111,16 @@ class FcaMessengerAdapter extends BaseMessengerAdapter {
       console.log('[E2EE-SEND-DEBUG] marked thread as E2EE:', String(threadID));
     }
   }
-  
+
+  markE2EEMessage(messageID, threadID, senderJid) {
+    if (messageID != null && threadID != null) {
+      this.e2eeMessages.set(String(messageID), { threadID: String(threadID), senderJid: senderJid || null });
+      if (this.e2eeMessages.size > 500) {
+        this.e2eeMessages.delete(this.e2eeMessages.keys().next().value);
+      }
+    }
+  }
+
 async reply(message, event) {
   return this.sendMessage(
     message,
@@ -186,6 +196,11 @@ async react(emoji, messageID) {
               }
               info = await this.api.e2ee.sendAttachment(jid, buffer, filename, mime, kind, duration);
               if (info && !info.messageID) { info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`; }
+              const captionText = message && typeof message === 'object' ? (message.body || '') : '';
+              if (captionText) {
+                try { await this.api.e2ee.sendMessage(jid, captionText, replyMessageID); }
+                catch (capErr) { logger.error('[FcaAdapter] Failed to send E2EE caption text:', capErr); }
+              }
             } else {
               const text = typeof message === 'object' ? (message.body || '') : String(message);
               info = await this.api.e2ee.sendMessage(jid, text, replyMessageID);
@@ -257,6 +272,24 @@ resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
   }
 
   async setReaction(emoji, messageID) {
+    const e2eeInfo = this.e2eeMessages ? this.e2eeMessages.get(String(messageID)) : null;
+    if (e2eeInfo && this.api.e2ee && typeof this.api.e2ee.sendReaction === 'function') {
+      try {
+        await this.api.e2ee.sendReaction(e2eeInfo.threadID, messageID, emoji, e2eeInfo.senderJid);
+        if (this.wsServer) {
+          this.wsServer.clients.forEach(client => {
+            if (client.readyState === 1) {
+              client.send(JSON.stringify({ type: 'bot_reaction', emoji, messageId: messageID }));
+            }
+          });
+        }
+        return { success: true };
+      } catch (err) {
+        logger.error(`[FcaAdapter] Error setting E2EE reaction for message ${messageID}:`, err);
+        throw err;
+      }
+    }
+
     return new Promise((resolve, reject) => {
       if (typeof this.api.setMessageReaction !== 'function' && typeof this.api.setReaction !== 'function') {
         logger.warn("[FcaAdapter] setMessageReaction/setReaction function not available on underlying API.");
