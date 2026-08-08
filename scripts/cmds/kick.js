@@ -70,6 +70,7 @@ const kickAndCheckError = async (uid) => {
 
       if (uids.length === 0) {
         const rawText = args.join(" ").replace(/^@/, "").trim().toLowerCase();
+        console.log("[KICK DEBUG] rawText:", JSON.stringify(rawText));
 
         let members = threadInfo.members || [];
         if (typeof api.getThreadInfo === "function") {
@@ -81,6 +82,7 @@ const kickAndCheckError = async (uid) => {
           }
         }
 
+        console.log("[KICK DEBUG] members:", JSON.stringify(members.map(m => m.name)));
         const matched = members.filter(m =>
           m.name && rawText.includes(m.name.toLowerCase()) && String(m.userID) !== String(botID)
         );
