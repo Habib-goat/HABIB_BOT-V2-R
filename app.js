@@ -107,6 +107,12 @@ await serviceManager.startAll();
     res.sendFile(path.join(__dirname, 'web/dashboard/index.html'));
   });
 
+  // Serve decrypted E2EE media (images/video/audio/docs) over a local
+  // loopback URL, since encrypted E2EE attachments have no plain CDN URL —
+  // the native E2EE bridge downloads+decrypts them into cache_e2ee/ and
+  // hands commands a fetchable http://127.0.0.1:PORT/e2ee-media/<file> URL.
+  app.use('/e2ee-media', express.static(path.join(__dirname, 'cache_e2ee')));
+
   // Mount API endpoints
   app.use('/api', apiRouter);
 
