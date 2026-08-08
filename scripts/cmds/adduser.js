@@ -66,8 +66,8 @@ module.exports = {
 
       try {
     if (typeof api.getThreadInfo === "function") {
-        const liveInfo = await api.getThreadInfo(threadID);
-        const participantIDs = liveInfo.participantIDs || [];
+        const liveInfo = await api.getThreadInfo(threadID).catch(() => null);
+        const participantIDs = (liveInfo && liveInfo.participantIDs) || [];
 
         if (
             participantIDs.includes(String(uid)) ||
