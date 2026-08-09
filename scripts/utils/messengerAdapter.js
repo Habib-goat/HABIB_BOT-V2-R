@@ -154,57 +154,31 @@ async react(emoji, messageID) {
       // Handle cases where the underlying API is not initialized or is missing methods
       console.log('[E2EE-SEND-DEBUG] sendMessage called for threadID:', String(threadID), 'isE2EEThread:', this.e2eeThreads ? this.e2eeThreads.has(String(threadID)) : 'no-set', 'hasApiE2ee:', !!this.api.e2ee, 'hasSendFn:', !!(this.api.e2ee && typeof this.api.e2ee.sendMessage === 'function'));
       if (this.e2eeThreads && this.e2eeThreads.has(String(threadID)) && this.api.e2ee && typeof this.api.e2ee.sendMessage === 'function') {
-        const jid = String(threadID).includes('@') ? threadID : String(threadID) + '@g.us';
-        const streamToBuffer = (stream) => new Promise((res, rej) => {
-          const chunks = [];
-          stream.on('data', (c) => chunks.push(c));
-          stream.on('end', () => res(Buffer.concat(chunks)));
-          stream.on('error', rej);
-        });
-        const guessKind = (filePath) => {
-          const ext = (filePath || '').split('.').pop().toLowerCase();
-          if (['jpg','jpeg','png','gif','webp'].includes(ext)) return { kind: 'image', mime: 'image/' + (ext === 'jpg' ? 'jpeg' : ext) };
-          if (['mp4','mov','mkv','webm'].includes(ext)) return { kind: 'video', mime: 'video/' + ext };
-          if (['mp3','ogg','wav','m4a','opus'].includes(ext)) return { kind: 'audio', mime: 'audio/' + (ext === 'mp3' ? 'mpeg' : ext) };
-          return { kind: 'document', mime: 'application/octet-stream' };
-        };
         (async () => {
           try {
-            const att = message && typeof message === 'object' ? (Array.isArray(message.attachment) ? message.attachment[0] : message.attachment) : null;
-            let info;
-            if (att) {
-              const filePath = att.path || '';
-              const filename = filePath.split('/').pop() || 'file';
-              const { kind, mime } = guessKind(filePath);
-              const buffer = Buffer.isBuffer(att) ? att : await streamToBuffer(att);
-              let duration;
-              if (kind === 'audio' || kind === 'video') {
-                try {
-                  const os = require('os');
-                  const pathMod = require('path');
-                  const ffmpeg = require('fluent-ffmpeg');
-                  const tmpFile = pathMod.join(os.tmpdir(), 'dur_' + Date.now() + '_' + filename);
-                  fs.writeFileSync(tmpFile, buffer);
-                  duration = await new Promise((res) => {
-                    ffmpeg.ffprobe(tmpFile, (err, data) => {
-                      fs.unlink(tmpFile, () => {});
-                      if (err || !data || !data.format) return res(undefined);
-                      res(Math.round(data.format.duration || 0));
-                    });
-                  });
-                } catch (_) { duration = undefined; }
-              }
-              info = await this.api.e2ee.sendAttachment(jid, buffer, filename, mime, kind, duration);
-              if (info && !info.messageID) { info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`; }
-              const captionText = message && typeof message === 'object' ? (message.body || '') : '';
-              if (captionText) {
-                try { await this.api.e2ee.sendMessage(jid, captionText, replyMessageID); }
-                catch (capErr) { logger.error('[FcaAdapter] Failed to send E2EE caption text:', capErr); }
-              }
-            } else {
-              const text = typeof message === 'object' ? (message.body || '') : String(message);
-              info = await this.api.e2ee.sendMessage(jid, text, replyMessageID);
-              if (info && !info.messageID) { info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`; }
+            // Keep the original chat JID.  Native E2EE accepts group JIDs
+            // (e.g. ...@g.us) and numeric/other JIDs for direct chats; adding
+            // @g.us to every thread breaks encrypted direct conversations.
+            const jid = String(threadID);
+            const messageAttachments = message && typeof message === "object"
+              ? [
+                  ...(Array.isArray(message.attachment)
+                    ? message.attachment
+                    : message.attachment
+                      ? [message.attachment]
+                      : []),
+                  ...(Array.isArray(message.attachments) ? message.attachments : [])
+                ]
+              : [];
+            const e2eeMessage = typeof message === "object" && message !== null
+              ? {
+                  body: message.body || "",
+                  attachments: messageAttachments
+                }
+              : String(message ?? "");
+            let info = await this.api.e2ee.sendMessage(jid, e2eeMessage, replyMessageID);
+            if (info && !info.messageID) {
+              info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`;
             }
             if (callback) { try { callback(null, info); } catch (_) {} }
             resolve(info);
