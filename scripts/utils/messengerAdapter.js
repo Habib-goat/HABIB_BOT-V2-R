@@ -65,7 +65,7 @@ async markAsSeen() {
 async removeUserFromGroup(userID, threadID) {
   throw new Error("Method 'removeUserFromGroup' must be implemented by the adapter subclass.");
 }
-  async unsendMessage(messageID) {
+  async unsendMessage(messageID, threadID = null) {
   throw new Error("Method 'unsendMessage' must be implemented by the adapter subclass.");
 }
   async addUserToGroup(userID, threadID) {
@@ -119,6 +119,14 @@ class FcaMessengerAdapter extends BaseMessengerAdapter {
         this.e2eeMessages.delete(this.e2eeMessages.keys().next().value);
       }
     }
+  }
+
+  // MQTT group-management methods expect the numeric thread key. Native
+  // E2EE events use a Messenger JID such as "123@g.us".
+  _fcaThreadID(threadID) {
+    return String(threadID ?? "")
+      .replace(/@g\.us$/i, "")
+      .replace(/@group\.facebook\.com$/i, "");
   }
 
 async reply(message, event) {
@@ -179,6 +187,10 @@ async react(emoji, messageID) {
             let info = await this.api.e2ee.sendMessage(jid, e2eeMessage, replyMessageID);
             if (info && !info.messageID) {
               info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`;
+            }
+            if (info && info.messageID) {
+              reactionManager.register(info.messageID, { commandName: "__global__" });
+              botMessageTracker.record(threadID, info.messageID);
             }
             if (callback) { try { callback(null, info); } catch (_) {} }
             resolve(info);
@@ -358,7 +370,7 @@ async removeUserFromGroup(userID, threadID) {
       return reject(new Error("Underlying FCA removeUserFromGroup function is not available."));
     }
 
-    this.api.removeUserFromGroup(userID, threadID, (err) => {
+    this.api.removeUserFromGroup(userID, this._fcaThreadID(threadID), (err) => {
       if (err) return reject(err);
       resolve(true);
     });
@@ -366,14 +378,36 @@ async removeUserFromGroup(userID, threadID) {
 }
 async unsendMessage(messageID) {
   return new Promise((resolve, reject) => {
+    const e2eeInfo = this.e2eeMessages ? this.e2eeMessages.get(String(messageID)) : null;
+    if (e2eeInfo && this.api.e2ee && typeof this.api.e2ee.unsendMessage === "function") {
+      this.api.e2ee.unsendMessage(String(messageID), e2eeInfo.threadID)
+        .then((result) => resolve(result || true))
+        .catch(reject);
+      return;
+    }
     if (typeof this.api.unsendMessage !== "function") {
       return reject(new Error("Underlying FCA unsendMessage function is not available."));
     }
 
-    this.api.unsendMessage(messageID, (err) => {
+    let settled = false;
+    const done = (err, result) => {
+      if (settled) return;
+      settled = true;
       if (err) return reject(err);
-      resolve(true);
-    });
+      resolve(result || true);
+    };
+
+    try {
+      const normalizedThreadID = threadID ? this._fcaThreadID(threadID) : null;
+      const result = this.api.unsendMessage.length >= 3
+        ? this.api.unsendMessage(messageID, normalizedThreadID, done)
+        : this.api.unsendMessage(messageID, done);
+      if (result && typeof result.then === "function") {
+        result.then((value) => done(null, value)).catch(done);
+      }
+    } catch (err) {
+      done(err);
+    }
   });
 }
 async markAsRead(threadID) {
@@ -417,7 +451,7 @@ async addUserToGroup(userID, threadID) {
       return reject(new Error("Underlying FCA addUserToGroup function is not available."));
     }
 
-    this.api.addUserToGroup(userID, threadID, (err) => {
+    this.api.addUserToGroup(userID, this._fcaThreadID(threadID), (err) => {
       if (err) return reject(err);
       resolve(true);
     });
@@ -439,7 +473,7 @@ async getThreadInfo(threadID) {
       return reject(new Error("getThreadInfo not supported"));
     }
 
-    this.api.getThreadInfo(threadID, (err, info) => {
+    this.api.getThreadInfo(this._fcaThreadID(threadID), (err, info) => {
       if (err) return reject(err);
       resolve(info);
     });
