@@ -36,7 +36,13 @@ module.exports = {
   },
 
   async handle(api, event, commandLoader) {
-    const messageID = event && event.messageID;
+    const messageID = event && (
+      event.messageID ||
+      event.messageId ||
+      event.targetMessageID ||
+      event.targetMessageId ||
+      event.targetId
+    );
     const reaction = event && event.reaction;
     if (!messageID || !reaction) return false;
 
@@ -49,7 +55,8 @@ module.exports = {
     // message IDs are tracked by the adapter, while normal reactions carry
     // the thread ID on the event for the MQTT fallback.
     if ((normalizedReaction === "🤬" || normalizedReaction === "😡") && data) {
-      const reactor = String(event.userID || event.senderID || event.senderId || "");
+      const reactorRaw = event.userID || event.senderID || event.senderId || event.from || "";
+      const reactor = String(reactorRaw).match(/^(\d+)/)?.[1] || String(reactorRaw);
       const allowed = [
         ...(config.adminIDs || []),
         ...(config.ownerIDs || [])
@@ -57,7 +64,7 @@ module.exports = {
       if (!allowed.includes(reactor)) return false;
 
       try {
-        await api.unsendMessage(messageID, event.threadID);
+        await api.unsendMessage(String(messageID), event.threadID || event.threadId);
         reactions.delete(String(messageID));
         return true;
       } catch (err) {
