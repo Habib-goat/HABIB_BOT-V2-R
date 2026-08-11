@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const simsimi = async () => "https://simsimi-api-tjb1.onrender.com";
+const simsimi = async () => "https://simsimi-xdi.onrender.com";
 
 module.exports.config = {
  name: "baby",
