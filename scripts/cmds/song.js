@@ -6,7 +6,7 @@ module.exports = {
   config: {
     name: "song",
     aliases: ["sing", "music"],
-    version: "1.0.0",
+    version: "1.0.1",
     author: "RiYad",
     countDown: 5,
     role: 0,
@@ -31,7 +31,7 @@ module.exports = {
       api.setMessageReaction?.("🪶", event.messageID, () => {}, true);
 
       const search = await axios.get(
-        `https://mostakim.onrender.com/mostakim/ytSearch?search=${encodeURIComponent(query)}`
+        `https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json}`
       );
 
       const parseDuration = (time) => {
