@@ -9,7 +9,7 @@ module.exports = {
 	config: {
 		name: "bluesai",
 		aliases: ["bmai", "bluesmind", "hey"],
-		version: "1.0.0",
+		version: "1.0.1",
 		author: "Riyad",
 		countDown: 5,
 		role: 0,
