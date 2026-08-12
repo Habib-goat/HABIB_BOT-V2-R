@@ -1,7 +1,7 @@
 /**
  * ╔══════════════════════════════════════════════════════════════╗
  * ║              AI TEXT & IMAGE — RIYAD FRAMEWORK                ║
- * ║  Command: ai  |  Aliases: gpt, imagine                        ║
+ * ║  Command: llm  |  Aliases: imagine, ask                       ║
  * ╚══════════════════════════════════════════════════════════════╝
  *
  * Uses FreeLLMAPI (https://github.com/tashfeenahmed/freellmapi) — a
@@ -12,18 +12,17 @@
  * SETUP:
  *  1. Deploy FreeLLMAPI (e.g. as a second Railway service, Docker image
  *     ghcr.io/tashfeenahmed/freellmapi:latest).
- *  2. Add at least one free provider key in its dashboard, then generate
- *     a unified "freellmapi-..." key.
+ *  2. Add at least one free provider key in its dashboard, then find your
+ *     unified key under Coding Agents → "Show API key".
  *  3. Set these two environment variables on THIS bot's service:
- *       FREELLMAPI_URL = http://freellmapi.railway.internal:3001/v1
- *                         (or your public https:// URL + /v1)
- *       FREELLMAPI_KEY = freellmapi-xxxxxxxxxxxx
+ *       FREELLMAPI_URL = https://<your-freellmapi-app>.up.railway.app/v1
+ *       FREELLMAPI_KEY = freellma...xxxxx
  *
  * USAGE:
- *   ai <question>            → text answer
- *   ai image <prompt>        → generates and sends an image
- *   gpt <question>           → alias for text
- *   imagine <prompt>         → alias for image
+ *   llm <question>            → text answer
+ *   llm image <prompt>        → generates and sends an image
+ *   ask <question>            → alias for text
+ *   imagine <prompt>          → alias for image
  */
 "use strict";
 
@@ -54,9 +53,31 @@ async function generateText(prompt) {
     messages: [{ role: "user", content: prompt }]
   });
   const choice = res.data && res.data.choices && res.data.choices[0];
-  const text = choice && choice.message && choice.message.content;
-  if (!text) throw new Error("Empty response from FreeLLMAPI.");
-  return { text, routedVia: res.headers["x-routed-via"] || res.data._routed_via || null };
+  const message = choice && choice.message;
+
+  // Normally content is a plain string. Some reasoning models occasionally
+  // return it as an array of {type:"text", text:...} parts, or (rarely)
+  // leave content empty and only fill the "reasoning" field. Handle all of
+  // these instead of failing outright.
+  let text = message && message.content;
+  if (Array.isArray(text)) {
+    text = text.map(p => (typeof p === "string" ? p : p.text || "")).join("").trim();
+  }
+  if ((!text || !text.trim()) && message && typeof message.reasoning === "string") {
+    text = message.reasoning.replace(/<\/?think>/gi, "").trim();
+  }
+
+  if (!text || !text.trim()) {
+    // Surface a short snippet of the raw response so the real cause is
+    // visible instead of a generic "empty" message.
+    const snippet = JSON.stringify(res.data).slice(0, 300);
+    throw new Error(`Empty response from FreeLLMAPI. Raw: ${snippet}`);
+  }
+
+  const routedVia = res.headers["x-routed-via"]
+    || (res.data._routed_via && `${res.data._routed_via.platform}/${res.data._routed_via.model}`)
+    || null;
+  return { text: text.trim(), routedVia };
 }
 
 // ─────────────────────────────────────────────
@@ -95,11 +116,11 @@ module.exports = {
     shortDescription: "AI text & image generation (FreeLLMAPI)",
     longDescription: "Generate text answers or AI images through a self-hosted FreeLLMAPI proxy.",
     category: "ai",
-    guide: { en: "ai <question> | ai image <prompt> | gpt <question> | imagine <prompt>" }
+    guide: { en: "llm <question> | llm image <prompt> | ask <question> | imagine <prompt>" }
   },
 
   onStart: async function ({ api, event, args, commandName }) {
-    const { threadID, messageID } = event;
+    const { threadID, messageID, body } = event;
 
     if (!API_KEY) {
       return api.sendMessage(
@@ -108,8 +129,14 @@ module.exports = {
       );
     }
 
-    // "imagine" alias, or "ai image <prompt>" / "gpt image <prompt>" → image mode
-    let isImage = commandName === "imagine";
+    // FIX: `commandName` from the framework is unreliable for alias
+    // detection — it's normalized to the primary command name ("llm")
+    // even when the user actually typed the "imagine" alias, so checking
+    // commandName === "imagine" never matched and everything fell through
+    // to text mode. Instead, read the first word the user actually typed
+    // straight from event.body.
+    const typedWord = (body || "").trim().split(/\s+/)[0]?.toLowerCase() || "";
+    let isImage = typedWord === "imagine";
     let promptArgs = args;
     if (!isImage && args[0] && args[0].toLowerCase() === "image") {
       isImage = true;
@@ -120,8 +147,8 @@ module.exports = {
     if (!prompt) {
       return api.sendMessage(
         isImage
-          ? "❌ Usage: ai image <prompt>\nExample: ai image a cat riding a bicycle"
-          : "❌ Usage: ai <question>\nExample: ai what is the capital of Bangladesh?",
+          ? "❌ Usage: llm image <prompt>\nExample: llm image a cat riding a bicycle"
+          : "❌ Usage: llm <question>\nExample: llm what is the capital of Bangladesh?",
         threadID, messageID
       );
     }
