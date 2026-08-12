@@ -81,25 +81,19 @@ async function generateText(prompt) {
 }
 
 // ─────────────────────────────────────────────
-//  IMAGE GENERATION
+//  IMAGE GENERATION — via Pollinations.ai (free, no key/signup needed)
+//  FreeLLMAPI's /v1/images/generations needs a configured image provider
+//  key, which isn't set up in the dashboard, so it fails with "All image
+//  providers failed". Pollinations works standalone with just a URL fetch,
+//  no key needed at all — simplest path to a working image feature.
 // ─────────────────────────────────────────────
 async function generateImage(prompt) {
-  const res = await client().post("/images/generations", {
-    model: "auto",
-    prompt,
-    n: 1
-  });
-  const item = res.data && res.data.data && res.data.data[0];
-  if (!item) throw new Error("Empty response from FreeLLMAPI.");
-
-  if (item.url) {
-    const imgRes = await axios.get(item.url, { responseType: "arraybuffer", timeout: 30000 });
-    return Buffer.from(imgRes.data);
-  }
-  if (item.b64_json) {
-    return Buffer.from(item.b64_json, "base64");
-  }
-  throw new Error("No image data (url/b64_json) in FreeLLMAPI response.");
+  const seed = Math.floor(Math.random() * 1000000);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
+  const res = await axios.get(url, { responseType: "arraybuffer", timeout: 60000 });
+  const buf = Buffer.from(res.data);
+  if (buf.length < 500) throw new Error("Pollinations returned an unexpectedly small/empty image.");
+  return buf;
 }
 
 // ─────────────────────────────────────────────
