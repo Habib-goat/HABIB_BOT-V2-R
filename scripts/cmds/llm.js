@@ -121,12 +121,14 @@ async function generateImagePollinations(prompt) {
 async function generateImage(prompt) {
   if (GEMINI_KEY) {
     try {
-      return await generateImageGemini(prompt);
+      const buf = await generateImageGemini(prompt);
+      return { buf, engine: "Gemini" };
     } catch (e) {
       console.error("[llm.js] Gemini image generation failed, falling back to Pollinations:", e.message);
     }
   }
-  return await generateImagePollinations(prompt);
+  const buf = await generateImagePollinations(prompt);
+  return { buf, engine: "Pollinations" };
 }
 
 // ─────────────────────────────────────────────
@@ -186,11 +188,11 @@ module.exports = {
         const cacheDir = path.join(__dirname, "cache");
         await fs.ensureDir(cacheDir);
         const filePath = path.join(cacheDir, `ai_img_${Date.now()}.png`);
-        const buf = await generateImage(prompt);
+        const { buf, engine } = await generateImage(prompt);
         await fs.writeFile(filePath, buf);
         await new Promise((resolve) =>
           api.sendMessage(
-            { body: `🖼️ ${prompt}`, attachment: fs.createReadStream(filePath) },
+            { body: `🖼️ ${prompt}\n— via ${engine}`, attachment: fs.createReadStream(filePath) },
             threadID,
             () => { resolve(); fs.remove(filePath).catch(() => {}); },
             messageID
