@@ -118,17 +118,45 @@ async function generateImagePollinations(prompt) {
   return buf;
 }
 
-async function generateImage(prompt) {
-  if (GEMINI_KEY) {
+function isRateLimited(e) {
+  return e.response?.status === 429;
+}
+
+async function withRetry(fn, attempts = 2, delayMs = 4000) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
     try {
-      const buf = await generateImageGemini(prompt);
-      return { buf, engine: "Gemini" };
+      return await fn();
     } catch (e) {
-      console.error("[llm.js] Gemini image generation failed, falling back to Pollinations:", e.message);
+      lastErr = e;
+      if (!isRateLimited(e) || i === attempts - 1) throw e;
+      await new Promise(r => setTimeout(r, delayMs));
     }
   }
-  const buf = await generateImagePollinations(prompt);
-  return { buf, engine: "Pollinations" };
+  throw lastErr;
+}
+
+async function generateImage(prompt) {
+  if (!GEMINI_KEY) {
+    const buf = await withRetry(() => generateImagePollinations(prompt));
+    return { buf, engine: "Pollinations (no GEMINI_API_KEY set)" };
+  }
+  try {
+    const buf = await withRetry(() => generateImageGemini(prompt));
+    return { buf, engine: "Gemini" };
+  } catch (e) {
+    const reason = e.response?.data?.error?.message || e.message || String(e);
+    console.error("[llm.js] Gemini image generation failed, falling back to Pollinations:", reason);
+    try {
+      const buf = await withRetry(() => generateImagePollinations(prompt));
+      return { buf, engine: `Pollinations (Gemini failed: ${reason.slice(0, 150)})` };
+    } catch (e2) {
+      if (isRateLimited(e2)) {
+        throw new Error("দুটো ইমেজ সার্ভিসই এই মুহূর্তে rate-limited (busy)। ১-২ মিনিট পর আবার চেষ্টা করুন।");
+      }
+      throw e2;
+    }
+  }
 }
 
 // ─────────────────────────────────────────────
