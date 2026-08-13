@@ -32,6 +32,7 @@ const axios = require("axios");
 
 const BASE_URL = (process.env.FREELLMAPI_URL || "http://localhost:3001/v1").replace(/\/+$/, "");
 const API_KEY = process.env.FREELLMAPI_KEY || "";
+const GEMINI_KEY = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_2 || "";
 
 function client() {
   return axios.create({
@@ -81,19 +82,51 @@ async function generateText(prompt) {
 }
 
 // ─────────────────────────────────────────────
-//  IMAGE GENERATION — via Pollinations.ai (free, no key/signup needed)
-//  FreeLLMAPI's /v1/images/generations needs a configured image provider
-//  key, which isn't set up in the dashboard, so it fails with "All image
-//  providers failed". Pollinations works standalone with just a URL fetch,
-//  no key needed at all — simplest path to a working image feature.
+//  IMAGE GENERATION
+//
+//  Primary: Gemini's own image-generation model ("Nano Banana" /
+//  gemini-2.5-flash-image) via the GEMINI_API_KEY already set on this
+//  bot's Railway service. This is genuinely the same Gemini image engine
+//  people mean when they say "like Gemini" — noticeably better quality
+//  than Pollinations for most prompts.
+//
+//  Fallback: Pollinations.ai (free, no key needed) — used only if no
+//  Gemini key is configured, or if the Gemini call fails for any reason,
+//  so image generation never goes completely dead.
 // ─────────────────────────────────────────────
-async function generateImage(prompt) {
+async function generateImageGemini(prompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_KEY}`;
+  const res = await axios.post(url, {
+    contents: [{ parts: [{ text: prompt }] }]
+  }, { timeout: 60000 });
+
+  const parts = res.data?.candidates?.[0]?.content?.parts || [];
+  const imgPart = parts.find(p => p.inlineData && p.inlineData.data);
+  if (!imgPart) {
+    const textPart = parts.find(p => p.text);
+    throw new Error(textPart ? `Gemini declined: ${textPart.text.slice(0, 200)}` : "Gemini returned no image data.");
+  }
+  return Buffer.from(imgPart.inlineData.data, "base64");
+}
+
+async function generateImagePollinations(prompt) {
   const seed = Math.floor(Math.random() * 1000000);
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${seed}`;
   const res = await axios.get(url, { responseType: "arraybuffer", timeout: 60000 });
   const buf = Buffer.from(res.data);
   if (buf.length < 500) throw new Error("Pollinations returned an unexpectedly small/empty image.");
   return buf;
+}
+
+async function generateImage(prompt) {
+  if (GEMINI_KEY) {
+    try {
+      return await generateImageGemini(prompt);
+    } catch (e) {
+      console.error("[llm.js] Gemini image generation failed, falling back to Pollinations:", e.message);
+    }
+  }
+  return await generateImagePollinations(prompt);
 }
 
 // ─────────────────────────────────────────────
