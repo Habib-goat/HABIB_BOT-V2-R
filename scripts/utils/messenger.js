@@ -10,6 +10,23 @@ const { MessengerAdapterFactory } = require('./messengerAdapter');
 
 let loginLib;
 
+// FIX: @rxabdullah/xdi-fca references the global `File` constructor (a
+// standard Web API, normally available in browsers and in newer Node
+// versions). Railway's build runs an older Node LTS (this project targets
+// "18.x" per package.json) where `File` is NOT exposed as a global, only
+// as a named export of the `buffer` module — so requiring the library
+// crashed immediately with "File is not defined" there, even though it
+// worked fine locally under a newer Node version that already has it as
+// a global. Polyfilling it here (before the require) fixes this without
+// needing to change the Node version.
+if (typeof globalThis.File === "undefined") {
+  try {
+    globalThis.File = require("buffer").File;
+  } catch (polyfillErr) {
+    logger.warn(`[Messenger] Could not polyfill global File: ${polyfillErr.message}`);
+  }
+}
+
 try {
   const libName = config.messengerLib || "@rxabdullah/xdi-fca";
   loginLib = require(libName);
