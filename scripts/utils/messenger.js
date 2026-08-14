@@ -13,34 +13,14 @@ let loginLib;
 try {
   const libName = config.messengerLib || "@rxabdullah/xdi-fca";
   loginLib = require(libName);
-
-  try {
-    const fs2 = require("fs");
-    const path2 = require("path");
-    const pkgMain = require.resolve(libName);
-    const loginHelperPath = path2.join(path2.dirname(pkgMain), "module", "loginHelper.js");
-    const c2 = fs2.readFileSync(loginHelperPath, "utf8");
-    const lines = c2.split("\n");
-    const target = lines.findIndex((l) => l.includes("e2eeModule = require"));
-    console.log("[DEBUG] loginHelper.js path:", loginHelperPath);
-    console.log("[DEBUG] e2ee require line (" + (target + 1) + "):", lines[target]);
-    console.log("[DEBUG] nativeBridge.js exists:", fs2.existsSync(path2.join(path2.dirname(pkgMain), "src/api/socket/e2ee/nativeBridge.js")));
-    console.log("[DEBUG] messagix.so exists:", fs2.existsSync(path2.join(path2.dirname(pkgMain), "src/api/socket/e2ee/native/build/messagix.so")));
-  } catch (dbgErr) {
-    console.log("[DEBUG] failed to inspect loginHelper.js:", dbgErr.message);
-  }
+  logger.success(`[Messenger] Loaded messenger library "${libName}" successfully.`);
 } catch (err) {
-  logger.warn(
-    `[Messenger] Selected library "${config.messengerLib || "@rxabdullah/xdi-fca"}" not found, falling back to "@rxabdullah/xdi-fca"`
+  logger.error(
+    `[Messenger] Failed to load "${config.messengerLib || "@rxabdullah/xdi-fca"}": ${err && err.message ? err.message : err}`
   );
-
-  try {
-    loginLib = require("@rxabdullah/xdi-fca");
-  } catch (e) {
-    logger.error(
-      "[Messenger] Failed to load '@rxabdullah/xdi-fca'. Running in simulated dashboard mode only."
-    );
-  }
+  logger.error(
+    "[Messenger] Running in simulated dashboard mode only until this is fixed."
+  );
 }
 
 let isConnected = false;
@@ -348,7 +328,7 @@ autoTimerService.setApi(adaptedApi);
   }
 
   console.log("================");
-console.log(JSON.stringify(event, (k, v) => typeof v === "bigint" ? v.toString() : v, 2));
+console.log(JSON.stringify(event, null, 2));
 console.log("================");
 
 console.log("EVENT TYPE:", event.type);
@@ -383,9 +363,7 @@ try {
     if (event.isE2EE && event.threadID && typeof adaptedApi.markE2EEThread === 'function') {
       adaptedApi.markE2EEThread(event.threadID);
     }
-if (event.isE2EE && event.messageID && event.threadID && typeof adaptedApi.markE2EEMessage === 'function') {
-      adaptedApi.markE2EEMessage(event.messageID, event.threadID, event.e2ee && event.e2ee.senderJid);
-    }
+
     await botEngine.processMessage(
       event,
       commandLoader,
@@ -453,7 +431,7 @@ if (event.isE2EE && event.messageID && event.threadID && typeof adaptedApi.markE
             console.error("[E2EE DEBUG] full stack:", e2eeErr && e2eeErr.stack ? e2eeErr.stack : e2eeErr);
           }
         } else if (e2eeEnabled) {
-          logger.warn("api.connectE2EE not available in this xdi-fca build — E2EE disabled for this session.");
+          logger.warn("api.connectE2EE not available in this fca-riyad build — E2EE disabled for this session.");
         }
 
         logger.info("Messenger live message broker successfully engaged. Listening for events...");
