@@ -1,85 +1,155 @@
-const axios = require("axios");
-const fs = require("fs-extra");
-const path = require("path");
+/**
+ * Riyad Bot Framework
+ *
+ * Search up to 10 videos via the user's own riyad-video-api, send ONE
+ * numbered collage image, then download the selected video as mp4 after
+ * a 1-10 reply.
+ *
+ * Supported: vidio <name/link> | video <name/link> | vid <name/link>
+ */
+"use strict";
 
-const baseApiUrl = async () => {
-	const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-	return base.data.mahmud;
-};
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+const replyManager = require("../replies/replyManager");
+const { search, resolveDownload } = require("../utils/riyadVideoApi");
+const { buildResultCollage } = require("../utils/resultCollage");
+
+// 🔒 Author verification — do not remove/rename
+const OFFICIAL_AUTHOR = "Riyad";
+function verifyAuthor(api, threadID, messageID) {
+  if (module.exports.config.author !== OFFICIAL_AUTHOR) {
+    api.sendMessage(
+      "🚨 Credit modification detected! Please restore the original author ('Riyad') to run this command.",
+      threadID,
+      messageID
+    );
+    return false;
+  }
+  return true;
+}
+
+function react(api, emoji, messageID) {
+  if (typeof api.setMessageReaction === "function") {
+    api.setMessageReaction(emoji, messageID, () => {}, true);
+  }
+}
+
+const YT_LINK_RE = /^(?:https?:\/\/)?(?:m\.|www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))((\w|-){11})(?:\S+)?$/;
+
+async function downloadToFile(url, filePath, timeout = 60000) {
+  const res = await axios.get(url, { responseType: "arraybuffer", timeout });
+  fs.writeFileSync(filePath, res.data);
+}
+
+async function sendVideo(api, id, title, threadID, messageID, cacheDir) {
+  const filePath = path.join(cacheDir, `vidio_${Date.now()}.mp4`);
+  react(api, "⏳", messageID);
+  try {
+    const resolved = await resolveDownload(id, "mp4");
+    await downloadToFile(resolved.downloadLink, filePath);
+    react(api, "✅", messageID);
+    return api.sendMessage(
+      { body: `✅ | ${resolved.title || title}`, attachment: fs.createReadStream(filePath) },
+      threadID,
+      () => {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      },
+      messageID
+    );
+  } catch (err) {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    react(api, "❌", messageID);
+    console.error("[VIDIO DOWNLOAD ERROR]", err.message);
+    return api.sendMessage(`❌ Download failed: ${err.message}`, threadID, messageID);
+  }
+}
 
 module.exports = {
-	config: {
-		name: "vidio",
-		aliases: ["video", "vid"],
-		version: "1.0.0",
-		author: "Riyad",
-		countDown: 10,
-		role: 0,
-		category: "media",
-		shortDescription: "Download video from YouTube (by name or link)",
-		longDescription: "Download YouTube video by providing a video name or link",
-		guide: "{pn} <name or link>: Provide video name or link"
-	},
+  config: {
+    name: "vidio",
+    aliases: ["video", "vid"],
+    version: "2.0.1",
+    author: "Riyad",
+    countDown: 10,
+    role: 0,
+    category: "media",
+    shortDescription: "Search/download a YouTube video as mp4",
+    guide: { en: "{pn} <name or link> — reply with 1-10 to download (name search only)" }
+  },
 
-	onStart: async function ({ api, event, args }) {
-		const { threadID, messageID, senderID } = event;
-		const hasReaction = typeof api.setMessageReaction === "function";
+  onStart: async function ({ api, event, args }) {
+    const { threadID, messageID, senderID } = event;
+    if (!verifyAuthor(api, threadID, messageID)) return;
 
-		const input = args.join(" ");
-		if (!input) {
-			return api.sendMessage("× Baby, please provide a video name or link!", threadID, messageID);
-		}
+    const input = args.join(" ").trim();
+    if (!input) {
+      return api.sendMessage("❌ Usage: vidio <name or link>", threadID, messageID);
+    }
 
-		let filePath;
-		try {
-			if (hasReaction) api.setMessageReaction("🐤", messageID, () => {}, true);
+    const cacheDir = path.join(__dirname, "cache");
+    fs.mkdirSync(cacheDir, { recursive: true });
 
-			const apiUrl = await baseApiUrl();
-			const checkurl = /^(?:https?:\/\/)?(?:m\.|www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))((\w|-){11})(?:\S+)?$/;
-			let videoID;
+    // Direct YouTube link — skip the search/collage step, download right away.
+    const linkMatch = input.match(YT_LINK_RE);
+    if (linkMatch) {
+      return sendVideo(api, linkMatch[1], input, threadID, messageID, cacheDir);
+    }
 
-			if (checkurl.test(input)) {
-				videoID = input.match(checkurl)[1];
-			} else {
-				const searchRes = await axios.get(`${apiUrl}/api/ytb/search?q=${encodeURIComponent(input)}`);
-				const results = searchRes.data.results;
-				if (!results || results.length === 0) {
-					if (hasReaction) api.setMessageReaction("🥹", messageID, () => {}, true);
-					return api.sendMessage("× No results found.", threadID, messageID);
-				}
-				videoID = results[0].id;
-			}
+    react(api, "⏳", messageID);
+    let collagePath;
+    try {
+      const results = await search(input);
+      if (!results.length) {
+        react(api, "❌", messageID);
+        return api.sendMessage(`❌ "${input}" এর জন্য কোনো ফলাফল পাওয়া যায়নি।`, threadID, messageID);
+      }
 
-			const cacheDir = path.join(__dirname, "cache");
-			if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-			filePath = path.join(cacheDir, `video_${Date.now()}.mp4`);
+      const pngBuffer = await buildResultCollage(results);
+      collagePath = path.join(cacheDir, `vidio_collage_${Date.now()}.png`);
+      fs.writeFileSync(collagePath, pngBuffer);
+      react(api, "✅", messageID);
 
-			const res = await axios.get(`${apiUrl}/api/ytb/get?id=${videoID}&type=video`);
-			const { title, downloadLink } = res.data.data;
+      return api.sendMessage(
+        {
+          body: `🔎 | "${input}" এর জন্য ${results.length}টি ফলাফল\n\n👉 Reply with a number (1-${results.length}) to get the video.`,
+          attachment: fs.createReadStream(collagePath)
+        },
+        threadID,
+        (err, info) => {
+          if (collagePath && fs.existsSync(collagePath)) fs.unlinkSync(collagePath);
+          if (!err && info?.messageID) {
+            replyManager.set(info.messageID, {
+              commandName: this.config.name,
+              author: senderID,
+              results,
+              query: input
+            });
+          }
+        },
+        messageID
+      );
+    } catch (err) {
+      if (collagePath && fs.existsSync(collagePath)) fs.unlinkSync(collagePath);
+      react(api, "❌", messageID);
+      console.error("[VIDIO ERROR]", err.message);
+      return api.sendMessage(`❌ Error: ${err.message}`, threadID, messageID);
+    }
+  },
 
-			const response = await axios({ url: downloadLink, method: "GET", responseType: "stream" });
-			const writer = fs.createWriteStream(filePath);
-			response.data.pipe(writer);
+  onReply: async function ({ api, event, Reply }) {
+    const { threadID, messageID, senderID } = event;
+    if (String(senderID) !== String(Reply.author)) return;
 
-			writer.on("finish", () => {
-				api.sendMessage({
-					body: `✅ 𝙃𝙚𝙧𝙚'𝙨 𝙮𝙤𝙪𝙧 𝙫𝙞𝙙𝙚𝙤 𝙗𝙖𝙗𝙮\n\n• 𝐓𝐢𝐭𝐥𝐞: ${title}`,
-					attachment: fs.createReadStream(filePath)
-				}, threadID, () => {
-					if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-					if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-				}, messageID);
-			});
+    const choice = parseInt(String(event.body || "").trim(), 10);
+    if (isNaN(choice) || choice < 1 || choice > Reply.results.length) {
+      return api.sendMessage(`❌ Reply with a number between 1 and ${Reply.results.length}.`, threadID, messageID);
+    }
 
-			writer.on("error", (err) => {
-				throw err;
-			});
-
-		} catch (err) {
-			console.error("error:", err);
-			if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-			if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-			return api.sendMessage(`× API error: ${err.message || "Download failed!"}. Contact MahMUD for help.\n•WhatsApp: 01836298139`, threadID, messageID);
-		}
-	}
+    const selected = Reply.results[choice - 1];
+    const cacheDir = path.join(__dirname, "cache");
+    fs.mkdirSync(cacheDir, { recursive: true });
+    return sendVideo(api, selected.id, selected.title, threadID, messageID, cacheDir);
+  }
 };
