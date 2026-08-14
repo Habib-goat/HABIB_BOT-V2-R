@@ -11,7 +11,7 @@ const { MessengerAdapterFactory } = require('./messengerAdapter');
 let loginLib;
 
 try {
-  const libName = config.messengerLib || "fca-riyad";
+  const libName = config.messengerLib || "@rxabdullah/xdi-fca";
   loginLib = require(libName);
 
   try {
@@ -31,14 +31,14 @@ try {
   }
 } catch (err) {
   logger.warn(
-    `[Messenger] Selected library "${config.messengerLib || "fca-riyad"}" not found, falling back to "fca-riyad"`
+    `[Messenger] Selected library "${config.messengerLib || "@rxabdullah/xdi-fca"}" not found, falling back to "@rxabdullah/xdi-fca"`
   );
 
   try {
-    loginLib = require("fca-riyad");
+    loginLib = require("@rxabdullah/xdi-fca");
   } catch (e) {
     logger.error(
-      "[Messenger] Failed to load 'fca-riyad'. Running in simulated dashboard mode only."
+      "[Messenger] Failed to load '@rxabdullah/xdi-fca'. Running in simulated dashboard mode only."
     );
   }
 }
@@ -283,7 +283,7 @@ function startMessenger(app, wsServer) {
 
       // Wrap standard API with our custom promise-based adapter
       const adaptedApi = MessengerAdapterFactory.create(
-  config.messengerLib || "fca-riyad",
+  config.messengerLib || "@rxabdullah/xdi-fca",
   api,
   wsServer
 );
@@ -453,7 +453,7 @@ if (event.isE2EE && event.messageID && event.threadID && typeof adaptedApi.markE
             console.error("[E2EE DEBUG] full stack:", e2eeErr && e2eeErr.stack ? e2eeErr.stack : e2eeErr);
           }
         } else if (e2eeEnabled) {
-          logger.warn("api.connectE2EE not available in this fca-riyad build — E2EE disabled for this session.");
+          logger.warn("api.connectE2EE not available in this xdi-fca build — E2EE disabled for this session.");
         }
 
         logger.info("Messenger live message broker successfully engaged. Listening for events...");

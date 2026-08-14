@@ -1,7 +1,7 @@
 {
   "botName": "Riyad Bot",
   "prefix": "/",
-  "messengerLib": "fca-riyad",
+  "messengerLib": "@rxabdullah/xdi-fca",
   "e2ee": {
     "enable": true
   },
