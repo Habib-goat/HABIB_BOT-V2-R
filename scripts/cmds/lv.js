@@ -1,167 +1,145 @@
+/**
+ * Riyad Bot Framework
+ *
+ * Search up to 10 lyrics videos via the user's own riyad-video-api, send
+ * ONE numbered collage image, then download the selected lyrics video as
+ * mp4 after a 1-10 reply.
+ *
+ * Supported: lv <song name> | lyricvideo <song name> | lyricsvideo <song name>
+ */
+"use strict";
+
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
+const replyManager = require("../replies/replyManager");
+const { lyricsSearch, resolveDownload } = require("../utils/riyadVideoApi");
+const { buildResultCollage } = require("../utils/resultCollage");
 
-// 🔒 Author verification function
-const OFFICIAL_AUTHOR = "✨ 𝐇𝐀𝐒𝐀𝐍 ✨";
+// 🔒 Author verification — do not remove/rename
+const OFFICIAL_AUTHOR = "Riyad";
+function verifyAuthor(api, threadID, messageID) {
+  if (module.exports.config.author !== OFFICIAL_AUTHOR) {
+    api.sendMessage(
+      "🚨 Credit modification detected! Please restore the original author ('Riyad') to run this command.",
+      threadID,
+      messageID
+    );
+    return false;
+  }
+  return true;
+}
 
-function verifyCredits(author) {
-  if (author !== OFFICIAL_AUTHOR) {
-    throw new Error("🚨 Credit modification detected! Please restore original credits to run this command.");
+function react(api, emoji, messageID) {
+  if (typeof api.setMessageReaction === "function") {
+    api.setMessageReaction(emoji, messageID, () => {}, true);
   }
 }
 
-// 🔎 Primary API Search
-async function fetchPrimary(query) {
-  try {
-    const res = await axios.get(
-      `https://lyric-search-neon.vercel.app/kshitiz?keyword=${encodeURIComponent(query)}`
-    );
-    if (res.data && res.data.length > 0 && res.data[0].videoUrl) {
-      return {
-        title: res.data[0].title,
-        videoUrl: res.data[0].videoUrl
-      };
-    }
-  } catch (e) {}
-  return null;
-}
-
-// 🔄 Backup API Search
-async function fetchBackup(query) {
-  try {
-    const res = await axios.get(
-      `https://raw-video-api.vercel.app/search?q=${encodeURIComponent(query)}`
-    );
-    if (res.data && res.data.url) {
-      return {
-        title: res.data.title || query,
-        videoUrl: res.data.url
-      };
-    }
-  } catch (e) {}
-  return null;
-}
-
-// 🎶 Clean Song Title Function
-function cleanTitle(text = "") {
-  return text
-    .replace(/#\S+/g, "")        // #hashtag বাদ
-    .replace(/@\S+/g, "")        // @username বাদ
-    .replace(/\(.*?\)/g, "")     // (bracket text) বাদ
-    .replace(/\[.*?\]/g, "")     // [bracket text] বাদ
-    .replace(/official|video|lyrics|lyric|audio|full song|4k|hd|status/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
+async function downloadToFile(url, filePath, timeout = 60000) {
+  const res = await axios.get(url, { responseType: "arraybuffer", timeout });
+  fs.writeFileSync(filePath, res.data);
 }
 
 module.exports = {
   config: {
     name: "lv",
     aliases: ["lyricvideo", "lyricsvideo"],
-    version: "4.5.0",
-    author: "✨ 𝐇𝐀𝐒𝐀𝐍 ✨",
-    countDown: 5,
+    version: "5.0.0",
+    author: "Riyad",
+    countDown: 10,
     role: 0,
-    category: "fun",
-    description: { en: "High reliability lyric video player with fallback API" },
-    guide: { en: "{pn} <song name / reply to audio or video>" }
+    category: "music",
+    description: { en: "Search a lyrics video and download it by replying with a number" },
+    guide: { en: "{pn} <song name> — reply with 1-10 to download" }
   },
 
   onStart: async function ({ api, event, args }) {
-    const { threadID, messageID, messageReply } = event;
+    const { threadID, messageID, senderID } = event;
+    if (!verifyAuthor(api, threadID, messageID)) return;
 
+    const query = args.join(" ").trim();
+    if (!query) {
+      return api.sendMessage("❌ Usage: lv <song name>\nExample: lv shape of you", threadID, messageID);
+    }
+
+    const cacheDir = path.join(__dirname, "cache");
+    fs.mkdirSync(cacheDir, { recursive: true });
+    react(api, "⏳", messageID);
+
+    let collagePath;
     try {
-      // 🛡️ Anti-Credit Edit Protection Check
-      verifyCredits(module.exports.config.author);
-
-      let query = "";
-
-      // 🎵 Reply Audio/Video check
-      if (messageReply && messageReply.attachments && messageReply.attachments.length > 0) {
-        const att = messageReply.attachments[0];
-
-        if (att.type === "audio" || att.type === "video") {
-          const res = await axios.get(
-            `https://audio-reco.onrender.com/kshitiz?url=${encodeURIComponent(att.url)}`
-          );
-
-          query = cleanTitle(res.data?.title || "");
-        }
-      }
-      // 🔎 Search by text input
-      else if (args.length > 0) {
-        query = args.join(" ");
-      }
-      // ⚠️ কোনো গানের নাম বা অডিও না দিলে
-      else {
-        return api.sendMessage("🦁 𝐏𝐥𝐞𝐚𝐬𝐞 𝐩𝐫𝐨𝐯𝐢𝐝𝐞 𝐚 𝐬𝐨𝐧𝐠 𝐧𝐚𝐦𝐞!", threadID, messageID);
+      const results = await lyricsSearch(query);
+      if (!results.length) {
+        react(api, "❌", messageID);
+        return api.sendMessage(`❌ "${query}" এর জন্য কোনো lyrics video পাওয়া যায়নি।`, threadID, messageID);
       }
 
-      if (!query) {
-        return api.sendMessage("🦁 𝐏𝐥𝐞𝐚𝐬𝐞 𝐩𝐫𝐨𝐯𝐢𝐝𝐞 𝐚 𝐬𝐨𝐧𝐠 𝐧𝐚𝐦𝐞!", threadID, messageID);
-      }
+      const pngBuffer = await buildResultCollage(results);
+      collagePath = path.join(cacheDir, `lv_collage_${Date.now()}.png`);
+      fs.writeFileSync(collagePath, pngBuffer);
+      react(api, "✅", messageID);
 
-      if (typeof api.setMessageReaction === "function") {
-        api.setMessageReaction("🎵", messageID, () => {}, true);
-      }
-
-      const searchKeyword = cleanTitle(query);
-      const finalQuery = `${searchKeyword} lyrics video`;
-
-      // 🚀 ১ম API দিয়ে ট্রাই করবে
-      let videoData = await fetchPrimary(finalQuery);
-
-      // 🔄 যদি ১ম টা ফেল করে, ব্যাকআপ API দিয়ে ট্রাই করবে
-      if (!videoData) {
-        videoData = await fetchBackup(finalQuery);
-      }
-
-      // ❌ কোনো API-তেই গান না পেলে ওয়ার্নিং মেসেজ দেবে
-      if (!videoData || !videoData.videoUrl) {
-        return api.sendMessage("🦁 𝐒𝐨𝐫𝐫𝐲, 𝐧𝐨 𝐯𝐢𝐝𝐞𝐨 𝐟𝐨𝐮𝐧𝐝 𝐟𝐨𝐫 𝐭𝐡𝐢𝐬 𝐬𝐨𝐧𝐠!", threadID, messageID);
-      }
-
-      const videoUrl = videoData.videoUrl;
-      const cleanSongName = cleanTitle(videoData.title || searchKeyword);
-
-      // 📥 Download to local cache then stream as attachment
-      const cacheDir = path.join(__dirname, "cache");
-      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-      const filePath = path.join(cacheDir, `lv_${Date.now()}.mp4`);
-
-      const response = await axios({
-        url: videoUrl,
-        method: "GET",
-        responseType: "arraybuffer",
-        timeout: 30000
-      });
-      fs.writeFileSync(filePath, response.data);
-
-      // 🦁 ক্লিন ক্যাপশন
-      const caption = `🦁 𝐋𝐘𝐑𝐈𝐂 𝐕𝐈𝐃𝐄𝐎 🦁\n\n🎵 ${cleanSongName}\n✨ 𝐄𝐧𝐣𝐨𝐲 𝐘𝐨𝐮𝐫 𝐌𝐮𝐬𝐢𝐜`;
-
-      // 🎶 Send video attachment, then clean up cache file
       return api.sendMessage(
         {
-          body: caption,
-          attachment: fs.createReadStream(filePath)
+          body: `🎬 | "${query}" এর জন্য ${results.length}টি lyrics video\n\n👉 Reply with a number (1-${results.length}) to get it.`,
+          attachment: fs.createReadStream(collagePath)
         },
         threadID,
-        () => {
-          fs.unlink(filePath, () => {});
+        (err, info) => {
+          if (collagePath && fs.existsSync(collagePath)) fs.unlinkSync(collagePath);
+          if (!err && info?.messageID) {
+            replyManager.set(info.messageID, {
+              commandName: this.config.name,
+              author: senderID,
+              results,
+              query
+            });
+          }
         },
         messageID
       );
-
     } catch (err) {
-      // 🛑 ক্রেডিট চেঞ্জ করলে এটি মেসেজ হিসেবে ইউজারকে জানিয়ে দেবে
-      if (err.message.includes("Credit modification detected")) {
-        return api.sendMessage("⚠️ 𝐓𝐡𝐢𝐬 𝐜𝐨𝐦𝐦𝐚𝐧𝐝 𝐡𝐚𝐬 𝐛𝐞𝐞𝐧 𝐭𝐚𝐦𝐩𝐞𝐫𝐞𝐝! 𝐎𝐫𝐢𝐠𝐢𝐧𝐚𝐥 𝐜𝐫𝐞𝐝𝐢𝐭𝐬 𝐦𝐮𝐬𝐭 𝐛𝐞 '✨ 𝐇𝐀𝐒𝐀𝐍 ✨'", threadID, messageID);
-      }
+      if (collagePath && fs.existsSync(collagePath)) fs.unlinkSync(collagePath);
+      react(api, "❌", messageID);
+      console.error("[LV ERROR]", err.message);
+      return api.sendMessage(`❌ Error: ${err.message}`, threadID, messageID);
+    }
+  },
 
-      console.error("LV Command Error:", err);
-      return api.sendMessage("𝐀𝐧 𝐞𝐫𝐫𝐨𝐫 𝐨𝐜𝐜𝐮𝐫𝐫𝐞𝐝 𝐰𝐡𝐢𝐥𝐞 𝐟𝐞𝐭𝐜𝐡𝐢𝐧𝐠 𝐭𝐡𝐞 𝐯𝐢𝐝𝐞𝐨!", threadID, messageID);
+  onReply: async function ({ api, event, Reply }) {
+    const { threadID, messageID, senderID } = event;
+    if (String(senderID) !== String(Reply.author)) return;
+
+    const choice = parseInt(String(event.body || "").trim(), 10);
+    if (isNaN(choice) || choice < 1 || choice > Reply.results.length) {
+      return api.sendMessage(`❌ Reply with a number between 1 and ${Reply.results.length}.`, threadID, messageID);
+    }
+
+    const selected = Reply.results[choice - 1];
+    const cacheDir = path.join(__dirname, "cache");
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const filePath = path.join(cacheDir, `lv_${Date.now()}.mp4`);
+    react(api, "⏳", messageID);
+
+    try {
+      const { downloadLink, title } = await resolveDownload(selected.id, "mp4");
+      await downloadToFile(downloadLink, filePath);
+      react(api, "✅", messageID);
+
+      return api.sendMessage(
+        { body: `✅ | ${title || selected.title}`, attachment: fs.createReadStream(filePath) },
+        threadID,
+        () => {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        },
+        messageID
+      );
+    } catch (err) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      react(api, "❌", messageID);
+      console.error("[LV DOWNLOAD ERROR]", err.message);
+      return api.sendMessage(`❌ Download failed: ${err.message}`, threadID, messageID);
     }
   }
 };
