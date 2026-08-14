@@ -1,76 +1,85 @@
-const axios=require("axios");
-const fs=require("fs");
-const path=require("path");
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
 
-let cachedApi=null;
-async function baseApiUrl(){
- if(cachedApi) return cachedApi;
- try{
-   const r=await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json",{timeout:5000});
-   if(r.data&&r.data.mahmud){cachedApi=r.data.mahmud;return cachedApi;}
- }catch(e){}
- return "https://mahmud-rest-api-v9.onrender.com";
-}
+const baseApiUrl = async () => {
+	const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
+	return base.data.mahmud;
+};
 
-module.exports={
- config:{
-   name:"vidio",
-   aliases:["video","vid","ভিডিও"],
-   version:"3.0.0",
-   author:"Riyad",
-   countDown:5,
-   role:0,
-   category:"media",
-   description:{en:"Download YouTube videos"},
-   guide:{en:"{pn} <name/link>"}
- },
+module.exports = {
+	config: {
+		name: "vidio",
+		aliases: ["video", "vid"],
+		version: "1.0.0",
+		author: "Riyad",
+		countDown: 10,
+		role: 0,
+		category: "media",
+		shortDescription: "Download video from YouTube (by name or link)",
+		longDescription: "Download YouTube video by providing a video name or link",
+		guide: "{pn} <name or link>: Provide video name or link"
+	},
 
- onStart:async function({api,event,args}){
-   try{
-     if(!args.length)
-       return api.sendMessage("📺 ভিডিওর নাম বা YouTube লিংক দিন।",event.threadID,event.messageID);
+	onStart: async function ({ api, event, args }) {
+		const { threadID, messageID, senderID } = event;
+		const hasReaction = typeof api.setMessageReaction === "function";
 
-     if(typeof api.setMessageReaction==="function")
-       api.setMessageReaction("⏳",event.messageID,()=>{},true);
+		const input = args.join(" ");
+		if (!input) {
+			return api.sendMessage("× Baby, please provide a video name or link!", threadID, messageID);
+		}
 
-     const apiUrl=await baseApiUrl();
+		let filePath;
+		try {
+			if (hasReaction) api.setMessageReaction("🐤", messageID, () => {}, true);
 
-     const yt=/^(?:https?:\/\/)?(?:m\.|www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))((\w|-){11})/;
-     let videoID;
+			const apiUrl = await baseApiUrl();
+			const checkurl = /^(?:https?:\/\/)?(?:m\.|www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))((\w|-){11})(?:\S+)?$/;
+			let videoID;
 
-     if(yt.test(args[0])){
-       videoID=args[0].match(yt)[1];
-     }else{
-       const search=await axios.get(`${apiUrl}/api/video/search?songName=${encodeURIComponent(args.join(" "))}`,{timeout:10000});
-       console.log("[VIDIO] SEARCH:",JSON.stringify(search.data));
-       if(!Array.isArray(search.data)||!search.data.length)
-         return api.sendMessage("❌ কোনো ভিডিও পাওয়া যায়নি।",event.threadID,event.messageID);
-       videoID=search.data[0].id;
-     }
+			if (checkurl.test(input)) {
+				videoID = input.match(checkurl)[1];
+			} else {
+				const searchRes = await axios.get(`${apiUrl}/api/ytb/search?q=${encodeURIComponent(input)}`);
+				const results = searchRes.data.results;
+				if (!results || results.length === 0) {
+					if (hasReaction) api.setMessageReaction("🥹", messageID, () => {}, true);
+					return api.sendMessage("× No results found.", threadID, messageID);
+				}
+				videoID = results[0].id;
+			}
 
-     const info=await axios.get(`${apiUrl}/api/video/download?link=${videoID}&format=mp4`,{timeout:15000});
-     console.log("[VIDIO] DOWNLOAD:",JSON.stringify(info.data));
+			const cacheDir = path.join(__dirname, "cache");
+			if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+			filePath = path.join(cacheDir, `video_${Date.now()}.mp4`);
 
-     if(!info.data||!info.data.downloadLink)
-       return api.sendMessage("❌ API থেকে download link পাওয়া যায়নি। Railway log দেখুন।",event.threadID,event.messageID);
+			const res = await axios.get(`${apiUrl}/api/ytb/get?id=${videoID}&type=video`);
+			const { title, downloadLink } = res.data.data;
 
-     const cache=path.join(__dirname,"cache");
-     if(!fs.existsSync(cache)) fs.mkdirSync(cache,{recursive:true});
-     const file=path.join(cache,`video_${Date.now()}.mp4`);
+			const response = await axios({ url: downloadLink, method: "GET", responseType: "stream" });
+			const writer = fs.createWriteStream(filePath);
+			response.data.pipe(writer);
 
-     const vid=await axios.get(info.data.downloadLink,{responseType:"arraybuffer",timeout:30000});
-     fs.writeFileSync(file,vid.data);
+			writer.on("finish", () => {
+				api.sendMessage({
+					body: `✅ 𝙃𝙚𝙧𝙚'𝙨 𝙮𝙤𝙪𝙧 𝙫𝙞𝙙𝙚𝙤 𝙗𝙖𝙗𝙮\n\n• 𝐓𝐢𝐭𝐥𝐞: ${title}`,
+					attachment: fs.createReadStream(filePath)
+				}, threadID, () => {
+					if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
+					if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+				}, messageID);
+			});
 
-     api.sendMessage({
-       body:`🎬 ${info.data.title||"YouTube Video"}`,
-       attachment:fs.createReadStream(file)
-     },event.threadID,()=>{
-       fs.unlink(file,()=>{});
-     },event.messageID);
+			writer.on("error", (err) => {
+				throw err;
+			});
 
-   }catch(err){
-     console.error("[VIDIO ERROR]",err);
-     api.sendMessage(`❌ ${err.message}`,event.threadID,event.messageID);
-   }
- }
+		} catch (err) {
+			console.error("error:", err);
+			if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
+			if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+			return api.sendMessage(`× API error: ${err.message || "Download failed!"}. Contact MahMUD for help.\n•WhatsApp: 01836298139`, threadID, messageID);
+		}
+	}
 };

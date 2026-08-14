@@ -1,8 +1,8 @@
 module.exports = {
   config: {
     name: "tag",
-    version: "1.0.0",
-    author: "Nayan (Fixed)",
+    version: "1.0.1",
+    author: "RiYad",
     role: 0,
     description: "Mention members of the group chat with a custom message.",
     category: "box chat",
@@ -21,12 +21,41 @@ try {
   threadInfo = {};
 }
 
-console.log("THREAD INFO:");
-console.log(JSON.stringify(threadInfo, null, 2));
-
-const members = (threadInfo.members || [])
+let members = (threadInfo.members || [])
   .filter(m => m.inGroup)
   .map(m => ({ id: m.userID, name: m.name }));
+
+// DB cache is empty until someone runs "refresh group" — so fall back
+// to a live fetch from the platform and re-cache it for next time.
+if (members.length === 0) {
+  try {
+    const info = await api.getThreadInfo(threadID);
+    const adminIDs = (info.adminIDs || []).map(x => String(x.id || x));
+    const liveMembers = (info.userInfo || []).map(u => ({
+      userID: String(u.id),
+      name: u.name || "",
+      inGroup: true,
+      isAdmin: adminIDs.includes(String(u.id))
+    }));
+
+    if (liveMembers.length > 0) {
+      members = liveMembers.map(m => ({ id: m.userID, name: m.name }));
+
+      try {
+        await threadsData.updateThread(threadID, {
+          id: String(threadID),
+          name: info.threadName || info.name || threadInfo.name || "Unknown Group",
+          adminIDs,
+          members: liveMembers
+        });
+      } catch (e) {
+        // caching failure shouldn't block the tag itself
+      }
+    }
+  } catch (e) {
+    // live fetch failed too, members stays empty and we report below
+  }
+}
 
       if (members.length === 0) {
         return api.sendMessage("❌ Could not load thread participants list.", threadID, messageID);

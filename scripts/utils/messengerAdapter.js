@@ -189,6 +189,7 @@ async react(emoji, messageID) {
               info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`;
             }
             if (info && info.messageID) {
+              this.markE2EEMessage(info.messageID, jid);
               reactionManager.register(info.messageID, { commandName: "__global__" });
               botMessageTracker.record(threadID, info.messageID);
             }
@@ -370,17 +371,20 @@ async removeUserFromGroup(userID, threadID) {
       return reject(new Error("Underlying FCA removeUserFromGroup function is not available."));
     }
 
-    this.api.removeUserFromGroup(userID, this._fcaThreadID(threadID), (err) => {
+    this.api.removeUserFromGroup(userID, this._fcaThreadID(threadID), (err, result) => {
       if (err) return reject(err);
-      resolve(true);
+      if (result && result.success === false) {
+        return reject(result.error || new Error("Messenger did not remove the member."));
+      }
+      resolve(result || true);
     });
   });
 }
-async unsendMessage(messageID) {
+async unsendMessage(messageID, threadID = null) {
   return new Promise((resolve, reject) => {
     const e2eeInfo = this.e2eeMessages ? this.e2eeMessages.get(String(messageID)) : null;
     if (e2eeInfo && this.api.e2ee && typeof this.api.e2ee.unsendMessage === "function") {
-      this.api.e2ee.unsendMessage(String(messageID), e2eeInfo.threadID)
+      this.api.e2ee.unsendMessage(String(messageID), threadID || e2eeInfo.threadID)
         .then((result) => resolve(result || true))
         .catch(reject);
       return;
@@ -451,9 +455,12 @@ async addUserToGroup(userID, threadID) {
       return reject(new Error("Underlying FCA addUserToGroup function is not available."));
     }
 
-    this.api.addUserToGroup(userID, this._fcaThreadID(threadID), (err) => {
+    this.api.addUserToGroup(userID, this._fcaThreadID(threadID), (err, result) => {
       if (err) return reject(err);
-      resolve(true);
+      if (result && result.success === false) {
+        return reject(result.error || new Error("Messenger did not add the member."));
+      }
+      resolve(result || true);
     });
   });
 }

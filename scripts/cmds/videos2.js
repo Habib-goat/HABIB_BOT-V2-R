@@ -14,7 +14,7 @@ module.exports = {
     author: "Riyad",
     countDown: 5,
     role: 2,
-    category: "media",
+    category: "segs",
     shortDescription: "Search & download videos",
     longDescription: "Search YouTube videos and download by replying with a number",
     guide: "{pn} <search query>"

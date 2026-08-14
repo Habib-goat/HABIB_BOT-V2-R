@@ -5,8 +5,8 @@
   "e2ee": {
     "enable": true
   },
-  "adminIDs": ["61574930690578", "61583837704690"],
-  "ownerIDs": ["61591664037355"],
+  "adminIDs": ["61593293094947", ""],
+  "ownerIDs": ["61593196287256"],
   "language": "en",
   "theme": "dark",
   "port": 3000,

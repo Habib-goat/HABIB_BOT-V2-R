@@ -12,6 +12,10 @@ module.exports = {
 
   onStart: async function ({ api, event, args, threadsData }) {
     const { threadID, messageID, messageReply, mentions } = event;
+    const userId = (value) => {
+      const raw = value == null ? "" : String(value);
+      return (raw.match(/^(\d+)/) || [])[1] || raw.replace(/@(?:g\.us|group\.facebook\.com)$/i, "");
+    };
     const botID = String(
       typeof api.getCurrentUserID === "function"
         ? api.getCurrentUserID()
@@ -41,14 +45,25 @@ module.exports = {
       } catch (_) {}
     }
 
-    const targetIDs = new Set(
-      Object.keys(mentions || {}).filter((id) => String(id) !== botID)
-    );
-
-    if (targetIDs.size === 0 && messageReply && messageReply.senderID) {
-      if (String(messageReply.senderID) !== botID) {
-        targetIDs.add(String(messageReply.senderID));
+    const targetIDs = new Set();
+    if (Array.isArray(mentions)) {
+      for (const mention of mentions) {
+        const id = userId(mention && (mention.id || mention.userID || mention.userId || mention.uid));
+        if (id && id !== botID) targetIDs.add(id);
       }
+    } else {
+      for (const id of Object.keys(mentions || {})) {
+        const normalized = userId(id);
+        if (normalized && normalized !== botID) targetIDs.add(normalized);
+      }
+    }
+
+    const replySender = messageReply && (
+      messageReply.senderID || messageReply.senderId || messageReply.userID || messageReply.from
+    );
+    if (targetIDs.size === 0 && replySender) {
+      const normalized = userId(replySender);
+      if (normalized && normalized !== botID) targetIDs.add(normalized);
     }
 
     if (targetIDs.size === 0 && args.length > 0) {
@@ -56,7 +71,7 @@ module.exports = {
       for (const member of threadInfo.members || []) {
         if (member.name && text.includes(String(member.name).toLowerCase())
             && String(member.userID) !== botID) {
-          targetIDs.add(String(member.userID));
+            targetIDs.add(userId(member.userID || member.id));
         }
       }
     }
