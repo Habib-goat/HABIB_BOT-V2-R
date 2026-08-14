@@ -8,7 +8,7 @@
 
 const axios = require("axios");
 
-const BASE_URL = "https://YOUR-PINTEREST-API.onrender.com"; // <-- put your deployed Render URL here
+const BASE_URL = "https://riyad-pinterest-api.onrender.com"; // <-- put your deployed Render URL here
 
 const TIMEOUT = 30000; // Render free tier cold start — same as riyadVideoApi.js
 
