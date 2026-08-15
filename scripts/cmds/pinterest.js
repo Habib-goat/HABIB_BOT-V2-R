@@ -34,6 +34,40 @@ async function downloadToFile(url, filePath, timeout = 60000) {
 	fs.writeFileSync(filePath, res.data);
 }
 
+// ─────────────────────────────────────────────
+//  FIX: sendMessage(attachment) via this library occasionally fails
+//  ("Mercury upload metadata[0] missing" over MQTT, then an HTTP fallback
+//  that itself can time out with a 408). This isn't caused by our code —
+//  the download itself succeeds every time — it's flakiness in the
+//  underlying messenger library's upload path. Retrying the SEND a couple
+//  of times (re-using the same already-downloaded file, no re-download)
+//  clears it in most cases instead of the message just silently never
+//  arriving.
+// ─────────────────────────────────────────────
+function sendMessageWithRetry(api, payload, threadID, messageID, attempts = 3, delayMs = 2500) {
+	return new Promise((resolve, reject) => {
+		let tries = 0;
+
+		const attempt = () => {
+			tries++;
+			api.sendMessage(
+				payload,
+				threadID,
+				(err, info) => {
+					if (!err) return resolve(info);
+
+					console.error(`[PIN SEND] attempt ${tries}/${attempts} failed:`, err.message || err);
+					if (tries >= attempts) return reject(err);
+					setTimeout(attempt, delayMs);
+				},
+				messageID
+			);
+		};
+
+		attempt();
+	});
+}
+
 async function sendMedia(api, media, threadID, messageID, cacheDir) {
 	if (!media || (!media.image && !media.videoUrl)) {
 		react(api, "❌", messageID);
@@ -48,15 +82,17 @@ async function sendMedia(api, media, threadID, messageID, cacheDir) {
 	react(api, "⏳", messageID);
 	try {
 		await downloadToFile(url, filePath);
-		react(api, "✅", messageID);
-		return api.sendMessage(
+
+		const info = await sendMessageWithRetry(
+			api,
 			{ body: `✅ | ${media.title || "Pinterest"}${isVideo ? " (video)" : " (HD image)"}`, attachment: fs.createReadStream(filePath) },
 			threadID,
-			() => {
-				if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-			},
 			messageID
 		);
+
+		if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+		react(api, "✅", messageID);
+		return info;
 	} catch (err) {
 		if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 		react(api, "❌", messageID);
