@@ -6,16 +6,17 @@ const replyManager = require("../replies/replyManager");
 // 👇 আপনার Instagram scraping API-এর base URL এখানে বসান
 const API_BASE = "https://riyad-instagram-api.onrender.com";
 
-// ক্যাটাগরি লিস্ট — প্রতিটার আসল hashtag গুলো এখন সার্ভারের hashtags.js এ
-// রাখা আছে (একটা category তে অনেকগুলো hashtag, সার্ভার নিজে থেকেই সেগুলো
-// একে একে try করে দেখে কোনটায় ভিডিও পাওয়া যায়)। এখানে শুধু key/label রাখা
-// হয়েছে, bot এর মেনু দেখানোর জন্য।
+// ক্যাটাগরি লিস্ট — প্রতিটার আসল hashtag/profile সার্ভারের hashtags.js /
+// profiles.js এ রাখা আছে (server.js প্রথমে profiles.js চেক করে, category-তে
+// profile configured থাকলে সেটাই ব্যবহার করে — না থাকলে hashtags.js এ fall
+// back করে)। এখানে শুধু key/label রাখা হয়েছে, bot এর মেনু দেখানোর জন্য।
 const CATEGORIES = [
 	{ key: "sad", label: "😢 Sad" },
 	{ key: "funny", label: "😂 Funny" },
 	{ key: "caption", label: "✍️ Caption" },
 	{ key: "love", label: "❤️ Love" },
 	{ key: "lyrics", label: "🎵 Lyrics" },
+	{ key: "90s", label: "🎶 90s Song" },
 	{ key: "motivational", label: "🔥 Motivational" },
 	{ key: "attitude", label: "😎 Attitude" }
 ];
@@ -50,17 +51,17 @@ function findCategory(input) {
 async function fetchRandomVideo(categoryKey) {
 	let videos = [];
 	try {
-		// সার্ভার নিজে থেকেই এই category-র জন্য configured সব hashtag একে
-		// একে (random order এ) try করে, প্রথম যেটায় ভিডিও পাওয়া যায় সেটার
-		// ফলাফল ফেরত দেয়।
+		// সার্ভার নিজে থেকেই এই category-র জন্য configured সব profile/hashtag
+		// একে একে (random order এ) try করে — প্রতিবার একই profile ব্যবহার হয়
+		// না, প্রথম যেটায় ভিডিও পাওয়া যায় সেটার ফলাফল ফেরত দেয়।
 		const res = await axios.get(`${API_BASE}/api/instagram/category`, {
 			params: { category: categoryKey, limit: 20 },
-			timeout: 45000 // একাধিক hashtag try করতে পারে বলে সময় একটু বেশি দেওয়া
+			timeout: 45000 // একাধিক profile/hashtag try করতে পারে বলে সময় একটু বেশি দেওয়া
 		});
 		videos = Array.isArray(res.data?.posts) ? res.data.posts : [];
 	} catch (err) {
-		// সার্ভার 404 মানে এই category-র কোনো configured hashtag-ই কাজ
-		// করেনি এই মুহূর্তে — এটা normal "no result" অবস্থা, raw error না।
+		// সার্ভার 404 মানে এই category-র কোনো configured profile/hashtag-ই
+		// কাজ করেনি এই মুহূর্তে — এটা normal "no result" অবস্থা, raw error না।
 		if (err.response?.status === 404) return null;
 		throw err;
 	}
@@ -133,12 +134,12 @@ module.exports = {
 	config: {
 		name: "instagram",
 		aliases: ["insta"],
-		version: "2.0.0",
+		version: "2.1.0",
 		author: "Riyad",
 		countDown: 8,
 		role: 0,
 		category: "media",
-		shortDescription: "Instagram category video (sad/funny/caption/lyrics etc)",
+		shortDescription: "Instagram category video (sad/funny/caption/lyrics/90s/etc)",
 		longDescription: "Random Instagram video by category. Use {pn} to see the menu, or {pn} <category> directly (e.g. insta sad).",
 		guide: "{pn} — menu দেখাবে, রিপ্লাই এ নাম্বার দিলে সেই ক্যাটাগরির ভিডিও আসবে।\n{pn} <category> — সরাসরি সেই ক্যাটাগরির ভিডিও আনবে (যেমন: insta sad)"
 	},
