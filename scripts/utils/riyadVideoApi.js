@@ -1,89 +1,88 @@
-/**
- * Riyad Bot Framework
- *
- * Thin wrapper around the user's own riyad-video-api (hosted on Render),
- * matched exactly to that server's endpoint shapes:
- *
- *   GET /api/video/search?songName=<query>
- *     -> [ { id, title, duration, thumbnail, url }, ... ]
- *
- *   GET /api/video/lyrics?songName=<query>
- *     -> same shape as /search, but prioritizes lyric-video results
- *
- *   GET /api/video/download?link=<videoID or URL>&format=mp4|mp3
- *     -> { downloadLink, title }
- *
- * Used by vidio.js, sing.js, and lv.js via:
- *   const { search, lyricsSearch, resolveDownload } = require("../utils/riyadVideoApi");
- */
 "use strict";
 
 const axios = require("axios");
 
-const BASE_URL = "https://riyad-video-api.onrender.com";
+const BASE_URL = (process.env.RIYAD_VIDEO_API_URL || "https://riyad-video-api.onrender.com").replace(/\/+$/, "");
+const SEARCH_TTL = 5 * 60 * 1000;
+const DOWNLOAD_TTL = 90 * 1000;
+const cache = new Map();
+const inflight = new Map();
 
-// Render free-tier services spin down after inactivity — the first request
-// after a period of idle can take 30-60s to "wake" the server. Give search
-// calls a generous timeout so that cold start doesn't look like a failure.
-const SEARCH_TIMEOUT = 60000;
-const DOWNLOAD_TIMEOUT = 60000;
+function cached(key, ttl) {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.createdAt > ttl) {
+    cache.delete(key);
+    return null;
+  }
+  return item.value;
+}
 
-/**
- * Search for videos by name.
- * @param {string} query
- * @returns {Promise<Array<{id: string, title: string, duration: string, thumbnail: string, url: string}>>}
- */
+function put(key, value) {
+  cache.set(key, { value, createdAt: Date.now() });
+  if (cache.size > 100) cache.delete(cache.keys().next().value);
+  return value;
+}
+
+function compactThumbnail(item) {
+  if (item.id) return `https://i.ytimg.com/vi/${item.id}/mqdefault.jpg`;
+  return item.thumbnail || item.thumb || item.image || null;
+}
+
+async function requestOnce(key, request, ttl) {
+  const hit = cached(key, ttl);
+  if (hit) return hit;
+  if (!inflight.has(key)) {
+    inflight.set(key, Promise.resolve().then(request).then((value) => put(key, value))
+      .finally(() => inflight.delete(key)));
+  }
+  return inflight.get(key);
+}
+
 async function search(query) {
-	try {
-		const res = await axios.get(`${BASE_URL}/api/video/search`, {
-			params: { songName: query },
-			timeout: SEARCH_TIMEOUT
-		});
-		return Array.isArray(res.data) ? res.data : [];
-	} catch (err) {
-		// 404 with an empty array is how the API signals "no results" — treat it the same as an empty list
-		if (err.response?.status === 404) return [];
-		throw new Error(err.response?.data?.error || err.message);
-	}
+  const data = await requestOnce(
+    `search:${String(query).trim().toLowerCase()}`,
+    async () => {
+      const response = await axios.get(`${BASE_URL}/api/video/search`, {
+        params: { songName: query },
+        timeout: 90000
+      });
+      return Array.isArray(response.data) ? response.data : [];
+    },
+    SEARCH_TTL
+  );
+  return data.map((item) => ({ ...item, thumbnail: compactThumbnail(item) }));
 }
 
-/**
- * Search for lyrics-video versions of a song.
- * @param {string} query
- * @returns {Promise<Array<{id: string, title: string, duration: string, thumbnail: string, url: string}>>}
- */
 async function lyricsSearch(query) {
-	try {
-		const res = await axios.get(`${BASE_URL}/api/video/lyrics`, {
-			params: { songName: query },
-			timeout: SEARCH_TIMEOUT
-		});
-		return Array.isArray(res.data) ? res.data : [];
-	} catch (err) {
-		if (err.response?.status === 404) return [];
-		throw new Error(err.response?.data?.error || err.message);
-	}
+  const data = await requestOnce(
+    `lyrics:${String(query).trim().toLowerCase()}`,
+    async () => {
+      const response = await axios.get(`${BASE_URL}/api/video/lyrics`, {
+        params: { songName: query },
+        timeout: 90000
+      });
+      return Array.isArray(response.data) ? response.data : [];
+    },
+    SEARCH_TTL
+  );
+  return data.map((item) => ({ ...item, thumbnail: compactThumbnail(item) }));
 }
 
-/**
- * Resolve a direct, temporary download link for a video ID (or full URL).
- * @param {string} idOrUrl - a YouTube video ID (e.g. "dQw4w9WgXcQ") or full URL
- * @param {"mp4"|"mp3"} format
- * @returns {Promise<{downloadLink: string, title: string}>}
- */
-async function resolveDownload(idOrUrl, format = "mp4") {
-	try {
-		const res = await axios.get(`${BASE_URL}/api/video/download`, {
-			params: { link: idOrUrl, format },
-			timeout: DOWNLOAD_TIMEOUT
-		});
-		if (!res.data?.downloadLink) {
-			throw new Error("No downloadLink in API response");
-		}
-		return res.data;
-	} catch (err) {
-		throw new Error(err.response?.data?.detail || err.response?.data?.error || err.message);
-	}
+async function resolveDownload(link, format = "mp4") {
+  const key = `download:${format}:${link}`;
+  return requestOnce(
+    key,
+    async () => {
+      const response = await axios.get(`${BASE_URL}/api/video/download`, {
+        params: { link, format },
+        timeout: 90000
+      });
+      if (!response.data?.downloadLink) throw new Error("Video API returned no download link");
+      return response.data;
+    },
+    DOWNLOAD_TTL
+  );
 }
 
-module.exports = { search, lyricsSearch, resolveDownload };
+module.exports = { search, lyricsSearch, resolveDownload, BASE_URL };
