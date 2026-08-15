@@ -283,7 +283,7 @@ resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
         return resolve({ success: false, error: 'setMessageReaction not supported' });
       }
 
-      const reactionFunc = this.api.setMessageReaction || this.api.setReaction;
+      const reactionFunc = this.api.setMessageReactionMqtt || this.api.setMessageReaction || this.api.setReaction;
 
       reactionFunc(emoji, messageID, (err) => {
         if (err) {
