@@ -1,7 +1,7 @@
 /**
- * instavideo.js
+ * reelgrab.js
  * -------------
- * Usage: instavideo <Instagram profile URL>
+ * Usage: reelgrab <Instagram profile URL>
  *
  * Fetches the video/reel posts of a public Instagram profile (via the
  * companion Render API) and lists them 12 at a time. Reply "next" to
@@ -70,8 +70,8 @@ function formatPage(videos, offset, total, username) {
 
 module.exports = {
   config: {
-    name: "instavideo",
-    aliases: ["ivideo"],
+    name: "reelgrab",
+    aliases: ["igvideo", "iginfo"],
     version: "1.0",
     author: "Riyad",
     countDown: 5,
