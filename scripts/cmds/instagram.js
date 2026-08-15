@@ -6,28 +6,30 @@ const replyManager = require("../replies/replyManager");
 // 👇 আপনার Instagram scraping API-এর base URL এখানে বসান
 const API_BASE = "https://riyad-instagram-api.onrender.com";
 
-// ক্যাটাগরি -> Instagram hashtag ম্যাপিং। Instagram-এ সত্যিকারের "category"
-// সার্চ নেই, তাই hashtag-ই সবচেয়ে কাছাকাছি বাস্তবসম্মত বিকল্প। "reels"-যুক্ত
-// ট্যাগগুলোতে ছবির বদলে আসল ভিডিও/reel content বেশি পাওয়া যায়।
+// ক্যাটাগরি লিস্ট — প্রতিটার আসল hashtag গুলো এখন সার্ভারের hashtags.js এ
+// রাখা আছে (একটা category তে অনেকগুলো hashtag, সার্ভার নিজে থেকেই সেগুলো
+// একে একে try করে দেখে কোনটায় ভিডিও পাওয়া যায়)। এখানে শুধু key/label রাখা
+// হয়েছে, bot এর মেনু দেখানোর জন্য।
 const CATEGORIES = [
-	{ key: "sad", label: "😢 Sad", tag: "sadreels" },
-	{ key: "funny", label: "😂 Funny", tag: "funnyreels" },
-	{ key: "caption", label: "✍️ Caption", tag: "captionreels" },
-	{ key: "love", label: "❤️ Love", tag: "lovereels" },
-	{ key: "motivational", label: "🔥 Motivational", tag: "motivationreels" },
-	{ key: "attitude", label: "😎 Attitude", tag: "attitudereels" }
+	{ key: "sad", label: "😢 Sad" },
+	{ key: "funny", label: "😂 Funny" },
+	{ key: "caption", label: "✍️ Caption" },
+	{ key: "love", label: "❤️ Love" },
+	{ key: "lyrics", label: "🎵 Lyrics" },
+	{ key: "motivational", label: "🔥 Motivational" },
+	{ key: "attitude", label: "😎 Attitude" }
 ];
 
 // একই ভিডিও পরপর কয়েকবার এড়াতে, প্রতিটা ক্যাটাগরির জন্য সাম্প্রতিক পাঠানো
 // ভিডিও ID মনে রাখা হয় (in-memory, bot restart হলে রিসেট হয়ে যাবে —
 // এটাই যথেষ্ট, permanent storage দরকার নেই)।
 const RECENT_HISTORY_SIZE = 8;
-const recentlySent = new Map(); // tag -> Set<videoId>
+const recentlySent = new Map(); // category -> Set<videoId>
 
-function rememberSent(tag, id) {
+function rememberSent(category, id) {
 	if (!id) return;
-	if (!recentlySent.has(tag)) recentlySent.set(tag, new Set());
-	const set = recentlySent.get(tag);
+	if (!recentlySent.has(category)) recentlySent.set(category, new Set());
+	const set = recentlySent.get(category);
 	set.add(id);
 	if (set.size > RECENT_HISTORY_SIZE) {
 		const oldest = set.values().next().value;
@@ -35,8 +37,8 @@ function rememberSent(tag, id) {
 	}
 }
 
-function wasRecentlySent(tag, id) {
-	return recentlySent.get(tag)?.has(id) || false;
+function wasRecentlySent(category, id) {
+	return recentlySent.get(category)?.has(id) || false;
 }
 
 function findCategory(input) {
@@ -45,38 +47,34 @@ function findCategory(input) {
 	return CATEGORIES.find((c) => c.key === q || c.label.toLowerCase().includes(q)) || null;
 }
 
-async function fetchRandomVideo(tag) {
-	let posts = [];
+async function fetchRandomVideo(categoryKey) {
+	let videos = [];
 	try {
-		// প্রতিবার random offset দিয়ে hashtag feed-এর ভিন্ন অংশ থেকে post আনা
-		// হয় — নাহলে প্রতিবার একই টপ ২০টা post আসে, আর তার মধ্যে ভিডিও কম
-		// থাকলে random pick বারবার একই ১-২টার মধ্যে ঘুরপাক খায়।
-		const offset = Math.floor(Math.random() * 60) + 1;
-		const res = await axios.get(`${API_BASE}/api/instagram/hashtag`, {
-			params: { tag, limit: 20, offset },
-			timeout: 30000
+		// সার্ভার নিজে থেকেই এই category-র জন্য configured সব hashtag একে
+		// একে (random order এ) try করে, প্রথম যেটায় ভিডিও পাওয়া যায় সেটার
+		// ফলাফল ফেরত দেয়।
+		const res = await axios.get(`${API_BASE}/api/instagram/category`, {
+			params: { category: categoryKey, limit: 20 },
+			timeout: 45000 // একাধিক hashtag try করতে পারে বলে সময় একটু বেশি দেওয়া
 		});
-		posts = Array.isArray(res.data) ? res.data : [];
+		videos = Array.isArray(res.data?.posts) ? res.data.posts : [];
 	} catch (err) {
-		// 404 from our own API just means "no posts found for this hashtag" —
-		// that's a normal, expected outcome (not every tag has content), so
-		// treat it the same as an empty result instead of bubbling up as a
-		// raw HTTP error.
+		// সার্ভার 404 মানে এই category-র কোনো configured hashtag-ই কাজ
+		// করেনি এই মুহূর্তে — এটা normal "no result" অবস্থা, raw error না।
 		if (err.response?.status === 404) return null;
 		throw err;
 	}
 
-	let videos = posts.filter((p) => p.isVideo && p.videoUrl);
 	if (videos.length === 0) return null;
 
 	// সাম্প্রতিক পাঠানো ভিডিওগুলো বাদ দিয়ে বাছাই করার চেষ্টা করো — পুরো pool
 	// টাই "recently sent" হয়ে থাকলে (ছোট pool), বাধ্য হয়ে সবগুলো থেকেই বাছাই
 	// করা হবে, তবু repeat হওয়ার চেয়ে ভালো।
-	const fresh = videos.filter((v) => !wasRecentlySent(tag, v.id));
+	const fresh = videos.filter((v) => !wasRecentlySent(categoryKey, v.id));
 	const pool = fresh.length > 0 ? fresh : videos;
 
 	const chosen = pool[Math.floor(Math.random() * pool.length)];
-	rememberSent(tag, chosen.id);
+	rememberSent(categoryKey, chosen.id);
 	return chosen;
 }
 
@@ -135,12 +133,12 @@ module.exports = {
 	config: {
 		name: "instagram",
 		aliases: ["insta"],
-		version: "1.0.0",
+		version: "2.0.0",
 		author: "Riyad",
 		countDown: 8,
 		role: 0,
 		category: "media",
-		shortDescription: "Instagram category video (sad/funny/caption etc)",
+		shortDescription: "Instagram category video (sad/funny/caption/lyrics etc)",
 		longDescription: "Random Instagram video by category. Use {pn} to see the menu, or {pn} <category> directly (e.g. insta sad).",
 		guide: "{pn} — menu দেখাবে, রিপ্লাই এ নাম্বার দিলে সেই ক্যাটাগরির ভিডিও আসবে।\n{pn} <category> — সরাসরি সেই ক্যাটাগরির ভিডিও আনবে (যেমন: insta sad)"
 	},
@@ -149,7 +147,7 @@ module.exports = {
 		const { threadID, messageID, senderID } = event;
 		const query = args.join(" ").trim();
 
-		// ── সরাসরি: "insta sad" / "insta funny" ─────────────────────────
+		// ── সরাসরি: "insta sad" / "insta funny" / "insta lyrics" ────────
 		if (query) {
 			const category = findCategory(query);
 			if (!category) {
@@ -162,7 +160,7 @@ module.exports = {
 			}
 
 			try {
-				const video = await fetchRandomVideo(category.tag);
+				const video = await fetchRandomVideo(category.key);
 				if (!video) {
 					return api.sendMessage(`❌ | "${category.label}" ক্যাটাগরিতে এখন কোনো ভিডিও পাওয়া যায়নি। আবার চেষ্টা করুন।`, threadID, messageID);
 				}
@@ -202,7 +200,7 @@ module.exports = {
 		const category = CATEGORIES[choice - 1];
 
 		try {
-			const video = await fetchRandomVideo(category.tag);
+			const video = await fetchRandomVideo(category.key);
 			if (!video) {
 				return api.sendMessage(`❌ | "${category.label}" ক্যাটাগরিতে এখন কোনো ভিডিও পাওয়া যায়নি।`, threadID, messageID);
 			}
