@@ -7,16 +7,37 @@ const replyManager = require("../replies/replyManager");
 const API_BASE = "https://riyad-instagram-api.onrender.com";
 
 // ক্যাটাগরি -> Instagram hashtag ম্যাপিং। Instagram-এ সত্যিকারের "category"
-// সার্চ নেই, তাই hashtag-ই সবচেয়ে কাছাকাছি বাস্তবসম্মত বিকল্প। চাইলে এখানে
-// আরও ক্যাটাগরি/hashtag যোগ করা যাবে।
+// সার্চ নেই, তাই hashtag-ই সবচেয়ে কাছাকাছি বাস্তবসম্মত বিকল্প। "reels"-যুক্ত
+// ট্যাগগুলোতে ছবির বদলে আসল ভিডিও/reel content বেশি পাওয়া যায়।
 const CATEGORIES = [
-	{ key: "sad", label: "😢 Sad", tag: "sadstatusvideo" },
-	{ key: "funny", label: "😂 Funny", tag: "funnyvideos" },
-	{ key: "caption", label: "✍️ Caption", tag: "captionvideos" },
-	{ key: "love", label: "❤️ Love", tag: "lovestatusvideo" },
-	{ key: "motivational", label: "🔥 Motivational", tag: "motivationvideo" },
-	{ key: "attitude", label: "😎 Attitude", tag: "attitudestatusvideo" }
+	{ key: "sad", label: "😢 Sad", tag: "sadreels" },
+	{ key: "funny", label: "😂 Funny", tag: "funnyreels" },
+	{ key: "caption", label: "✍️ Caption", tag: "captionreels" },
+	{ key: "love", label: "❤️ Love", tag: "lovereels" },
+	{ key: "motivational", label: "🔥 Motivational", tag: "motivationreels" },
+	{ key: "attitude", label: "😎 Attitude", tag: "attitudereels" }
 ];
+
+// একই ভিডিও পরপর কয়েকবার এড়াতে, প্রতিটা ক্যাটাগরির জন্য সাম্প্রতিক পাঠানো
+// ভিডিও ID মনে রাখা হয় (in-memory, bot restart হলে রিসেট হয়ে যাবে —
+// এটাই যথেষ্ট, permanent storage দরকার নেই)।
+const RECENT_HISTORY_SIZE = 8;
+const recentlySent = new Map(); // tag -> Set<videoId>
+
+function rememberSent(tag, id) {
+	if (!id) return;
+	if (!recentlySent.has(tag)) recentlySent.set(tag, new Set());
+	const set = recentlySent.get(tag);
+	set.add(id);
+	if (set.size > RECENT_HISTORY_SIZE) {
+		const oldest = set.values().next().value;
+		set.delete(oldest);
+	}
+}
+
+function wasRecentlySent(tag, id) {
+	return recentlySent.get(tag)?.has(id) || false;
+}
 
 function findCategory(input) {
 	if (!input) return null;
@@ -27,25 +48,36 @@ function findCategory(input) {
 async function fetchRandomVideo(tag) {
 	let posts = [];
 	try {
+		// প্রতিবার random offset দিয়ে hashtag feed-এর ভিন্ন অংশ থেকে post আনা
+		// হয় — নাহলে প্রতিবার একই টপ ২০টা post আসে, আর তার মধ্যে ভিডিও কম
+		// থাকলে random pick বারবার একই ১-২টার মধ্যে ঘুরপাক খায়।
+		const offset = Math.floor(Math.random() * 60) + 1;
 		const res = await axios.get(`${API_BASE}/api/instagram/hashtag`, {
-			params: { tag, limit: 20 },
+			params: { tag, limit: 20, offset },
 			timeout: 30000
 		});
 		posts = Array.isArray(res.data) ? res.data : [];
 	} catch (err) {
 		// 404 from our own API just means "no posts found for this hashtag" —
-		// that's a normal, expected outcome (not every tag has content, and
-		// #<tag>video hashtags often turn out to be mostly photos in
-		// practice), so treat it the same as an empty result instead of
-		// bubbling up as a raw HTTP error.
+		// that's a normal, expected outcome (not every tag has content), so
+		// treat it the same as an empty result instead of bubbling up as a
+		// raw HTTP error.
 		if (err.response?.status === 404) return null;
 		throw err;
 	}
 
-	const videos = posts.filter((p) => p.isVideo && p.videoUrl);
-
+	let videos = posts.filter((p) => p.isVideo && p.videoUrl);
 	if (videos.length === 0) return null;
-	return videos[Math.floor(Math.random() * videos.length)];
+
+	// সাম্প্রতিক পাঠানো ভিডিওগুলো বাদ দিয়ে বাছাই করার চেষ্টা করো — পুরো pool
+	// টাই "recently sent" হয়ে থাকলে (ছোট pool), বাধ্য হয়ে সবগুলো থেকেই বাছাই
+	// করা হবে, তবু repeat হওয়ার চেয়ে ভালো।
+	const fresh = videos.filter((v) => !wasRecentlySent(tag, v.id));
+	const pool = fresh.length > 0 ? fresh : videos;
+
+	const chosen = pool[Math.floor(Math.random() * pool.length)];
+	rememberSent(tag, chosen.id);
+	return chosen;
 }
 
 async function downloadAndSend(api, threadID, messageID, video, categoryLabel) {
