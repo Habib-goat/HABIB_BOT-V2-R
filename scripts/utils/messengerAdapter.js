@@ -818,6 +818,8 @@ class MessengerAdapterFactory {
       case 'fca-eryxenx':
       case 'facebook-chat-api':
       case 'fca':
+      case '@rxabdullah/xdi-fca':
+      case 'rx-fca':
         return new FcaMessengerAdapter(underlyingApi, wsServer, restLogs);
       case 'graph':
       case 'facebook-graph':
