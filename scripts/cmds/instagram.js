@@ -4,7 +4,7 @@ const path = require("path");
 const replyManager = require("../replies/replyManager");
 
 // 👇 আপনার Instagram scraping API-এর base URL এখানে বসান
-const API_BASE = "https://riyad-instagram-api.onrender.com/";
+const API_BASE = "https://riyad-instagram-api.onrender.com";
 
 // ক্যাটাগরি -> Instagram hashtag ম্যাপিং। Instagram-এ সত্যিকারের "category"
 // সার্চ নেই, তাই hashtag-ই সবচেয়ে কাছাকাছি বাস্তবসম্মত বিকল্প। চাইলে এখানে
@@ -25,12 +25,23 @@ function findCategory(input) {
 }
 
 async function fetchRandomVideo(tag) {
-	const res = await axios.get(`${API_BASE}/api/instagram/hashtag`, {
-		params: { tag, limit: 20 },
-		timeout: 30000
-	});
+	let posts = [];
+	try {
+		const res = await axios.get(`${API_BASE}/api/instagram/hashtag`, {
+			params: { tag, limit: 20 },
+			timeout: 30000
+		});
+		posts = Array.isArray(res.data) ? res.data : [];
+	} catch (err) {
+		// 404 from our own API just means "no posts found for this hashtag" —
+		// that's a normal, expected outcome (not every tag has content, and
+		// #<tag>video hashtags often turn out to be mostly photos in
+		// practice), so treat it the same as an empty result instead of
+		// bubbling up as a raw HTTP error.
+		if (err.response?.status === 404) return null;
+		throw err;
+	}
 
-	const posts = Array.isArray(res.data) ? res.data : [];
 	const videos = posts.filter((p) => p.isVideo && p.videoUrl);
 
 	if (videos.length === 0) return null;
