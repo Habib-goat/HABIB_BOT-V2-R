@@ -56,7 +56,7 @@ async function fetchRandomVideo(categoryKey) {
 		// না, প্রথম যেটায় ভিডিও পাওয়া যায় সেটার ফলাফল ফেরত দেয়।
 		const res = await axios.get(`${API_BASE}/api/instagram/category`, {
 			params: { category: categoryKey, limit: 20 },
-			timeout: 45000 // একাধিক profile/hashtag try করতে পারে বলে সময় একটু বেশি দেওয়া
+			timeout: 90000 // একাধিক profile/hashtag try করতে পারে বলে সময় একটু বেশি দেওয়া
 		});
 		videos = Array.isArray(res.data?.posts) ? res.data.posts : [];
 	} catch (err) {
