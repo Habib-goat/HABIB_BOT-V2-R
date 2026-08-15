@@ -65,7 +65,7 @@ async markAsSeen() {
 async removeUserFromGroup(userID, threadID) {
   throw new Error("Method 'removeUserFromGroup' must be implemented by the adapter subclass.");
 }
-  async unsendMessage(messageID, threadID = null) {
+  async unsendMessage(messageID) {
   throw new Error("Method 'unsendMessage' must be implemented by the adapter subclass.");
 }
   async addUserToGroup(userID, threadID) {
@@ -102,7 +102,17 @@ class FcaMessengerAdapter extends BaseMessengerAdapter {
   constructor(underlyingApi, wsServer, restLogs) {
     super(underlyingApi, wsServer, restLogs);
     this.e2eeThreads = new Set();
-    this.e2eeMessages = new Map(); // messageID -> {threadID, senderJid}, needed for setReaction()
+    // messageID -> { threadID, senderJid } for messages received over E2EE.
+    // Needed because setReaction(emoji, messageID) only gets a messageID —
+    // without this map we can't tell whether that message lives in an E2EE
+    // thread, so we can't know to call api.e2ee.sendReaction(...) instead
+    // of the legacy setMessageReaction(...) (which silently no-ops on
+    // E2EE message IDs).
+    this.e2eeMessages = new Map();
+    // messageID -> threadID for ALL messages (E2EE or not). Needed because
+    // the MQTT reaction path (setMessageReactionMqtt) requires threadID as
+    // an argument, but setReaction(emoji, messageID) is never given one.
+    this.messageThreads = new Map();
   }
 
   markE2EEThread(threadID) {
@@ -114,19 +124,23 @@ class FcaMessengerAdapter extends BaseMessengerAdapter {
 
   markE2EEMessage(messageID, threadID, senderJid) {
     if (messageID != null && threadID != null) {
-      this.e2eeMessages.set(String(messageID), { threadID: String(threadID), senderJid: senderJid || null });
+      this.e2eeMessages.set(String(messageID), {
+        threadID: String(threadID),
+        senderJid: senderJid || null
+      });
       if (this.e2eeMessages.size > 500) {
         this.e2eeMessages.delete(this.e2eeMessages.keys().next().value);
       }
     }
   }
 
-  // MQTT group-management methods expect the numeric thread key. Native
-  // E2EE events use a Messenger JID such as "123@g.us".
-  _fcaThreadID(threadID) {
-    return String(threadID ?? "")
-      .replace(/@g\.us$/i, "")
-      .replace(/@group\.facebook\.com$/i, "");
+  trackMessage(messageID, threadID) {
+    if (messageID != null && threadID != null) {
+      this.messageThreads.set(String(messageID), String(threadID));
+      if (this.messageThreads.size > 1000) {
+        this.messageThreads.delete(this.messageThreads.keys().next().value);
+      }
+    }
   }
 
 async reply(message, event) {
@@ -162,36 +176,69 @@ async react(emoji, messageID) {
       // Handle cases where the underlying API is not initialized or is missing methods
       console.log('[E2EE-SEND-DEBUG] sendMessage called for threadID:', String(threadID), 'isE2EEThread:', this.e2eeThreads ? this.e2eeThreads.has(String(threadID)) : 'no-set', 'hasApiE2ee:', !!this.api.e2ee, 'hasSendFn:', !!(this.api.e2ee && typeof this.api.e2ee.sendMessage === 'function'));
       if (this.e2eeThreads && this.e2eeThreads.has(String(threadID)) && this.api.e2ee && typeof this.api.e2ee.sendMessage === 'function') {
+        const jid = String(threadID).includes('@') ? threadID : String(threadID) + '@g.us';
+        const streamToBuffer = (stream) => new Promise((res, rej) => {
+          const chunks = [];
+          stream.on('data', (c) => chunks.push(c));
+          stream.on('end', () => res(Buffer.concat(chunks)));
+          stream.on('error', rej);
+        });
+        const guessKind = (filePath) => {
+          const ext = (filePath || '').split('.').pop().toLowerCase();
+          if (['jpg','jpeg','png','gif','webp'].includes(ext)) return { kind: 'image', mime: 'image/' + (ext === 'jpg' ? 'jpeg' : ext) };
+          if (['mp4','mov','mkv','webm'].includes(ext)) return { kind: 'video', mime: 'video/' + ext };
+          if (['mp3','ogg','wav','m4a','opus'].includes(ext)) return { kind: 'audio', mime: 'audio/' + (ext === 'mp3' ? 'mpeg' : ext) };
+          return { kind: 'document', mime: 'application/octet-stream' };
+        };
         (async () => {
           try {
-            // Keep the original chat JID.  Native E2EE accepts group JIDs
-            // (e.g. ...@g.us) and numeric/other JIDs for direct chats; adding
-            // @g.us to every thread breaks encrypted direct conversations.
-            const jid = String(threadID);
-            const messageAttachments = message && typeof message === "object"
-              ? [
-                  ...(Array.isArray(message.attachment)
-                    ? message.attachment
-                    : message.attachment
-                      ? [message.attachment]
-                      : []),
-                  ...(Array.isArray(message.attachments) ? message.attachments : [])
-                ]
-              : [];
-            const e2eeMessage = typeof message === "object" && message !== null
-              ? {
-                  body: message.body || "",
-                  attachments: messageAttachments
-                }
-              : String(message ?? "");
-            let info = await this.api.e2ee.sendMessage(jid, e2eeMessage, replyMessageID);
-            if (info && !info.messageID) {
-              info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`;
-            }
-            if (info && info.messageID) {
-              this.markE2EEMessage(info.messageID, jid);
-              reactionManager.register(info.messageID, { commandName: "__global__" });
-              botMessageTracker.record(threadID, info.messageID);
+            const att = message && typeof message === 'object' ? (Array.isArray(message.attachment) ? message.attachment[0] : message.attachment) : null;
+            // Caption/body text that should travel alongside the attachment.
+            // Previously this was only read in the "no attachment" branch
+            // below, so any {body, attachment} message (help.js, pp.js,
+            // autodl.js, etc.) silently lost its caption in E2EE threads —
+            // only the attachment ever arrived.
+            const captionText = message && typeof message === 'object' ? (message.body || '') : '';
+            let info;
+            if (att && this.api.e2ee && typeof this.api.e2ee.sendAttachment === 'function') {
+              const filePath = att.path || '';
+              const filename = filePath.split('/').pop() || 'file';
+              const { kind, mime } = guessKind(filePath);
+              const buffer = Buffer.isBuffer(att) ? att : await streamToBuffer(att);
+              let duration;
+              if (kind === 'audio' || kind === 'video') {
+                try {
+                  const os = require('os');
+                  const pathMod = require('path');
+                  const ffmpeg = require('fluent-ffmpeg');
+                  const tmpFile = pathMod.join(os.tmpdir(), 'dur_' + Date.now() + '_' + filename);
+                  fs.writeFileSync(tmpFile, buffer);
+                  duration = await new Promise((res) => {
+                    ffmpeg.ffprobe(tmpFile, (err, data) => {
+                      fs.unlink(tmpFile, () => {});
+                      if (err || !data || !data.format) return res(undefined);
+                      res(Math.round(data.format.duration || 0));
+                    });
+                  });
+                } catch (_) { duration = undefined; }
+              }
+              info = await this.api.e2ee.sendAttachment(jid, buffer, filename, mime, kind, duration);
+              if (info && !info.messageID) { info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`; }
+              if (info && info.messageID) { this.trackMessage(info.messageID, threadID); }
+              // sendAttachment has no caption parameter, so send the text as
+              // its own follow-up message instead of dropping it.
+              if (captionText) {
+                try { await this.api.e2ee.sendMessage(jid, captionText, replyMessageID); }
+                catch (capErr) { logger.error('[FcaAdapter] Failed to send E2EE caption text:', capErr); }
+              }
+            } else {
+              // Either there's no attachment, or this fca build has no
+              // api.e2ee.sendAttachment at all — fall back to text-only so
+              // the person at least gets the caption instead of nothing.
+              const text = captionText || (typeof message === 'object' ? '' : String(message));
+              info = await this.api.e2ee.sendMessage(jid, text, replyMessageID);
+              if (info && !info.messageID) { info.messageID = info.messageId || info.id || `mid.e2ee_${Date.now()}`; }
+              if (info && info.messageID) { this.trackMessage(info.messageID, threadID); }
             }
             if (callback) { try { callback(null, info); } catch (_) {} }
             resolve(info);
@@ -251,6 +298,7 @@ if (messageInfo && messageInfo.messageID) {
     commandName: "__global__"
   });
   botMessageTracker.record(threadID, messageInfo.messageID);
+  this.trackMessage(messageInfo.messageID, threadID);
 }
 
 resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
@@ -259,6 +307,10 @@ resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
   }
 
   async setReaction(emoji, messageID) {
+    // E2EE messages need api.e2ee.sendReaction(threadId, messageId, emoji, senderJid) —
+    // the legacy setMessageReaction() call below targets Mercury's reaction
+    // endpoint, which doesn't recognize E2EE (Signal/Noise) message IDs at
+    // all, so it was failing silently for every E2EE thread.
     const e2eeInfo = this.e2eeMessages ? this.e2eeMessages.get(String(messageID)) : null;
     if (e2eeInfo && this.api.e2ee && typeof this.api.e2ee.sendReaction === 'function') {
       try {
@@ -278,14 +330,27 @@ resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
     }
 
     return new Promise((resolve, reject) => {
-      if (typeof this.api.setMessageReaction !== 'function' && typeof this.api.setReaction !== 'function') {
+      if (
+        typeof this.api.setMessageReactionMqtt !== 'function' &&
+        typeof this.api.setMessageReaction !== 'function' &&
+        typeof this.api.setReaction !== 'function'
+      ) {
         logger.warn("[FcaAdapter] setMessageReaction/setReaction function not available on underlying API.");
         return resolve({ success: false, error: 'setMessageReaction not supported' });
       }
 
-      const reactionFunc = this.api.setMessageReactionMqtt || this.api.setMessageReaction || this.api.setReaction;
+      // Prefer the MQTT reaction endpoint — it accepts arbitrary custom
+      // emoji. The legacy setMessageReaction (Graph-based) rejects any
+      // emoji outside FB's small built-in reaction set with
+      // "Reaction is not a valid emoji.", which is why 🔥/❌/🔎/etc reactions
+      // used across commands were silently failing.
+      const useMqtt = typeof this.api.setMessageReactionMqtt === 'function';
+      const reactionFunc = useMqtt
+        ? this.api.setMessageReactionMqtt
+        : (this.api.setMessageReaction || this.api.setReaction);
+      const threadIDForReaction = this.messageThreads ? this.messageThreads.get(String(messageID)) : null;
 
-      reactionFunc(emoji, messageID, (err) => {
+      const doReact = (err) => {
         if (err) {
           logger.error(`[FcaAdapter] Error setting reaction for message ${messageID}:`, err);
           return reject(err);
@@ -301,7 +366,26 @@ resolve(messageInfo || { messageID: `mid.fca_${Date.now()}` });
         }
 
         resolve({ success: true });
-      });
+      };
+
+      if (useMqtt && threadIDForReaction) {
+        reactionFunc(emoji, messageID, threadIDForReaction, doReact);
+      } else if (useMqtt) {
+        // No tracked threadID (e.g. reacting to a message from before the
+        // bot started, or trackMessage() wasn't called for it) — MQTT
+        // reaction needs one, so fall back to the legacy endpoint if it
+        // exists rather than failing outright.
+        if (typeof this.api.setMessageReaction === 'function' || typeof this.api.setReaction === 'function') {
+          logger.warn(`[FcaAdapter] No tracked threadID for message ${messageID}, falling back to legacy setMessageReaction.`);
+          const fallbackFunc = this.api.setMessageReaction || this.api.setReaction;
+          fallbackFunc(emoji, messageID, doReact);
+        } else {
+          logger.warn(`[FcaAdapter] No tracked threadID for message ${messageID}, cannot use setMessageReactionMqtt.`);
+          resolve({ success: false, error: 'threadID not tracked for MQTT reaction' });
+        }
+      } else {
+        reactionFunc(emoji, messageID, doReact);
+      }
     });
   }
 
@@ -371,47 +455,22 @@ async removeUserFromGroup(userID, threadID) {
       return reject(new Error("Underlying FCA removeUserFromGroup function is not available."));
     }
 
-    this.api.removeUserFromGroup(userID, this._fcaThreadID(threadID), (err, result) => {
+    this.api.removeUserFromGroup(userID, threadID, (err) => {
       if (err) return reject(err);
-      if (result && result.success === false) {
-        return reject(result.error || new Error("Messenger did not remove the member."));
-      }
-      resolve(result || true);
+      resolve(true);
     });
   });
 }
-async unsendMessage(messageID, threadID = null) {
+async unsendMessage(messageID) {
   return new Promise((resolve, reject) => {
-    const e2eeInfo = this.e2eeMessages ? this.e2eeMessages.get(String(messageID)) : null;
-    if (e2eeInfo && this.api.e2ee && typeof this.api.e2ee.unsendMessage === "function") {
-      this.api.e2ee.unsendMessage(String(messageID), threadID || e2eeInfo.threadID)
-        .then((result) => resolve(result || true))
-        .catch(reject);
-      return;
-    }
     if (typeof this.api.unsendMessage !== "function") {
       return reject(new Error("Underlying FCA unsendMessage function is not available."));
     }
 
-    let settled = false;
-    const done = (err, result) => {
-      if (settled) return;
-      settled = true;
+    this.api.unsendMessage(messageID, (err) => {
       if (err) return reject(err);
-      resolve(result || true);
-    };
-
-    try {
-      const normalizedThreadID = threadID ? this._fcaThreadID(threadID) : null;
-      const result = this.api.unsendMessage.length >= 3
-        ? this.api.unsendMessage(messageID, normalizedThreadID, done)
-        : this.api.unsendMessage(messageID, done);
-      if (result && typeof result.then === "function") {
-        result.then((value) => done(null, value)).catch(done);
-      }
-    } catch (err) {
-      done(err);
-    }
+      resolve(true);
+    });
   });
 }
 async markAsRead(threadID) {
@@ -455,12 +514,9 @@ async addUserToGroup(userID, threadID) {
       return reject(new Error("Underlying FCA addUserToGroup function is not available."));
     }
 
-    this.api.addUserToGroup(userID, this._fcaThreadID(threadID), (err, result) => {
+    this.api.addUserToGroup(userID, threadID, (err) => {
       if (err) return reject(err);
-      if (result && result.success === false) {
-        return reject(result.error || new Error("Messenger did not add the member."));
-      }
-      resolve(result || true);
+      resolve(true);
     });
   });
 }
@@ -480,7 +536,7 @@ async getThreadInfo(threadID) {
       return reject(new Error("getThreadInfo not supported"));
     }
 
-    this.api.getThreadInfo(this._fcaThreadID(threadID), (err, info) => {
+    this.api.getThreadInfo(threadID, (err, info) => {
       if (err) return reject(err);
       resolve(info);
     });
@@ -759,7 +815,6 @@ class MessengerAdapterFactory {
     switch (normalizedProvider) {
       case 'fca-unofficial':
       case 'fca-riyad':
-      case '@rxabdullah/xdi-fca':
       case 'fca-eryxenx':
       case 'facebook-chat-api':
       case 'fca':
