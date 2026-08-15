@@ -4,7 +4,7 @@ const path = require("path");
 const replyManager = require("../replies/replyManager");
 
 // 👇 আপনার Instagram scraping API-এর base URL এখানে বসান
-const API_BASE = "https://riyad-instagram-api.onrender.com";
+const API_BASE = "https://riyad-instagram-api.onrender.com/";
 
 // ক্যাটাগরি -> Instagram hashtag ম্যাপিং। Instagram-এ সত্যিকারের "category"
 // সার্চ নেই, তাই hashtag-ই সবচেয়ে কাছাকাছি বাস্তবসম্মত বিকল্প। চাইলে এখানে
