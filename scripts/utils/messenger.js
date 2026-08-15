@@ -381,6 +381,14 @@ try {
       adaptedApi.markE2EEThread(event.threadID);
     }
 
+    if (event.isE2EE && event.messageID && event.threadID && typeof adaptedApi.markE2EEMessage === 'function') {
+      adaptedApi.markE2EEMessage(event.messageID, event.threadID, event.e2ee && event.e2ee.senderJid);
+    }
+
+    if (event.threadID && event.messageID && typeof adaptedApi.trackMessage === 'function') {
+      adaptedApi.trackMessage(event.messageID, event.threadID);
+    }
+
     await botEngine.processMessage(
       event,
       commandLoader,
