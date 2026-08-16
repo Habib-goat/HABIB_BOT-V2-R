@@ -216,6 +216,10 @@ module.exports = {
         return api.sendMessage(describeError(new Error("empty image buffer")), threadID, messageID);
       }
 
+      // Guard: a real edited image is always at least a few KB. Anything
+      // tiny, or reported with a non-image mime type, is actually an
+      // error/JSON payload — not an image — so never forward it as an
+      // attachment. Log the raw body so the real cause is visible.
       const reportedType = (resultBlob.type || "").toLowerCase();
       const looksLikeImage = reportedType.startsWith("image/");
       const isSuspiciouslySmall = resultBuffer.length < 2048;
