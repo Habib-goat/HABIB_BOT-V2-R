@@ -6,19 +6,29 @@ const sessions = new Map(); // key: senderID -> { login, domain, interval, seenI
 const BASE = "https://www.1secmail.com/api/v1/";
 const DOMAINS = ["1secmail.com", "1secmail.org", "1secmail.net"];
 
+// কিছু ফ্রি API হেডার ছাড়া রিকোয়েস্ট ব্লক করে (403) — তাই ব্রাউজারের মতো হেডার পাঠানো হচ্ছে
+const client = axios.create({
+  timeout: 15000,
+  headers: {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    Accept: "application/json"
+  }
+});
+
 function randomLogin() {
   return "riyad" + Math.random().toString(36).substring(2, 10);
 }
 
 async function getMessages(login, domain) {
-  const res = await axios.get(BASE, {
+  const res = await client.get(BASE, {
     params: { action: "getMessages", login, domain }
   });
   return res.data || [];
 }
 
 async function getMessageBody(login, domain, id) {
-  const res = await axios.get(BASE, {
+  const res = await client.get(BASE, {
     params: { action: "readMessage", login, domain, id }
   });
   return res.data;
@@ -30,13 +40,25 @@ function extractCode(text) {
   return match ? match[0] : null;
 }
 
+function extractLink(html, text) {
+  const source = html || text || "";
+  // http/https দিয়ে শুরু হওয়া প্রথম লিংক খোঁজা হচ্ছে
+  const match = source.match(/https?:\/\/[^\s"'<>)]+/);
+  return match ? match[0] : null;
+}
+
 function formatMail(full) {
   let body = `📩 | New mail received!\nFrom: ${full.from || "unknown"}\n`;
   body += `Subject: ${full.subject || "(no subject)"}\n\n`;
   const text = full.textBody || full.body || "";
-  body += `${text.slice(0, 500)}\n`;
+  const html = full.htmlBody || "";
+  body += `${text.slice(0, 400)}\n`;
+
   const code = extractCode(text || full.subject);
+  const link = extractLink(html, text);
+
   if (code) body += `\n🔑 | Detected code: ${code}`;
+  if (link) body += `\n🔗 | Verification link: ${link}`;
   return body;
 }
 
