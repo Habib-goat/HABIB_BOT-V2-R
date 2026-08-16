@@ -232,6 +232,30 @@ module.exports = {
         return api.sendMessage(describeError(new Error("empty image buffer")), threadID, messageID);
       }
 
+      // Guard: a real edited image is always at least a few KB. Anything
+      // tiny, or reported with a non-image mime type, is actually an
+      // error/JSON payload — not an image — so never forward it as an
+      // attachment. Log the raw body so the real cause is visible.
+      const reportedType = (resultBlob.type || "").toLowerCase();
+      const looksLikeImage = reportedType.startsWith("image/");
+      const isSuspiciouslySmall = resultBuffer.length < 2048;
+
+      if (!looksLikeImage || isSuspiciouslySmall) {
+        let bodyPreview = "";
+        try {
+          bodyPreview = resultBuffer.toString("utf8").slice(0, 500);
+        } catch (_) {
+          bodyPreview = "(non-text binary payload)";
+        }
+        console.error(
+          "hgedit: unexpected non-image response from Hugging Face.",
+          "content-type:", reportedType || "(none)",
+          "size:", resultBuffer.length,
+          "body:", bodyPreview
+        );
+        return api.sendMessage(describeError(new Error(bodyPreview || "non-image response")), threadID, messageID);
+      }
+
       const imageStream = Readable.from(resultBuffer);
 
       // 6. Send the final result
