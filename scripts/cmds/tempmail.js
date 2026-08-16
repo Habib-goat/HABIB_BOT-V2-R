@@ -1,57 +1,55 @@
 const axios = require("axios");
 
-// প্রতিটা থ্রেড/ইউজারের অ্যাকাউন্ট ও পোলিং ইন্টারভাল মনে রাখার জন্য
-const sessions = new Map(); // key: senderID -> { email, password, token, id, interval, seenIDs }
+// প্রতিটা ইউজারের ইমেইল সেশন মনে রাখার জন্য
+const sessions = new Map(); // key: senderID -> { login, domain, interval, seenIDs }
 
-const BASE = "https://api.mail.tm";
+const BASE = "https://www.1secmail.com/api/v1/";
+const DOMAINS = ["1secmail.com", "1secmail.org", "1secmail.net"];
 
-async function createAccount() {
-  const domRes = await axios.get(`${BASE}/domains`);
-  const domain = domRes.data["hydra:member"][0].domain;
-
-  const username = "riyad" + Math.random().toString(36).substring(2, 10);
-  const password = Math.random().toString(36).substring(2, 12);
-  const address = `${username}@${domain}`;
-
-  await axios.post(`${BASE}/accounts`, { address, password });
-
-  const tokenRes = await axios.post(`${BASE}/token`, { address, password });
-  const token = tokenRes.data.token;
-
-  return { email: address, password, token };
+function randomLogin() {
+  return "riyad" + Math.random().toString(36).substring(2, 10);
 }
 
-async function getMessages(token) {
-  const res = await axios.get(`${BASE}/messages`, {
-    headers: { Authorization: `Bearer ${token}` }
+async function getMessages(login, domain) {
+  const res = await axios.get(BASE, {
+    params: { action: "getMessages", login, domain }
   });
-  return res.data["hydra:member"] || [];
+  return res.data || [];
 }
 
-async function getMessageBody(token, id) {
-  const res = await axios.get(`${BASE}/messages/${id}`, {
-    headers: { Authorization: `Bearer ${token}` }
+async function getMessageBody(login, domain, id) {
+  const res = await axios.get(BASE, {
+    params: { action: "readMessage", login, domain, id }
   });
   return res.data;
 }
 
 function extractCode(text) {
   if (!text) return null;
-  // ৪-৮ ডিজিটের OTP/verification code খোঁজার সাধারণ প্যাটার্ন
   const match = text.match(/\b\d{4,8}\b/);
   return match ? match[0] : null;
+}
+
+function formatMail(full) {
+  let body = `📩 | New mail received!\nFrom: ${full.from || "unknown"}\n`;
+  body += `Subject: ${full.subject || "(no subject)"}\n\n`;
+  const text = full.textBody || full.body || "";
+  body += `${text.slice(0, 500)}\n`;
+  const code = extractCode(text || full.subject);
+  if (code) body += `\n🔑 | Detected code: ${code}`;
+  return body;
 }
 
 module.exports = {
   config: {
     name: "tempmail",
-    version: "1.0.0",
+    version: "2.0.0",
     author: "Riyad",
     countDown: 5,
     role: 0,
     category: "utility",
     shortDescription: "Create a temporary email & auto-receive codes",
-    longDescription: "Generate a disposable email, check inbox, and auto-notify when a verification code arrives",
+    longDescription: "Generate a disposable email (1secmail), check inbox, and auto-notify when a code arrives",
     guide: "{pn} → নতুন টেম্প ইমেইল বানায়\n{pn} check → ইনবক্স চেক করে\n{pn} stop → অটো-চেক বন্ধ করে"
   },
 
@@ -78,38 +76,33 @@ module.exports = {
         );
       }
       try {
-        const messages = await getMessages(session.token);
+        const messages = await getMessages(session.login, session.domain);
         if (!messages.length) {
           return api.sendMessage("📭 | Inbox is empty right now.", threadID, messageID);
         }
         const latest = messages[0];
-        const full = await getMessageBody(session.token, latest.id);
-        const code = extractCode(full.text || full.subject);
-        let body = `📩 | New mail from: ${full.from?.address || "unknown"}\n`;
-        body += `Subject: ${full.subject || "(no subject)"}\n\n`;
-        body += `${(full.text || "").slice(0, 500)}\n`;
-        if (code) body += `\n🔑 | Detected code: ${code}`;
-        return api.sendMessage(body, threadID, messageID);
+        const full = await getMessageBody(session.login, session.domain, latest.id);
+        return api.sendMessage(formatMail(full), threadID, messageID);
       } catch (err) {
         console.error("tempmail check error:", err?.response?.data || err.message);
         const status = err?.response?.status;
-        const detail = status ? `HTTP ${status}: ${JSON.stringify(err?.response?.data || {})}` : err.message;
+        const detail = status ? `HTTP ${status}` : err.message;
         return api.sendMessage(`❌ | Failed to check inbox.\nReason: ${detail}`, threadID, messageID);
       }
     }
 
     // ===== CREATE NEW =====
     try {
-      // আগের সেশন থাকলে বন্ধ করে দেওয়া
       const old = sessions.get(senderID);
       if (old?.interval) clearInterval(old.interval);
 
-      const account = await createAccount();
+      const login = randomLogin();
+      const domain = DOMAINS[Math.floor(Math.random() * DOMAINS.length)];
+      const email = `${login}@${domain}`;
       const seenIDs = new Set();
 
       // ইমেইলটা আলাদা মেসেজে পাঠানো হচ্ছে যাতে সহজে কপি করা যায়
-      await api.sendMessage(account.email, threadID, messageID);
-
+      await api.sendMessage(email, threadID, messageID);
       await api.sendMessage(
         `👆 | Your temp email (tap & hold to copy)\n\n` +
           `👉 এই ইমেইলে যেকোনো সাইটে সাইন-আপ করুন। কোড আসলে আমি অটোমেটিক পাঠিয়ে দেব।\n` +
@@ -117,32 +110,22 @@ module.exports = {
         threadID
       );
 
-      // প্রতি ১০ সেকেন্ডে ইনবক্স পোল করে নতুন মেইল আসলেই পাঠানো হবে
       const interval = setInterval(async () => {
         try {
-          const messages = await getMessages(account.token);
+          const messages = await getMessages(login, domain);
           for (const m of messages) {
             if (seenIDs.has(m.id)) continue;
             seenIDs.add(m.id);
-
-            const full = await getMessageBody(account.token, m.id);
-            const code = extractCode(full.text || full.subject);
-
-            let body = `📩 | New mail received!\nFrom: ${full.from?.address || "unknown"}\n`;
-            body += `Subject: ${full.subject || "(no subject)"}\n\n`;
-            body += `${(full.text || "").slice(0, 500)}\n`;
-            if (code) body += `\n🔑 | Detected code: ${code}`;
-
-            api.sendMessage(body, threadID);
+            const full = await getMessageBody(login, domain, m.id);
+            api.sendMessage(formatMail(full), threadID);
           }
         } catch (err) {
-          console.error("tempmail poll error:", err);
+          console.error("tempmail poll error:", err?.response?.data || err.message);
         }
       }, 10000);
 
-      sessions.set(senderID, { ...account, interval, seenIDs });
+      sessions.set(senderID, { login, domain, interval, seenIDs });
 
-      // ৩০ মিনিট পর অটো বন্ধ (সার্ভার রিসোর্স বাঁচাতে)
       setTimeout(() => {
         const s = sessions.get(senderID);
         if (s?.interval) {
@@ -153,10 +136,8 @@ module.exports = {
       }, 30 * 60 * 1000);
     } catch (err) {
       console.error("tempmail create error:", err?.response?.data || err.message);
-      const status = err?.response?.status;
-      const detail = status ? `HTTP ${status}: ${JSON.stringify(err?.response?.data || {})}` : err.message;
       return api.sendMessage(
-        `❌ | Failed to create temp email.\nReason: ${detail}`,
+        `❌ | Failed to create temp email.\nReason: ${err.message}`,
         threadID,
         messageID
       );
