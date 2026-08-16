@@ -21,6 +21,19 @@ const CATEGORY_PROMPTS = {
     "attitude/আত্মবিশ্বাস/নিজের উপর বিশ্বাস নিয়ে একটি শক্তিশালী caption লেখো।"
 };
 
+const CATEGORY_GUIDANCE = {
+  islamic:
+    "শান্ত, পবিত্র ও আশাবাদী ইসলামিক ভাবনা দাও। কষ্ট বা রোমান্টিক বিষয় মেশাবে না।",
+  valobasha:
+    "মিষ্টি, হৃদয়স্পর্শী ও রোমান্টিক ভালোবাসার অনুভূতি দাও। ইসলামিক, দুঃখ বা joke-এর বিষয় মেশাবে না।",
+  kosto:
+    "গভীর, আবেগঘন ও বিষণ্ণ অনুভূতি দাও। হাসির, romantic বা motivational joke-এর tone মেশাবে না।",
+  hasi:
+    "শুধু হাস্যরস, মজার পরিস্থিতি, witty কথা বা relatable everyday joke দাও—যেটা পড়লে সত্যিই হাসি পেতে পারে। দুঃখ, heartbreak, loneliness, কান্না, হতাশা, sad quote বা motivational lecture একদম দেবে না।",
+  attitude:
+    "আত্মবিশ্বাসী, bold ও powerful attitude দাও। দুঃখের বা কান্নার tone মেশাবে না।"
+};
+
 const ALIASES_MAP = {
   islamic: "islamic",
   islam: "islamic",
@@ -58,6 +71,16 @@ const EMOJI_MAP = {
   hasi: "😄",
   attitude: "🔥"
 };
+
+const SYMBOL_PAIRS = [
+  ["✦", "✦"],
+  ["✧", "✧"],
+  ["❀", "❀"],
+  ["⟡", "⟡"],
+  ["༺", "༻"],
+  ["𓆩", "𓆪"],
+  ["「", "」"]
+];
 
 const LANGUAGE_NAMES = {
   bangla: "শুদ্ধ বাংলায়",
@@ -130,9 +153,32 @@ function formatCaption(text, category) {
 
   const styledCaption = toBoldUnicode(caption);
   const emoji = EMOJI_MAP[category];
+  const symbols =
+    SYMBOL_PAIRS[Math.floor(Math.random() * SYMBOL_PAIRS.length)];
 
   // Caption ছাড়া কোনো explanatory text নয়—শুধু হালকা decorative symbol এবং emoji।
-  return `✦ ${emoji} ${styledCaption} ✦`;
+  return `${symbols[0]} ${emoji} ${styledCaption} ${symbols[1]}`;
+}
+
+function getUsageMessage() {
+  return `❌ | ব্যবহার করুন:
+
+📌 ভাষা:
+• b  = বাংলা
+• ba = Banglish
+• e  = English
+
+📚 Status category:
+• love     = ভালোবাসার caption
+• sad      = কষ্টের caption
+• funny    = হাসির/মজার caption
+• islamic  = ইসলামিক caption
+• attitude = আত্মবিশ্বাসের caption
+
+✨ উদাহরণ:
+caption b love
+caption ba funny
+caption e attitude`;
 }
 
 module.exports = {
@@ -146,7 +192,7 @@ module.exports = {
     category: "ai",
     description: "Gemini AI দিয়ে বাংলা, Banglish ও English caption জেনারেট করে",
     guide:
-      "{pn} <b|ba|e> <islamic|valobasha|kosto|hasi|attitude>\nউদাহরণ: {pn} b islamic"
+      "{pn} <b|ba|e> <love|sad|funny|islamic|attitude>\nউদাহরণ: {pn} b funny"
   },
 
   onStart: async function ({ api, event, args }) {
@@ -171,11 +217,7 @@ module.exports = {
     const category = ALIASES_MAP[categoryInput];
 
     if (!language || !category) {
-      return api.sendMessage(
-        "❌ | ব্যবহার করুন:\ncaption b islamic\ncaption ba islamic\ncaption e islamic",
-        threadID,
-        messageID
-      );
+      return api.sendMessage(getUsageMessage(), threadID, messageID);
     }
 
     try {
@@ -193,6 +235,7 @@ module.exports = {
             const prompt = `${CATEGORY_PROMPTS[category]}
 
 ভাষা: ${LANGUAGE_NAMES[language]}
+এই category-এর বিশেষ নির্দেশনা: ${CATEGORY_GUIDANCE[category]}
 
 কঠোর নিয়ম:
 1. শুধু caption-এর text দেবে—কোনো ভূমিকা, ব্যাখ্যা, title, label, language name, hashtag বা অতিরিক্ত কথা দেবে না।
