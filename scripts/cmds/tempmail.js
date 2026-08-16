@@ -91,8 +91,10 @@ module.exports = {
         if (code) body += `\n🔑 | Detected code: ${code}`;
         return api.sendMessage(body, threadID, messageID);
       } catch (err) {
-        console.error("tempmail check error:", err);
-        return api.sendMessage("❌ | Failed to check inbox.", threadID, messageID);
+        console.error("tempmail check error:", err?.response?.data || err.message);
+        const status = err?.response?.status;
+        const detail = status ? `HTTP ${status}: ${JSON.stringify(err?.response?.data || {})}` : err.message;
+        return api.sendMessage(`❌ | Failed to check inbox.\nReason: ${detail}`, threadID, messageID);
       }
     }
 
@@ -105,12 +107,14 @@ module.exports = {
       const account = await createAccount();
       const seenIDs = new Set();
 
+      // ইমেইলটা আলাদা মেসেজে পাঠানো হচ্ছে যাতে সহজে কপি করা যায়
+      await api.sendMessage(account.email, threadID, messageID);
+
       await api.sendMessage(
-        `📧 | Your temp email:\n${account.email}\n\n` +
+        `👆 | Your temp email (tap & hold to copy)\n\n` +
           `👉 এই ইমেইলে যেকোনো সাইটে সাইন-আপ করুন। কোড আসলে আমি অটোমেটিক পাঠিয়ে দেব।\n` +
           `Manual check: tempmail check\nStop: tempmail stop`,
-        threadID,
-        messageID
+        threadID
       );
 
       // প্রতি ১০ সেকেন্ডে ইনবক্স পোল করে নতুন মেইল আসলেই পাঠানো হবে
@@ -148,9 +152,11 @@ module.exports = {
         }
       }, 30 * 60 * 1000);
     } catch (err) {
-      console.error("tempmail create error:", err);
+      console.error("tempmail create error:", err?.response?.data || err.message);
+      const status = err?.response?.status;
+      const detail = status ? `HTTP ${status}: ${JSON.stringify(err?.response?.data || {})}` : err.message;
       return api.sendMessage(
-        "❌ | Failed to create temp email. The service may be down, try again later.",
+        `❌ | Failed to create temp email.\nReason: ${detail}`,
         threadID,
         messageID
       );
