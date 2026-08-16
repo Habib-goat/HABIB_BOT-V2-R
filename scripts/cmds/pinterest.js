@@ -1,216 +1,306 @@
-const axios = require("axios");
-const fs = require("fs-extra");
+"use strict";
+
+const fs = require("fs");
 const path = require("path");
-const { createCanvas, loadImage } = require("@napi-rs/canvas");
 const replyManager = require("../replies/replyManager");
+const {
+  search,
+  getMediaById,
+  resolveUrl,
+  unwrapPinterestUrl,
+} = require("../utils/riyadPinterestApi");
+const { buildResultCollage } = require("../utils/resultCollage");
+const {
+  downloadPinterestMedia,
+  sendFileWithRetry,
+  removeFile,
+} = require("../utils/mediaFile");
 
-const baseApiUrl = async () => {
-	const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-	return base.data.mahmud;
-};
+const PIN_LINK_RE = /https?:\/\/[^\s<>"']+/gi;
+const RESULT_LIMIT = 10;
 
-// ─────────────────────────────────────────────
-//  BUILD NUMBERED GRID COLLAGE
-//  Downloads each image, lays them out in a grid, and stamps a big
-//  numbered badge (1, 2, 3...) in the corner of every cell so the user
-//  can reply with that number to get the full image.
-// ─────────────────────────────────────────────
-async function buildCollage(imageUrls) {
-	const n = imageUrls.length;
-	const cols = n <= 4 ? 2 : n <= 9 ? 3 : 4;
-	const rows = Math.ceil(n / cols);
+function react(api, emoji, messageID) {
+  if (typeof api.setMessageReaction === "function") {
+    api.setMessageReaction(emoji, messageID, () => {}, true);
+  }
+}
 
-	const cellSize = 380;
-	const gap = 8;
-	const width = cols * cellSize + (cols + 1) * gap;
-	const height = rows * cellSize + (rows + 1) * gap;
+function findPinterestUrl(text) {
+  for (const candidate of String(text || "").match(PIN_LINK_RE) || []) {
+    const url = unwrapPinterestUrl(candidate.replace(/[),.;!?]+$/, ""));
+    if (/pin\.it\//i.test(url) || /pinterest\.[a-z.]+\/pin\//i.test(url)) {
+      return url;
+    }
+  }
+  return null;
+}
 
-	const canvas = createCanvas(width, height);
-	const ctx = canvas.getContext("2d");
-	ctx.fillStyle = "#111111";
-	ctx.fillRect(0, 0, width, height);
+function mediaUrl(item) {
+  return String(item?.videoUrl || item?.image || item?.thumbnail || "");
+}
 
-	const images = await Promise.all(
-		imageUrls.map(async (url) => {
-			try {
-				const res = await axios.get(url, { responseType: "arraybuffer", timeout: 20000 });
-				return await loadImage(Buffer.from(res.data));
-			} catch (e) {
-				return null;
-			}
-		})
-	);
+function isVideoResult(item) {
+  return Boolean(
+    item &&
+      (item.isVideo ||
+        item.videoUrl ||
+        item.type === "video" ||
+        /\.(mp4|m3u8|mov|m4v|webm|gif)(?:[?#].*)?$/i.test(mediaUrl(item))),
+  );
+}
 
-	images.forEach((img, i) => {
-		const col = i % cols;
-		const row = Math.floor(i / cols);
-		const x = gap + col * (cellSize + gap);
-		const y = gap + row * (cellSize + gap);
+function isGifResult(item) {
+  return /\.gif(?:[?#].*)?$/i.test(mediaUrl(item));
+}
 
-		// cell background
-		ctx.fillStyle = "#222222";
-		ctx.fillRect(x, y, cellSize, cellSize);
+function resultKey(item) {
+  return String(item?.id || item?.pinUrl || item?.image || item?.thumbnail || "");
+}
 
-		if (img) {
-			// cover-fit crop into the square cell
-			const scale = Math.max(cellSize / img.width, cellSize / img.height);
-			const drawW = img.width * scale;
-			const drawH = img.height * scale;
-			const dx = x + (cellSize - drawW) / 2;
-			const dy = y + (cellSize - drawH) / 2;
-			ctx.save();
-			ctx.beginPath();
-			ctx.rect(x, y, cellSize, cellSize);
-			ctx.clip();
-			ctx.drawImage(img, dx, dy, drawW, drawH);
-			ctx.restore();
-		} else {
-			ctx.fillStyle = "#666666";
-			ctx.font = "28px sans-serif";
-			ctx.textAlign = "center";
-			ctx.fillText("Failed", x + cellSize / 2, y + cellSize / 2);
-		}
+function keepOnlyRequestedMedia(results, mode) {
+  const seen = new Set();
+  const filtered = [];
 
-		// number badge (top-left of cell)
-		const badgeR = 34;
-		const bx = x + badgeR + 10;
-		const by = y + badgeR + 10;
-		ctx.beginPath();
-		ctx.arc(bx, by, badgeR, 0, Math.PI * 2);
-		ctx.fillStyle = "rgba(0,0,0,0.75)";
-		ctx.fill();
-		ctx.strokeStyle = "#ffffff";
-		ctx.lineWidth = 3;
-		ctx.stroke();
+  for (const item of results || []) {
+    const key = resultKey(item);
+    if (!key || seen.has(key)) continue;
 
-		ctx.fillStyle = "#ffffff";
-		ctx.font = "bold 34px sans-serif";
-		ctx.textAlign = "center";
-		ctx.textBaseline = "middle";
-		ctx.fillText(String(i + 1), bx, by + 2);
-	});
+    // "pin <query>" is intentionally image-only. GIFs are also left out of
+    // the photo list; they can still be returned by "pin V <query>".
+    const matches =
+      mode === "video"
+        ? isVideoResult(item)
+        : !isVideoResult(item) && !isGifResult(item);
+    if (!matches) continue;
 
-	return canvas.encode("png");
+    seen.add(key);
+    filtered.push(item);
+    if (filtered.length === RESULT_LIMIT) break;
+  }
+
+  return filtered;
+}
+
+async function searchMedia(query, mode) {
+  const searchLimit = 25;
+  const requestedType = mode === "video" ? "video" : "image";
+
+  // The third argument is supported by the updated API helper. Older helpers
+  // ignore it, so the local filter below still guarantees the command output
+  // never mixes images and videos.
+  let results = await search(query, searchLimit, { type: requestedType });
+  let filtered = keepOnlyRequestedMedia(results, mode);
+
+  // Search responses can contain too few items of one media type. One small
+  // second pass asks Pinterest for a more specific query, then de-duplicates
+  // the combined results while keeping the same 10-item limit.
+  if (filtered.length < RESULT_LIMIT) {
+    const focusedQuery =
+      mode === "video" ? `${query} video` : `${query} photo`;
+    try {
+      const focused = await search(focusedQuery, searchLimit, {
+        type: requestedType,
+      });
+      filtered = keepOnlyRequestedMedia(
+        [...filtered, ...(focused || [])],
+        mode,
+      );
+    } catch (_) {
+      // Keep the first successful search result.
+    }
+  }
+
+  return filtered.slice(0, RESULT_LIMIT);
+}
+
+async function sendMedia(api, media, threadID, messageID, cacheDir) {
+  if (!media || (!media.image && !media.videoUrl)) {
+    react(api, "❌", messageID);
+    return api.sendMessage(
+      "❌ এই Pinterest pin-এ কোনো media পাওয়া যায়নি।",
+      threadID,
+      messageID,
+    );
+  }
+
+  const video = Boolean(media.isVideo || media.videoUrl);
+  const filePath = path.join(
+    cacheDir,
+    `pin_${Date.now()}_${video ? "video.mp4" : "image.jpg"}`,
+  );
+  react(api, "⏳", messageID);
+
+  try {
+    await downloadPinterestMedia(media, filePath);
+    const info = await sendFileWithRetry(api, {
+      body: `✅ | ${media.title || "Pinterest"}${video ? " (video)" : " (HD image)"}`,
+      filePath,
+      threadID,
+      messageID,
+    });
+    await removeFile(filePath);
+    react(api, "✅", messageID);
+    return info;
+  } catch (error) {
+    await removeFile(filePath);
+    react(api, "❌", messageID);
+    console.error("[PIN DOWNLOAD ERROR]", error.response?.data || error.message);
+    return api.sendMessage(
+      `❌ Pinterest download failed: ${error.message}`,
+      threadID,
+      messageID,
+    );
+  }
+}
+
+async function sendSearchResults(api, event, replyManagerInstance, results, mode) {
+  const { threadID, messageID, senderID } = event;
+  const cacheDir = path.join(__dirname, "cache");
+  await fs.promises.mkdir(cacheDir, { recursive: true });
+  const collagePath = path.join(cacheDir, `pin_results_${Date.now()}.png`);
+  const collage = await buildResultCollage(results, {
+    variant: "pinterest",
+    headerTitle: mode === "video" ? "PINTEREST VIDEOS" : "PINTEREST IMAGES",
+  });
+  await fs.promises.writeFile(collagePath, collage);
+
+  const label = mode === "video" ? "video" : "image";
+  const info = await sendFileWithRetry(api, {
+    body: `📌 ${results.length}টি Pinterest ${label} result পাওয়া গেছে। Reply করে 1-${results.length} লিখুন।`,
+    filePath: collagePath,
+    threadID,
+    messageID,
+  });
+  await removeFile(collagePath);
+
+  if (info?.messageID && replyManagerInstance) {
+    replyManagerInstance.set(info.messageID, {
+      commandName: "pin",
+      author: senderID,
+      results,
+    });
+  }
+  return info;
 }
 
 module.exports = {
-	config: {
-		name: "pin",
-		aliases: ["pinterest", "pic"],
-		version: "2.0.0",
-		author: "RiYad",
-		countDown: 10,
-		role: 0,
-		description: "Search Pinterest images — pick one by number to get it full-size",
-		category: "image gen",
-		guide: "{pn} <query> - <amount>: (Ex: {pn} goku - 10)"
-	},
+  config: {
+    name: "pin",
+    aliases: ["pinterest", "pic"],
+    version: "6.0.0",
+    author: "Riyad",
+    countDown: 10,
+    role: 0,
+    category: "image",
+    shortDescription:
+      "Search Pinterest images, or use pin V <query> for videos only",
+    guide: {
+      en: "{pn} <query> — images only; {pn} V <query> — videos only; reply 1-10",
+    },
+  },
 
-	onStart: async function ({ api, event, args }) {
-		const { threadID, messageID, senderID } = event;
+  onStart: async function ({ api, event, args, replyManager: replyManagerInstance }) {
+    const { threadID, messageID } = event;
+    const rawArgs = [...args];
+    const videoMode = String(rawArgs[0] || "").toLowerCase() === "v";
+    if (videoMode) rawArgs.shift();
 
-		const queryAndLength = args.join(" ").split("-");
-		const keySearch = queryAndLength[0]?.trim();
-		const count = queryAndLength[1]?.trim();
-		const numberSearch = count ? Math.min(parseInt(count), 20) : 6;
+    const query = rawArgs.join(" ").trim();
+    if (!query) {
+      return api.sendMessage(
+        videoMode
+          ? "❌ V-এর পরে Pinterest video search query দিন।"
+          : "❌ Pinterest image search query দিন।",
+        threadID,
+        messageID,
+      );
+    }
 
-		if (!keySearch) {
-			return api.sendMessage("× Baby, please enter a search query and amount! 🔍\nExample: pin goku - 10", threadID, messageID);
-		}
+    const mode = videoMode ? "video" : "image";
+    react(api, "⏳", messageID);
+    try {
+      const results = await searchMedia(query, mode);
+      if (!results.length) {
+        react(api, "❌", messageID);
+        return api.sendMessage(
+          mode === "video"
+            ? "❌ এই query-তে কোনো Pinterest video পাওয়া যায়নি।"
+            : "❌ এই query-তে কোনো Pinterest image পাওয়া যায়নি।",
+          threadID,
+          messageID,
+        );
+      }
+      react(api, "✅", messageID);
+      return await sendSearchResults(
+        api,
+        event,
+        replyManagerInstance || replyManager,
+        results,
+        mode,
+      );
+    } catch (error) {
+      react(api, "❌", messageID);
+      const status = error.response?.status || error.status;
+      if (status === 403 || /403|forbidden|blocked/i.test(error.message || "")) {
+        return api.sendMessage(
+          "❌ Pinterest search সাময়িকভাবে block করেছে। API-তে logged-in Pinterest cookies সেট করলে এই search-এর 403 কমবে।",
+          threadID,
+          messageID,
+        );
+      }
+      return api.sendMessage(
+        `❌ Pinterest search failed: ${error.message}`,
+        threadID,
+        messageID,
+      );
+    }
+  },
 
-		const cacheDir = path.join(__dirname, "cache");
-		if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+  onReply: async function ({ api, event, Reply, replyData }) {
+    const data = Reply || replyData || {};
+    if (data.author && String(event.senderID) !== String(data.author)) return;
+    const choice = Number.parseInt(String(event.body || "").trim(), 10);
+    if (!Number.isInteger(choice) || choice < 1 || choice > data.results.length) {
+      return api.sendMessage(
+        `❌ 1-${data.results.length} এর মধ্যে একটি number reply দিন।`,
+        event.threadID,
+        event.messageID,
+      );
+    }
 
-		const hasReaction = typeof api.setMessageReaction === "function";
-		let collagePath;
+    const selected = data.results[choice - 1];
+    const cacheDir = path.join(__dirname, "cache");
+    await fs.promises.mkdir(cacheDir, { recursive: true });
+    try {
+      const media = await getMediaById(selected.id);
+      return sendMedia(api, media, event.threadID, event.messageID, cacheDir);
+    } catch (error) {
+      react(api, "❌", event.messageID);
+      return api.sendMessage(
+        `❌ Pinterest media resolve failed: ${error.message}`,
+        event.threadID,
+        event.messageID,
+      );
+    }
+  },
 
-		try {
-			if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
+  onChat: async function ({ api, event }) {
+    const url = findPinterestUrl(event.body);
+    if (!url) return;
 
-			const response = await axios.get(`${await baseApiUrl()}/api/pin/mahmud?query=${encodeURIComponent(keySearch)}&limit=${numberSearch}`);
-
-			const data = response.data.images;
-			if (!data || data.length === 0) {
-				if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-				return api.sendMessage("× Sorry, no images found for your query.", threadID, messageID);
-			}
-
-			const pngBuffer = await buildCollage(data);
-			collagePath = path.join(cacheDir, `pin_collage_${Date.now()}.png`);
-			await fs.outputFile(collagePath, pngBuffer);
-
-			if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-
-			return api.sendMessage(
-				{
-					body: `🔎 | Pinterest results for "${keySearch}" (${data.length} images)\n\n👉 Reply with a number (1-${data.length}) to get that image full-size.`,
-					attachment: fs.createReadStream(collagePath)
-				},
-				threadID,
-				(err, info) => {
-					if (collagePath && fs.existsSync(collagePath)) fs.remove(collagePath).catch(() => {});
-					if (!err && info?.messageID) {
-						replyManager.set(info.messageID, {
-							commandName: this.config.name,
-							author: senderID,
-							images: data,
-							query: keySearch
-						});
-					}
-				},
-				messageID
-			);
-		} catch (err) {
-			if (collagePath && fs.existsSync(collagePath)) fs.remove(collagePath).catch(() => {});
-			console.error("Pinterest Error:", err);
-			if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-			return api.sendMessage(`× API error: ${err.message}. Contact MahMUD for help.\n•WhatsApp: 01836298139`, threadID, messageID);
-		}
-	},
-
-	onReply: async function ({ api, event, Reply }) {
-		const { threadID, messageID, senderID, body } = event;
-
-		if (senderID !== Reply.author) return;
-
-		const hasReaction = typeof api.setMessageReaction === "function";
-		const choice = parseInt(body);
-
-		if (isNaN(choice) || choice < 1 || choice > Reply.images.length) {
-			return api.sendMessage(
-				`❌ | Invalid choice. Reply with a number between 1 and ${Reply.images.length}.`,
-				threadID,
-				messageID
-			);
-		}
-
-		const imageUrl = Reply.images[choice - 1];
-		const cacheDir = path.join(__dirname, "cache");
-		if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-		const filePath = path.join(cacheDir, `pin_full_${Date.now()}.jpg`);
-
-		try {
-			if (hasReaction) api.setMessageReaction("⏳", messageID, () => {}, true);
-
-			const imgRes = await axios.get(imageUrl, { responseType: "arraybuffer", timeout: 20000 });
-			await fs.outputFile(filePath, imgRes.data);
-
-			return api.sendMessage(
-				{
-					body: `✅ | Image #${choice} for "${Reply.query}"`,
-					attachment: fs.createReadStream(filePath)
-				},
-				threadID,
-				() => {
-					if (hasReaction) api.setMessageReaction("✅", messageID, () => {}, true);
-					if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-				},
-				messageID
-			);
-		} catch (err) {
-			if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-			if (hasReaction) api.setMessageReaction("❌", messageID, () => {}, true);
-			return api.sendMessage(`× Failed to fetch that image: ${err.message}`, threadID, messageID);
-		}
-	}
+    const cacheDir = path.join(__dirname, "cache");
+    await fs.promises.mkdir(cacheDir, { recursive: true });
+    try {
+      const media = await resolveUrl(url);
+      return sendMedia(api, media, event.threadID, event.messageID, cacheDir);
+    } catch (error) {
+      react(api, "❌", event.messageID);
+      console.error("[PIN AUTO-DOWNLOAD ERROR]", error.message);
+      return api.sendMessage(
+        `❌ Pinterest link process করা যায়নি: ${error.message}`,
+        event.threadID,
+        event.messageID,
+      );
+    }
+  },
 };

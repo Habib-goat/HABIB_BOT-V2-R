@@ -22,7 +22,6 @@ function detectPlatform(url) {
   if (urlLower.includes("instagram.com") || urlLower.includes("instagr.am")) return "𝙄𝙣𝙨𝙩𝙖𝙜𝙧𝙖𝙢";
   if (urlLower.includes("youtube.com") || urlLower.includes("youtu.be")) return "𝙔𝙤𝙪𝙏𝙪𝙗𝙚";
   if (urlLower.includes("x.com") || urlLower.includes("twitter.com")) return "𝙏𝙬𝙞𝙩𝙩𝙚𝙧 / 𝙓";
-  if (urlLower.includes("pin.it") || urlLower.includes("pinterest.com")) return "𝙋𝙞𝙣𝙩𝙚𝙧𝙚𝙨𝙩";
   if (urlLower.includes("threads.net")) return "𝙏𝙝𝙧𝙚𝙖𝙙𝙨";
   if (urlLower.includes("snapchat.com")) return "𝙎𝙣𝙖𝙥𝙘𝙝𝙖𝙩";
   if (urlLower.includes("vimeo.com")) return "𝙑𝙞𝙢𝙚𝙤";
@@ -66,8 +65,7 @@ function extractVideo(data) {
   if (!data) return null;
   const r = data.result || data.data || {};
 
-  // direct known fields (video-first, then generic media/image fields —
-  // Pinterest and some other providers only return an image, not a video)
+  // direct known fields (video-first, then generic media/image fields)
   let found = firstString(
     r.high_quality, r.video, r.url, r.download, r.download_url,
     r.media, r.media_url, r.image, r.image_url, r.thumbnail,
@@ -98,13 +96,16 @@ function extractVideo(data) {
 }
 
 // ================= SUPPORTED DOMAIN ONLY CHECK (strict) =================
+// Pinterest removed — that's now fully handled by pin.js's own onChat
+// auto-download, so keeping it here too would cause both commands to
+// race on the same link.
 function isSupportedDomain(url) {
   if (!url) return false;
   const urlLower = url.toLowerCase();
 
   const domains = [
     "tiktok.com", "fb.watch", "facebook.com", "fb.com", "instagram.com", "instagr.am",
-    "youtube.com", "youtu.be", "x.com", "twitter.com", "pin.it", "pinterest.com",
+    "youtube.com", "youtu.be", "x.com", "twitter.com",
     "threads.net", "snapchat.com", "vimeo.com", "dailymotion.com", "dai.ly",
     "spotify.com", "soundcloud.com", "reddit.com", "linkedin.com", "capcut.com",
     "kuaishou.com", "kwai.com", "douyin.com", "bsky.app", "tumblr.com"
@@ -216,7 +217,7 @@ module.exports = {
   config: {
     name: "autodl",
     aliases: ["tiktok", "ig", "yt", "alldl", "dl", "download"],
-    version: "1.1.0",
+    version: "1.2.0",
     author: "Riyad",
     countDown: 5,
     role: 0,
@@ -225,7 +226,7 @@ module.exports = {
 
   onStart: async function({ api, event }) {
     return api.sendMessage(
-      "🤖 Auto-Download Bot is active!\n\nJust send any supported media link directly in the chat, and I will download it for you automatically without any commands or prefix!\n\nSupported Platforms:\n• TikTok\n• YouTube / Shorts\n• Facebook / FB Watch\n• Instagram / Reels\n• Twitter (X)\n• Threads\n• Snapchat\n• Pinterest\n• Spotify\n• SoundCloud\n• Reddit\n• LinkedIn\n• CapCut\n• Dailymotion\n• Kwai / Kuaishou\n• Douyin\n• Bluesky\n• Tumblr\n• Vimeo\n• Direct file links",
+      "🤖 Auto-Download Bot is active!\n\nJust send any supported media link directly in the chat, and I will download it for you automatically without any commands or prefix!\n\nSupported Platforms:\n• TikTok\n• YouTube / Shorts\n• Facebook / FB Watch\n• Instagram / Reels\n• Twitter (X)\n• Threads\n• Snapchat\n• Spotify\n• SoundCloud\n• Reddit\n• LinkedIn\n• CapCut\n• Dailymotion\n• Kwai / Kuaishou\n• Douyin\n• Bluesky\n• Tumblr\n• Vimeo\n• Direct file links\n\n📌 Pinterest links are handled separately by the 'pin' command.",
       event.threadID,
       event.messageID
     );
@@ -284,9 +285,9 @@ module.exports = {
       const cacheDir = path.join(__dirname, "cache");
       await fs.ensureDir(cacheDir);
 
-      // Resolve shortened links (pin.it, fb.watch, dai.ly, etc.) to their
+      // Resolve shortened links (fb.watch, dai.ly, etc.) to their
       // final URL — many downloader APIs fail on the short redirect form.
-      const shortDomains = ["pin.it", "fb.watch", "dai.ly", "youtu.be"];
+      const shortDomains = ["fb.watch", "dai.ly", "youtu.be"];
       if (shortDomains.some(d => finalUrl.toLowerCase().includes(d))) {
         try {
           const headRes = await axios.get(finalUrl, {

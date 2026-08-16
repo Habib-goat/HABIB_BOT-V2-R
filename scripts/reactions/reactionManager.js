@@ -35,6 +35,13 @@ module.exports = {
     reactions.delete(String(messageID));
   },
 
+  cleanExpired() {
+    const cutoff = Date.now() - TTL;
+    for (const [id, data] of reactions) {
+      if (data.timestamp < cutoff) reactions.delete(id);
+    }
+  },
+
   async handle(api, event, commandLoader) {
     const messageID = event && (
       event.messageID ||

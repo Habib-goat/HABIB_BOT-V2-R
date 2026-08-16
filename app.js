@@ -8,6 +8,15 @@
 // via `new WebSocket(...)` assuming a browser-style global, which Node 18
 // doesn't provide. `ws` is already a dependency, so just expose it globally
 // — this MUST run before anything that might touch WebSocket is required.
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SAFETY NET] Unhandled Rejection:', reason);
+  // crash করতে না দিয়ে শুধু log করে বট চালু রাখা হলো
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[SAFETY NET] Uncaught Exception:', err);
+});
+
 if (typeof globalThis.WebSocket === 'undefined') {
   globalThis.WebSocket = require('ws');
 }
