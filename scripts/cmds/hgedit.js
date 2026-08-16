@@ -45,10 +45,6 @@ const NEGATIVE_PROMPT =
 
 const REQUEST_TIMEOUT_MS = 90 * 1000;
 
-/**
- * Try to find a usable image URL from an array of attachments.
- * Messenger attachment shapes vary, so check several possible property paths.
- */
 function extractImageUrlFromAttachments(attachments) {
   if (!Array.isArray(attachments) || attachments.length === 0) return null;
 
@@ -70,7 +66,6 @@ function extractImageUrlFromAttachments(attachments) {
     }
   }
 
-  // Fallback: if type filtering above found nothing, try any attachment's url-like field
   for (const att of attachments) {
     if (!att) continue;
     const candidateUrl =
@@ -106,10 +101,6 @@ function buildPrompt(customInstruction) {
   return `${DEFAULT_PROMPT}\n\nAdditional instruction from user (apply only as a stylistic adjustment, do not use it to add/remove/change objects, people identity, or composition): ${customInstruction.trim()}`;
 }
 
-/**
- * Inspect an error thrown by axios or @huggingface/inference and
- * return a user-friendly message without leaking the token.
- */
 function describeError(err) {
   const status =
     (err && err.httpResponse && err.httpResponse.status) ||
@@ -149,7 +140,6 @@ module.exports = {
     const threadID = event.threadID;
     const messageID = event.messageID;
 
-    // 1. Token check
     const hfToken = process.env.HF_TOKEN;
     if (!hfToken) {
       return api.sendMessage(
@@ -159,7 +149,6 @@ module.exports = {
       );
     }
 
-    // 2. Find image (direct attachment or replied message attachment)
     const imageUrl = findImageUrl(event);
     if (!imageUrl) {
       return api.sendMessage(
@@ -182,7 +171,6 @@ module.exports = {
         threadID
       );
 
-      // 3. Download the original image
       let imageBuffer;
       try {
         const downloadRes = await axios.get(imageUrl, {
@@ -200,9 +188,6 @@ module.exports = {
         );
       }
 
-      // 4. Call Hugging Face Inference Providers via the official client.
-      // The client automatically routes to a compatible provider for this
-      // model and returns the edited image as a Blob.
       const client = new InferenceClient(hfToken);
 
       let resultBlob;
@@ -224,7 +209,6 @@ module.exports = {
         return api.sendMessage(describeError(new Error("empty response")), threadID, messageID);
       }
 
-      // 5. Convert the Blob response into a Buffer, then a stream for sendMessage
       const resultArrayBuffer = await resultBlob.arrayBuffer();
       const resultBuffer = Buffer.from(resultArrayBuffer);
 
@@ -232,9 +216,28 @@ module.exports = {
         return api.sendMessage(describeError(new Error("empty image buffer")), threadID, messageID);
       }
 
+      const reportedType = (resultBlob.type || "").toLowerCase();
+      const looksLikeImage = reportedType.startsWith("image/");
+      const isSuspiciouslySmall = resultBuffer.length < 2048;
+
+      if (!looksLikeImage || isSuspiciouslySmall) {
+        let bodyPreview = "";
+        try {
+          bodyPreview = resultBuffer.toString("utf8").slice(0, 500);
+        } catch (_) {
+          bodyPreview = "(non-text binary payload)";
+        }
+        console.error(
+          "hgedit: unexpected non-image response from Hugging Face.",
+          "content-type:", reportedType || "(none)",
+          "size:", resultBuffer.length,
+          "body:", bodyPreview
+        );
+        return api.sendMessage(describeError(new Error(bodyPreview || "non-image response")), threadID, messageID);
+      }
+
       const imageStream = Readable.from(resultBuffer);
 
-      // 6. Send the final result
       await api.sendMessage(
         {
           body:
