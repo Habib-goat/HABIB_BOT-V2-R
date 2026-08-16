@@ -184,7 +184,7 @@ caption e attitude`;
 module.exports = {
   config: {
     name: "caption",
-    aliases: ["status", "quote", "ukti"],
+    aliases: ["status", "cap", "ukti"],
     version: "3.0.0",
     author: "Riyad",
     countDown: 8,
